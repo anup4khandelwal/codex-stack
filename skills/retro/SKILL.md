@@ -23,6 +23,14 @@ Summarize throughput, hotspots, review bottlenecks, and recurring failure patter
 4. Summarize wins, friction, and risks.
 5. Recommend one or two process changes.
 
+## CLI
+
+```bash
+node dist/cli.js retro --since "7 days ago"
+node dist/cli.js retro --since "30 days ago" --json
+node dist/cli.js retro --since "14 days ago" --out .codex-stack/retros/latest.md
+```
+
 ## Output format
 
 - Delivery summary

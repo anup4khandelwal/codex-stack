@@ -3,38 +3,79 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
 
-const STATE_DIR = path.join(os.tmpdir(), "codex-stack");
-const STATE_PATH = path.join(STATE_DIR, "browse-state.json");
+const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
+const STATE_DIR = path.join(ROOT_DIR, "browse");
+const STATE_PATH = path.join(STATE_DIR, "state.json");
+const SESSION_DIR = path.join(STATE_DIR, "sessions");
 
 function usage() {
   console.log(`codex-stack browse
 
 Usage:
   codex-stack browse doctor
-  codex-stack browse status
-  codex-stack browse text <url>
-  codex-stack browse html <url> [selector]
-  codex-stack browse links <url>
-  codex-stack browse screenshot <url> [path]
-  codex-stack browse eval <url> <expression>
-  codex-stack browse flow <url> <json-steps>
+  codex-stack browse status [--session <name>]
+  codex-stack browse sessions
+  codex-stack browse clear-session [name]
+  codex-stack browse text <url> [--session <name>]
+  codex-stack browse html <url> [selector] [--session <name>]
+  codex-stack browse links <url> [--session <name>]
+  codex-stack browse screenshot <url> [path] [--session <name>]
+  codex-stack browse eval <url> <expression> [--session <name>]
+  codex-stack browse flow <url> <json-steps> [--session <name>]
 `);
   process.exit(1);
 }
 
-function state() {
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function readState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
   } catch {
-    return { lastCommand: "", lastUrl: "", updatedAt: "" };
+    return { sessions: {} };
   }
 }
 
 function writeState(payload) {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
+  ensureDir(STATE_DIR);
   fs.writeFileSync(STATE_PATH, JSON.stringify(payload, null, 2));
+}
+
+function getSessionState(name) {
+  const full = readState();
+  return {
+    full,
+    session: full.sessions?.[name] || {
+      name,
+      updatedAt: "",
+      lastCommand: "",
+      lastUrl: "",
+      output: "",
+    },
+  };
+}
+
+function sessionProfileDir(name) {
+  return path.join(SESSION_DIR, name);
+}
+
+function parseGlobalArgs(argv) {
+  const out = { session: "default", command: "", rest: [] };
+  const copy = [...argv];
+  out.command = copy.shift() || "doctor";
+
+  while (copy.length) {
+    const item = copy.shift();
+    if (item === "--session") {
+      out.session = copy.shift() || "default";
+      continue;
+    }
+    out.rest.push(item);
+  }
+  return out;
 }
 
 async function loadPlaywright() {
@@ -46,16 +87,19 @@ async function loadPlaywright() {
   }
 }
 
-async function withPage(url, callback) {
+async function withPage(sessionName, url, callback) {
   const playwright = await loadPlaywright();
   if (!playwright) {
     console.error("Playwright is not installed. Run `npm install` and `npx playwright install chromium`.");
     process.exit(1);
   }
 
-  let browser;
+  ensureDir(SESSION_DIR);
+  const userDataDir = sessionProfileDir(sessionName);
+
+  let context;
   try {
-    browser = await playwright.chromium.launch({ headless: true });
+    context = await playwright.chromium.launchPersistentContext(userDataDir, { headless: true });
   } catch (error) {
     const message = String(error?.message || error);
     if (/machport|permission denied|sandbox|Target page, context or browser has been closed/i.test(message)) {
@@ -65,15 +109,29 @@ async function withPage(url, callback) {
     }
     throw error;
   }
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto(url, { waitUntil: "networkidle" });
+
+  const page = context.pages()[0] || (await context.newPage());
+  if (url) {
+    await page.goto(url, { waitUntil: "networkidle" });
+  }
 
   try {
-    return await callback({ page, context, browser });
+    return await callback({ page, context });
   } finally {
-    await browser.close();
+    await context.close();
   }
+}
+
+function recordSession(sessionName, patch) {
+  const state = readState();
+  if (!state.sessions) state.sessions = {};
+  state.sessions[sessionName] = {
+    ...(state.sessions[sessionName] || { name: sessionName }),
+    ...patch,
+    name: sessionName,
+    updatedAt: new Date().toISOString(),
+  };
+  writeState(state);
 }
 
 function parseFlow(jsonText) {
@@ -85,28 +143,51 @@ function parseFlow(jsonText) {
   }
 }
 
-const [, , command = "doctor", ...rest] = process.argv;
+const parsed = parseGlobalArgs(process.argv.slice(2));
+const { command, rest, session } = parsed;
 
 if (command === "doctor") {
   const playwrightInstalled = fs.existsSync(path.resolve(process.cwd(), "node_modules", "playwright"));
   console.log("codex-stack browse runtime");
   console.log(`- playwright package: ${playwrightInstalled ? "installed" : "missing"}`);
   console.log(`- state file: ${STATE_PATH}`);
-  console.log("- commands: text, html, links, screenshot, eval, flow");
+  console.log(`- session root: ${SESSION_DIR}`);
+  console.log("- session model: persistent browser profile per named session");
+  console.log("- commands: sessions, clear-session, text, html, links, screenshot, eval, flow");
   console.log("- browser install: run `npx playwright install chromium` after npm install");
   process.exit(0);
 }
 
 if (command === "status") {
-  console.log(JSON.stringify(state(), null, 2));
+  const { session: sessionState } = getSessionState(session);
+  console.log(JSON.stringify(sessionState, null, 2));
+  process.exit(0);
+}
+
+if (command === "sessions") {
+  const state = readState();
+  const rows = Object.values(state.sessions || {}).sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  console.log(JSON.stringify(rows, null, 2));
+  process.exit(0);
+}
+
+if (command === "clear-session") {
+  const targetSession = rest[0] || session;
+  const state = readState();
+  if (state.sessions?.[targetSession]) {
+    delete state.sessions[targetSession];
+    writeState(state);
+  }
+  fs.rmSync(sessionProfileDir(targetSession), { recursive: true, force: true });
+  console.log(`cleared session ${targetSession}`);
   process.exit(0);
 }
 
 if (command === "text") {
   const url = rest[0];
   if (!url) usage();
-  const text = await withPage(url, async ({ page }) => page.locator("body").innerText());
-  writeState({ lastCommand: "text", lastUrl: url, updatedAt: new Date().toISOString() });
+  const text = await withPage(session, url, async ({ page }) => page.locator("body").innerText());
+  recordSession(session, { lastCommand: "text", lastUrl: url });
   console.log(text);
   process.exit(0);
 }
@@ -114,8 +195,8 @@ if (command === "text") {
 if (command === "html") {
   const [url, selector] = rest;
   if (!url) usage();
-  const html = await withPage(url, async ({ page }) => (selector ? page.locator(selector).first().innerHTML() : page.content()));
-  writeState({ lastCommand: "html", lastUrl: url, updatedAt: new Date().toISOString() });
+  const html = await withPage(session, url, async ({ page }) => (selector ? page.locator(selector).first().innerHTML() : page.content()));
+  recordSession(session, { lastCommand: "html", lastUrl: url });
   console.log(html);
   process.exit(0);
 }
@@ -123,7 +204,7 @@ if (command === "html") {
 if (command === "links") {
   const url = rest[0];
   if (!url) usage();
-  const links = await withPage(url, async ({ page }) =>
+  const links = await withPage(session, url, async ({ page }) =>
     page.$$eval("a[href]", (anchors) =>
       anchors.map((anchor) => ({
         text: (anchor.textContent || "").trim(),
@@ -131,17 +212,17 @@ if (command === "links") {
       }))
     )
   );
-  writeState({ lastCommand: "links", lastUrl: url, updatedAt: new Date().toISOString() });
+  recordSession(session, { lastCommand: "links", lastUrl: url });
   console.log(JSON.stringify(links, null, 2));
   process.exit(0);
 }
 
 if (command === "screenshot") {
   const url = rest[0];
-  const outPath = rest[1] || path.join(os.tmpdir(), "codex-stack-browse.png");
+  const outPath = rest[1] || path.join(os.tmpdir(), `codex-stack-browse-${session}.png`);
   if (!url) usage();
-  await withPage(url, async ({ page }) => page.screenshot({ path: outPath, fullPage: true }));
-  writeState({ lastCommand: "screenshot", lastUrl: url, updatedAt: new Date().toISOString(), output: outPath });
+  await withPage(session, url, async ({ page }) => page.screenshot({ path: outPath, fullPage: true }));
+  recordSession(session, { lastCommand: "screenshot", lastUrl: url, output: outPath });
   console.log(outPath);
   process.exit(0);
 }
@@ -149,8 +230,8 @@ if (command === "screenshot") {
 if (command === "eval") {
   const [url, expression] = rest;
   if (!url || !expression) usage();
-  const result = await withPage(url, async ({ page }) => page.evaluate(expressionText => eval(expressionText), expression));
-  writeState({ lastCommand: "eval", lastUrl: url, updatedAt: new Date().toISOString() });
+  const result = await withPage(session, url, async ({ page }) => page.evaluate(expressionText => eval(expressionText), expression));
+  recordSession(session, { lastCommand: "eval", lastUrl: url });
   console.log(typeof result === "string" ? result : JSON.stringify(result, null, 2));
   process.exit(0);
 }
@@ -163,7 +244,7 @@ if (command === "flow") {
     console.error("Invalid JSON steps. Example: [{\"action\":\"click\",\"selector\":\"button\"}]");
     process.exit(1);
   }
-  const out = await withPage(url, async ({ page }) => {
+  const out = await withPage(session, url, async ({ page }) => {
     const results = [];
     for (const step of steps) {
       if (!step || typeof step !== "object") continue;
@@ -184,7 +265,7 @@ if (command === "flow") {
         continue;
       }
       if (action === "screenshot") {
-        const target = String(step.path || path.join(os.tmpdir(), "codex-stack-flow.png"));
+        const target = String(step.path || path.join(os.tmpdir(), `codex-stack-flow-${session}.png`));
         await page.screenshot({ path: target, fullPage: true });
         results.push({ action, path: target, status: "ok" });
         continue;
@@ -193,7 +274,7 @@ if (command === "flow") {
     }
     return results;
   });
-  writeState({ lastCommand: "flow", lastUrl: url, updatedAt: new Date().toISOString(), steps: steps.length });
+  recordSession(session, { lastCommand: "flow", lastUrl: url, steps: steps.length });
   console.log(JSON.stringify(out, null, 2));
   process.exit(0);
 }

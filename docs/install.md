@@ -12,6 +12,8 @@ Then install a browser for Playwright:
 npx playwright install chromium
 ```
 
+Named browser sessions are stored under `.codex-stack/browse/` and are already ignored by git.
+
 ## Install Codex skills
 
 User-level:

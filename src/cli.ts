@@ -13,6 +13,8 @@ Usage:
   codex-stack path <mode>
   codex-stack doctor
   codex-stack review [--json] [--base <ref>]
+  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr]
+  codex-stack retro [--since <range>] [--out <path>] [--json]
   codex-stack browse <args...>
 `);
   process.exit(1);
@@ -35,6 +37,18 @@ function runBrowse(args: string[]): void {
 function runReview(args: string[]): void {
   const reviewPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "review-diff.mjs");
   const result = spawnSync("node", [reviewPath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 0);
+}
+
+function runShip(args: string[]): void {
+  const shipPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "ship-branch.mjs");
+  const result = spawnSync("node", [shipPath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 0);
+}
+
+function runRetro(args: string[]): void {
+  const retroPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "retro-report.mjs");
+  const result = spawnSync("node", [retroPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
@@ -83,6 +97,14 @@ if (command === "browse") {
 
 if (command === "review") {
   runReview(rest);
+}
+
+if (command === "ship") {
+  runShip(rest);
+}
+
+if (command === "retro") {
+  runRetro(rest);
 }
 
 usage();

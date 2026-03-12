@@ -18,6 +18,8 @@ Give the agent eyes for QA and deployment checks.
 
 - `doctor`
 - `status`
+- `sessions`
+- `clear-session`
 - `text <url>`
 - `html <url> [selector]`
 - `links <url>`
@@ -28,12 +30,13 @@ Give the agent eyes for QA and deployment checks.
 ## Example
 
 ```bash
-node dist/cli.js browse text https://example.com
-node dist/cli.js browse screenshot https://example.com /tmp/example.png
-node dist/cli.js browse flow https://example.com '[{"action":"click","selector":"a"}]'
+node dist/cli.js browse text https://example.com --session staging
+node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
+node dist/cli.js browse sessions
 ```
 
 ## Guardrails
 
 - Do not claim visual validation without screenshots or runtime output.
 - Prefer deterministic selectors and stable flows.
+- Reuse named sessions for authenticated flows so login state persists.

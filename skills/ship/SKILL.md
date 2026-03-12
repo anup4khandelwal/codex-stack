@@ -24,6 +24,14 @@ Run the shipping checklist with minimal back-and-forth.
 5. Stage, commit, push, and open PR if requested.
 6. Report the exact commands executed.
 
+## CLI
+
+```bash
+node dist/cli.js ship --dry-run
+node dist/cli.js ship --message "feat: ready for review" --push
+node dist/cli.js ship --message "feat: ready for review" --push --pr
+```
+
 ## Output format
 
 - Branch status

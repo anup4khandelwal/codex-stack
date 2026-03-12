@@ -13,6 +13,8 @@
     "doctor": "bash scripts/doctor.sh",
     "smoke": "bash scripts/ci-check.sh",
     "review": "node scripts/review-diff.mjs",
+    "ship:dry": "node scripts/ship-branch.mjs --dry-run",
+    "retro": "node scripts/retro-report.mjs --since '7 days ago'",
     "browse:doctor": "node browse/dist/cli.js doctor",
     "browse:text": "node browse/dist/cli.js text",
     "browse:screenshot": "node browse/dist/cli.js screenshot",

@@ -14,6 +14,8 @@ node browse/dist/cli.js doctor >/tmp/codex-stack-browse-doctor.log
 
 echo "[4/5] review script interface"
 node scripts/review-diff.mjs --help >/tmp/codex-stack-review-help.log
+node scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
+node scripts/retro-report.mjs --help >/tmp/codex-stack-retro-help.log
 
 echo "[5/5] docs present"
 test -f README.md
