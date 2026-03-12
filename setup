@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo "[codex-stack] running environment checks"
+bash "$ROOT_DIR/scripts/doctor.sh"
+
+mkdir -p "$ROOT_DIR/.codex-stack/bin"
+ln -snf "$ROOT_DIR/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack"
+ln -snf "$ROOT_DIR/browse/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack-browse"
+
+echo "[codex-stack] local wrappers ready:"
+echo "  $ROOT_DIR/.codex-stack/bin/codex-stack"
+echo "  $ROOT_DIR/.codex-stack/bin/codex-stack-browse"
+echo
+echo "Next steps:"
+echo "  1. node dist/cli.js list"
+echo "  2. bash scripts/install-skills.sh user"
+echo "  3. node dist/cli.js show review"

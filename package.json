@@ -1,0 +1,29 @@
+{
+  "name": "codex-stack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex workflow modes for product planning, engineering review, shipping, QA, and retrospectives.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "codex-stack": "./dist/cli.js",
+    "codex-stack-browse": "./browse/dist/cli.js"
+  },
+  "scripts": {
+    "doctor": "bash scripts/doctor.sh",
+    "smoke": "node dist/cli.js list && node dist/cli.js path review && node browse/dist/cli.js doctor",
+    "build": "node -e \"console.log('Checked-in dist/ is ready. Install TypeScript and Playwright before enabling a real build pipeline.')\""
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "keywords": [
+    "codex",
+    "skills",
+    "workflow",
+    "review",
+    "ship",
+    "qa"
+  ]
+}

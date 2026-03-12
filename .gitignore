@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+dist/.cache/
+browse/node_modules/
+browse/dist/.cache/
+.codex/
+.codex-stack/
+coverage/
+*.log
