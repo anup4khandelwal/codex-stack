@@ -8,18 +8,19 @@ function usage() {
   console.log(`retro-report
 
 Usage:
-  node scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts]
+  node scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github] [--github-limit <n>]
 `);
   process.exit(0);
 }
 
 function run(cmd, options = {}) {
   try {
-    return execSync(cmd, {
+    const output = execSync(cmd, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       ...options,
-    }).trim();
+    });
+    return typeof output === "string" ? output.trim() : "";
   } catch (error) {
     if (options.allowFailure) return "";
     const stderr = error.stderr ? String(error.stderr) : "";
@@ -40,6 +41,10 @@ function timestampSlug() {
   return new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
 }
 
+function round(value) {
+  return Number.isFinite(value) ? Math.round(value * 10) / 10 : 0;
+}
+
 function parseArgs(argv) {
   const out = {
     since: "7 days ago",
@@ -48,6 +53,9 @@ function parseArgs(argv) {
     jsonOut: "",
     artifactDir: path.resolve(process.cwd(), ".codex-stack", "retros"),
     noArtifacts: false,
+    repo: "",
+    noGithub: false,
+    githubLimit: 100,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -67,9 +75,20 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === "--no-artifacts") {
       out.noArtifacts = true;
+    } else if (arg === "--repo") {
+      out.repo = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--no-github") {
+      out.noGithub = true;
+    } else if (arg === "--github-limit") {
+      out.githubLimit = Number(argv[i + 1] || out.githubLimit);
+      i += 1;
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
+  }
+  if (!Number.isFinite(out.githubLimit) || out.githubLimit < 1) {
+    out.githubLimit = 100;
   }
   return out;
 }
@@ -108,7 +127,92 @@ function summarizeWorkdirs(raw) {
   );
 }
 
+function parseSinceDate(since) {
+  const trimmed = String(since || "").trim();
+  const relative = trimmed.match(/^(\d+)\s+(hour|hours|day|days|week|weeks|month|months)\s+ago$/i);
+  if (relative) {
+    const count = Number(relative[1]);
+    const unit = relative[2].toLowerCase();
+    const date = new Date();
+    if (unit.startsWith("hour")) date.setHours(date.getHours() - count);
+    else if (unit.startsWith("day")) date.setDate(date.getDate() - count);
+    else if (unit.startsWith("week")) date.setDate(date.getDate() - (count * 7));
+    else if (unit.startsWith("month")) date.setMonth(date.getMonth() - count);
+    return date;
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function inferGithubRepo() {
+  const remote = run("git remote get-url origin", { allowFailure: true });
+  const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
+  return match ? match[1] : "";
+}
+
+function commandExists(command) {
+  return Boolean(run(`command -v ${command}`, { allowFailure: true }));
+}
+
+function fetchGithubAnalytics({ repo, since, limit }) {
+  if (!repo) {
+    return { enabled: false, reason: "repo-unresolved", repo: "" };
+  }
+  if (!commandExists("gh")) {
+    return { enabled: false, reason: "gh-missing", repo };
+  }
+
+  const raw = run(`gh api repos/${repo}/pulls?state=all&per_page=${limit}&sort=updated&direction=desc`, { allowFailure: true });
+  if (!raw) {
+    return { enabled: false, reason: "gh-unavailable", repo };
+  }
+
+  let pulls;
+  try {
+    pulls = JSON.parse(raw);
+  } catch {
+    return { enabled: false, reason: "gh-parse-error", repo };
+  }
+
+  const cutoff = parseSinceDate(since);
+  const filtered = Array.isArray(pulls)
+    ? pulls.filter((pr) => !cutoff || new Date(pr.updated_at) >= cutoff)
+    : [];
+
+  const merged = filtered.filter((pr) => Boolean(pr.merged_at));
+  const open = filtered.filter((pr) => pr.state === "open");
+  const closedUnmerged = filtered.filter((pr) => pr.state === "closed" && !pr.merged_at);
+  const draft = filtered.filter((pr) => Boolean(pr.draft));
+  const avgTimeToMergeHours = merged.length
+    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.merged_at) - new Date(pr.created_at)) / 36e5), 0) / merged.length)
+    : 0;
+  const avgConversationCount = filtered.length
+    ? round(filtered.reduce((sum, pr) => sum + Number(pr.comments || 0) + Number(pr.review_comments || 0), 0) / filtered.length)
+    : 0;
+  const oldestOpenAgeHours = open.length
+    ? round(Math.max(...open.map((pr) => (Date.now() - new Date(pr.created_at).getTime()) / 36e5)))
+    : 0;
+
+  return {
+    enabled: true,
+    reason: "ok",
+    repo,
+    scannedCount: filtered.length,
+    mergedCount: merged.length,
+    openCount: open.length,
+    closedUnmergedCount: closedUnmerged.length,
+    draftCount: draft.length,
+    avgTimeToMergeHours,
+    avgConversationCount,
+    oldestOpenAgeHours,
+    topAuthors: topCounts(filtered, (pr) => pr.user?.login || "", 5),
+  };
+}
+
 function recommendation(summary) {
+  if (summary.github.enabled && summary.github.oldestOpenAgeHours >= 72) {
+    return `At least one open PR has been waiting for ${summary.github.oldestOpenAgeHours} hours. Clear review debt before new work piles up.`;
+  }
   if (summary.mergeCommits > Math.max(2, summary.commitCount / 3)) {
     return "Too much merge churn this week. Tighten branch lifetimes and reduce parallel long-lived branches.";
   }
@@ -131,6 +235,23 @@ function toMarkdown(summary) {
   const subjectLines = summary.recentSubjects.length
     ? summary.recentSubjects.map((item) => `- ${item.subject}`).join("\n")
     : "- none";
+  const githubSection = summary.github.enabled
+    ? `## GitHub PR analytics
+
+- Repo: ${summary.github.repo}
+- PRs scanned: ${summary.github.scannedCount}
+- Merged: ${summary.github.mergedCount}
+- Open: ${summary.github.openCount}
+- Closed without merge: ${summary.github.closedUnmergedCount}
+- Draft: ${summary.github.draftCount}
+- Avg time to merge: ${summary.github.avgTimeToMergeHours} hours
+- Avg conversation count: ${summary.github.avgConversationCount}
+- Oldest open PR age: ${summary.github.oldestOpenAgeHours} hours
+`
+    : `## GitHub PR analytics
+
+- Status: unavailable (${summary.github.reason})
+`;
 
   return `# Retro Report
 
@@ -156,7 +277,8 @@ ${areaLines}
 ## Recent work
 
 ${subjectLines}
-`;
+
+${githubSection}`;
 }
 
 function writeArtifacts(summary, markdown, artifactDir) {
@@ -187,6 +309,10 @@ const numstatRaw = run(`git log --since=${JSON.stringify(args.since)} --numstat 
 const topAreas = summarizeWorkdirs(numstatRaw);
 const topAuthors = topCounts(commits, (commit) => commit.author, 5);
 const mergeCommits = commits.filter((commit) => /^merge\b/i.test(commit.subject)).length;
+const repo = args.repo || inferGithubRepo();
+const github = args.noGithub
+  ? { enabled: false, reason: "disabled", repo }
+  : fetchGithubAnalytics({ repo, since: args.since, limit: args.githubLimit });
 
 const summary = {
   since: args.since,
@@ -197,6 +323,7 @@ const summary = {
   topAreas,
   recentSubjects: commits.slice(0, 10).map((commit) => ({ subject: commit.subject, author: commit.author })),
   recommendation: "",
+  github,
   artifacts: {},
 };
 summary.recommendation = recommendation(summary);

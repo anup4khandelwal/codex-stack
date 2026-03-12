@@ -12,17 +12,29 @@ const TEMPLATE_PATHS = [
   "docs/PULL_REQUEST_TEMPLATE.md",
 ];
 
+const CODEOWNERS_PATHS = [
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  "docs/CODEOWNERS",
+];
+
 function usage() {
   console.log(`ship-branch
 
 Usage:
-  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--draft] [--json]
+  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--label <name>] [--milestone <title>] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
 
 function quote(value) {
   return JSON.stringify(String(value));
+}
+
+function cleanSubject(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function run(cmd, options = {}) {
@@ -36,12 +48,16 @@ function run(cmd, options = {}) {
   } catch (error) {
     if (options.allowFailure) return "";
     const stderr = error.stderr ? String(error.stderr) : "";
-    throw new Error(stderr || error.message);
+    throw new Error(cleanSubject(stderr || error.message));
   }
 }
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function uniq(items) {
+  return [...new Set(items.filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
 }
 
 function readPackageScripts() {
@@ -62,12 +78,18 @@ function parseArgs(argv) {
     pr: false,
     json: false,
     draft: false,
+    noAutoLabels: false,
+    noAutoReviewers: false,
     base: "origin/main",
     message: "",
     title: "",
     body: "",
     bodyFile: "",
     template: "",
+    milestone: "",
+    reviewers: [],
+    teamReviewers: [],
+    labels: [],
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -77,6 +99,8 @@ function parseArgs(argv) {
     else if (arg === "--pr") out.pr = true;
     else if (arg === "--json") out.json = true;
     else if (arg === "--draft") out.draft = true;
+    else if (arg === "--no-auto-labels") out.noAutoLabels = true;
+    else if (arg === "--no-auto-reviewers") out.noAutoReviewers = true;
     else if (arg === "--base") {
       out.base = argv[i + 1] || out.base;
       i += 1;
@@ -95,10 +119,25 @@ function parseArgs(argv) {
     } else if (arg === "--template") {
       out.template = argv[i + 1] || "";
       i += 1;
+    } else if (arg === "--reviewer") {
+      out.reviewers.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--team-reviewer") {
+      out.teamReviewers.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--label") {
+      out.labels.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--milestone") {
+      out.milestone = argv[i + 1] || "";
+      i += 1;
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
   }
+  out.reviewers = uniq(out.reviewers);
+  out.teamReviewers = uniq(out.teamReviewers);
+  out.labels = uniq(out.labels);
   return out;
 }
 
@@ -123,12 +162,6 @@ function baseParts(baseRef) {
     branch: baseRef,
     display: baseRef,
   };
-}
-
-function cleanSubject(text) {
-  return String(text || "")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function deriveTitleFromBranch(branch) {
@@ -159,10 +192,19 @@ function collectDiffContext(base) {
     .map(cleanSubject)
     .filter(Boolean)
     .filter((subject, index, items) => items.indexOf(subject) === index);
-  const changedFiles = run(`git diff --name-only ${quote(range)}`, { allowFailure: true })
+  const committedChangedFiles = run(`git diff --name-only ${quote(range)}`, { allowFailure: true })
     .split(/\r?\n/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+  const workingTreeFiles = run("git diff --name-only", { allowFailure: true })
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const stagedFiles = run("git diff --name-only --cached", { allowFailure: true })
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const changedFiles = uniq([...committedChangedFiles, ...workingTreeFiles, ...stagedFiles]);
   const changedAreas = [...new Set(changedFiles.map((file) => file.split("/")[0] || "root"))].slice(0, 6);
   return {
     range,
@@ -244,15 +286,16 @@ function applyTemplate(templateContent, sections, generatedBody) {
   return `${rendered}\n\n---\n\n${generatedBody}`;
 }
 
-function resolvePrContent({ args, branch, base, validationCommand }) {
-  const diffContext = collectDiffContext(base);
+function resolvePrContent({ args, branch, base, validationCommand, diffContext }) {
   const templatePath = findTemplatePath(args.template);
   const templateContent = templatePath ? fs.readFileSync(templatePath, "utf8") : "";
   const generated = buildGeneratedSections({ branch, base, validationCommand, diffContext });
 
   let title = cleanSubject(args.title);
   if (!title) {
-    title = cleanSubject(args.message) || diffContext.latestCommitSubject || deriveTitleFromBranch(branch);
+    title = cleanSubject(args.message)
+      || (diffContext.commitSubjects.length ? diffContext.latestCommitSubject : "")
+      || deriveTitleFromBranch(branch);
   }
 
   let body = "";
@@ -275,10 +318,205 @@ function resolvePrContent({ args, branch, base, validationCommand }) {
     body,
     bodySource,
     templatePath,
-    changedFiles: diffContext.changedFiles,
-    commitSubjects: diffContext.commitSubjects,
     bodyPreview: body.split(/\r?\n/).slice(0, 12).join("\n"),
   };
+}
+
+function findCodeownersPath() {
+  for (const candidate of CODEOWNERS_PATHS) {
+    const absolute = path.resolve(process.cwd(), candidate);
+    if (fs.existsSync(absolute)) {
+      return absolute;
+    }
+  }
+  return "";
+}
+
+function parseCodeownersEntries(filePath) {
+  if (!filePath) return [];
+  const content = fs.readFileSync(filePath, "utf8");
+  const entries = [];
+  for (const line of content.split(/\r?\n/)) {
+    const stripped = line.replace(/\s+#.*$/, "").trim();
+    if (!stripped || stripped.startsWith("#") || stripped.startsWith("!")) continue;
+    const parts = stripped.split(/\s+/);
+    if (parts.length < 2) continue;
+    const pattern = parts[0];
+    const owners = parts.slice(1).filter((owner) => owner.startsWith("@"));
+    if (!owners.length) continue;
+    entries.push({ pattern, owners });
+  }
+  return entries;
+}
+
+function escapeRegex(text) {
+  return text.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function codeownersPatternToRegex(pattern) {
+  let normalized = pattern.trim();
+  const anchored = normalized.startsWith("/");
+  normalized = normalized.replace(/^\/+/, "");
+  if (normalized.endsWith("/")) {
+    normalized += "**";
+  }
+
+  let body = "";
+  for (let i = 0; i < normalized.length; i += 1) {
+    const char = normalized[i];
+    const next = normalized[i + 1];
+    if (char === "*" && next === "*") {
+      body += ".*";
+      i += 1;
+      continue;
+    }
+    if (char === "*") {
+      body += "[^/]*";
+      continue;
+    }
+    if (char === "?") {
+      body += "[^/]";
+      continue;
+    }
+    body += escapeRegex(char);
+  }
+
+  const prefix = anchored ? "^" : "(?:^|.*/)";
+  return new RegExp(`${prefix}${body}$`);
+}
+
+function splitOwners(owners) {
+  const users = [];
+  const teams = [];
+  for (const owner of owners) {
+    const normalized = owner.replace(/^@/, "");
+    if (!normalized) continue;
+    if (normalized.includes("/")) teams.push(normalized);
+    else users.push(normalized);
+  }
+  return {
+    users: uniq(users),
+    teams: uniq(teams),
+  };
+}
+
+function inferReviewersFromCodeowners(changedFiles) {
+  const codeownersPath = findCodeownersPath();
+  if (!codeownersPath) {
+    return {
+      users: [],
+      teams: [],
+      source: "none",
+      matchedRules: 0,
+    };
+  }
+
+  const entries = parseCodeownersEntries(codeownersPath).map((entry) => ({
+    ...entry,
+    regex: codeownersPatternToRegex(entry.pattern),
+  }));
+
+  const owners = [];
+  let matchedRules = 0;
+  for (const file of changedFiles) {
+    let matchOwners = [];
+    for (const entry of entries) {
+      if (entry.regex.test(file)) {
+        matchOwners = entry.owners;
+      }
+    }
+    if (matchOwners.length) {
+      matchedRules += 1;
+      owners.push(...matchOwners);
+    }
+  }
+
+  const split = splitOwners(owners);
+  return {
+    ...split,
+    source: path.relative(process.cwd(), codeownersPath),
+    matchedRules,
+  };
+}
+
+function inferLabels(branch, changedFiles) {
+  const labels = new Set();
+  const branchPrefix = branch.split("/")[0].toLowerCase();
+  const lowerFiles = changedFiles.map((file) => file.toLowerCase());
+
+  const branchMap = {
+    feat: "feature",
+    feature: "feature",
+    fix: "bugfix",
+    bugfix: "bugfix",
+    hotfix: "bugfix",
+    docs: "docs",
+    chore: "chore",
+    refactor: "refactor",
+    release: "release",
+  };
+  if (branchMap[branchPrefix]) {
+    labels.add(branchMap[branchPrefix]);
+  }
+
+  if (lowerFiles.length && lowerFiles.every((file) => file.endsWith(".md") || file.startsWith("docs/"))) {
+    labels.add("docs");
+  }
+  if (lowerFiles.some((file) => file.startsWith(".github/") || file.includes("/workflows/") || file === "dockerfile")) {
+    labels.add("ci");
+  }
+  if (lowerFiles.some((file) => file.startsWith("infra/") || file.startsWith("terraform/") || file.startsWith("k8s/") || file.startsWith("helm/"))) {
+    labels.add("infra");
+  }
+  if (lowerFiles.some((file) => file.endsWith(".tsx") || file.endsWith(".jsx") || file.endsWith(".css") || file.startsWith("frontend/") || file.startsWith("components/") || file.startsWith("pages/"))) {
+    labels.add("frontend");
+  }
+  if (lowerFiles.some((file) => file.endsWith(".py") || file.endsWith(".go") || file.endsWith(".rb") || file.startsWith("api/") || file.startsWith("server/") || file.startsWith("backend/") || file.startsWith("db/") || file.startsWith("prisma/"))) {
+    labels.add("backend");
+  }
+  if (lowerFiles.some((file) => file.includes("__tests__") || file.includes("/test") || /(^|\/).+\.(spec|test)\./.test(file) || file.startsWith("e2e/"))) {
+    labels.add("tests");
+  }
+
+  return [...labels];
+}
+
+function getCurrentGitHubLogin() {
+  return cleanSubject(run("gh api user --jq .login", { allowFailure: true }));
+}
+
+function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
+  const autoLabels = args.noAutoLabels ? [] : inferLabels(branch, diffContext.changedFiles);
+  const codeowners = args.noAutoReviewers
+    ? { users: [], teams: [], source: "disabled", matchedRules: 0 }
+    : inferReviewersFromCodeowners(diffContext.changedFiles);
+
+  const filteredAutoUsers = codeowners.users.filter((user) => !currentLogin || user.toLowerCase() !== currentLogin.toLowerCase());
+  const labels = uniq([...args.labels, ...autoLabels]);
+  const reviewers = uniq([...args.reviewers, ...filteredAutoUsers]);
+  const teamReviewers = uniq([...args.teamReviewers, ...codeowners.teams]);
+
+  return {
+    labels,
+    manualLabels: args.labels,
+    autoLabels,
+    reviewers,
+    manualReviewers: args.reviewers,
+    teamReviewers,
+    manualTeamReviewers: args.teamReviewers,
+    autoReviewerSource: codeowners.source,
+    matchedCodeownersRules: codeowners.matchedRules,
+    milestone: cleanSubject(args.milestone),
+  };
+}
+
+function safeGhEdit(result, description, cmd) {
+  try {
+    run(cmd, { stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    result.status = result.status === "ok" ? "warning" : result.status;
+    result.warnings.push(`${description}: ${cleanSubject(error.message)}`);
+  }
 }
 
 function printText(result) {
@@ -293,12 +531,28 @@ function printText(result) {
     console.log(`- PR title: ${result.pr.title}`);
     console.log(`- PR body source: ${result.pr.bodySource}`);
   }
+  if (result.automation.labels.length) {
+    console.log(`- Labels: ${result.automation.labels.join(", ")}`);
+  }
+  if (result.automation.reviewers.length || result.automation.teamReviewers.length) {
+    console.log(`- Reviewers: ${[...result.automation.reviewers, ...result.automation.teamReviewers].join(", ")}`);
+  }
+  if (result.automation.milestone) {
+    console.log(`- Milestone: ${result.automation.milestone}`);
+  }
   console.log();
   for (const step of result.steps) {
     console.log(`- ${step}`);
   }
   if (result.prUrl) {
     console.log(`- PR: ${result.prUrl}`);
+  }
+  if (result.warnings.length) {
+    console.log();
+    console.log("Warnings:");
+    for (const warning of result.warnings) {
+      console.log(`- ${warning}`);
+    }
   }
 }
 
@@ -312,6 +566,19 @@ const result = {
   validation: { command: "", passed: null },
   pr: null,
   prUrl: "",
+  automation: {
+    labels: [],
+    manualLabels: [],
+    autoLabels: [],
+    reviewers: [],
+    manualReviewers: [],
+    teamReviewers: [],
+    manualTeamReviewers: [],
+    autoReviewerSource: "none",
+    matchedCodeownersRules: 0,
+    milestone: "",
+  },
+  warnings: [],
   steps: [],
 };
 
@@ -358,6 +625,16 @@ if (dirty && args.message) {
   }
 }
 
+const diffContext = collectDiffContext(args.base);
+const currentLogin = !args.dryRun && args.pr ? getCurrentGitHubLogin() : "";
+result.automation = buildAutomationPlan(args, result.branch, diffContext, currentLogin);
+if (result.automation.autoLabels.length) {
+  result.steps.push(`infer labels ${result.automation.autoLabels.join(", ")}`);
+}
+if (result.automation.autoReviewerSource !== "none" && result.automation.autoReviewerSource !== "disabled") {
+  result.steps.push(`infer reviewers from ${result.automation.autoReviewerSource}`);
+}
+
 if (args.push || args.pr) {
   result.steps.push(`push branch ${result.branch}`);
   if (!args.dryRun) {
@@ -371,6 +648,7 @@ if (args.pr) {
     branch: result.branch,
     base: args.base,
     validationCommand,
+    diffContext,
   });
   result.pr = {
     title: prContent.title,
@@ -380,6 +658,15 @@ if (args.pr) {
   };
   result.steps.push(`prepare PR title ${JSON.stringify(prContent.title)}`);
   result.steps.push(`prepare PR body from ${prContent.bodySource}`);
+  if (result.automation.labels.length) {
+    result.steps.push(`plan labels ${result.automation.labels.join(", ")}`);
+  }
+  if (result.automation.reviewers.length || result.automation.teamReviewers.length) {
+    result.steps.push(`plan reviewers ${[...result.automation.reviewers, ...result.automation.teamReviewers].join(", ")}`);
+  }
+  if (result.automation.milestone) {
+    result.steps.push(`plan milestone ${result.automation.milestone}`);
+  }
   result.steps.push("open pull request");
 
   if (!args.dryRun) {
@@ -397,6 +684,29 @@ if (args.pr) {
       ];
       if (args.draft) prCmd.push("--draft");
       result.prUrl = run(prCmd.join(" "), { stdio: ["ignore", "pipe", "pipe"] }).split(/\r?\n/).at(-1) || "";
+
+      if (result.prUrl && result.automation.labels.length) {
+        safeGhEdit(
+          result,
+          "apply labels",
+          `gh pr edit ${quote(result.prUrl)} --add-label ${quote(result.automation.labels.join(","))}`
+        );
+      }
+      const allReviewers = uniq([...result.automation.reviewers, ...result.automation.teamReviewers]);
+      if (result.prUrl && allReviewers.length) {
+        safeGhEdit(
+          result,
+          "request reviewers",
+          `gh pr edit ${quote(result.prUrl)} --add-reviewer ${quote(allReviewers.join(","))}`
+        );
+      }
+      if (result.prUrl && result.automation.milestone) {
+        safeGhEdit(
+          result,
+          "set milestone",
+          `gh pr edit ${quote(result.prUrl)} --milestone ${quote(result.automation.milestone)}`
+        );
+      }
     } finally {
       fs.rmSync(tempPath, { force: true });
     }

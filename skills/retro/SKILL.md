@@ -30,6 +30,7 @@ node dist/cli.js retro --since "7 days ago"
 node dist/cli.js retro --since "30 days ago" --json
 node dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
 node dist/cli.js retro --since "14 days ago" --no-artifacts
+node dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
 ```
 
 ## Output format
@@ -45,3 +46,4 @@ node dist/cli.js retro --since "14 days ago" --no-artifacts
 - Focus on evidence, not vague culture commentary.
 - Keep recommendations operational and measurable.
 - Keep the generated markdown/json snapshots under `.codex-stack/retros/` unless the operator explicitly disables artifacts.
+- Treat GitHub analytics as additive; if `gh` or repo access is unavailable, still return the git-based retrospective.
