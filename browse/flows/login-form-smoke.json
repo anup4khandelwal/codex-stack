@@ -1,0 +1,18 @@
+[
+  {
+    "action": "assert-visible",
+    "selector": "form"
+  },
+  {
+    "action": "assert-visible",
+    "selector": "input[type=email], input[name=email]"
+  },
+  {
+    "action": "assert-visible",
+    "selector": "input[type=password], input[name=password]"
+  },
+  {
+    "action": "assert-visible",
+    "selector": "button[type=submit]"
+  }
+]

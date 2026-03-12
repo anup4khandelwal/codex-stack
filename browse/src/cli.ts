@@ -4,6 +4,7 @@ export type BrowseCommand =
   | "sessions"
   | "flows"
   | "save-flow"
+  | "save-repo-flow"
   | "show-flow"
   | "delete-flow"
   | "clear-session"
@@ -25,5 +26,5 @@ export type BrowseCommand =
   | "login";
 
 export function describeBrowseRuntime(): string {
-  return "codex-stack browse provides persistent Playwright sessions, reusable named flows, deterministic assertions, and QA commands such as click, fill, wait, press, screenshot, and login.";
+  return "codex-stack browse provides persistent Playwright sessions, deterministic assertions, and reusable flow files from both local state and checked-in browse/flows definitions.";
 }

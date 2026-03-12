@@ -23,7 +23,7 @@ Run the shipping checklist with minimal back-and-forth.
 4. Summarize failures or proceed.
 5. Build a PR title/body from the branch diff or merge the diff summary into a PR template if present.
 6. Infer labels from branch/files and reviewers from `CODEOWNERS` unless disabled.
-7. Stage, commit, push, open PR if requested, and apply metadata.
+7. Create missing labels in GitHub if required, then stage, commit, push, open PR, and apply metadata.
 8. Report the exact commands executed.
 
 ## CLI

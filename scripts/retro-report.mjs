@@ -154,12 +154,96 @@ function commandExists(command) {
   return Boolean(run(`command -v ${command}`, { allowFailure: true }));
 }
 
+function splitRepo(repo) {
+  const [owner, name] = String(repo || "").split("/");
+  if (!owner || !name) return null;
+  return { owner, name };
+}
+
+function fetchGithubAnalyticsGraphql({ repo, since, limit }) {
+  const parts = splitRepo(repo);
+  if (!parts) return null;
+
+  const query = "query($owner:String!,$name:String!,$limit:Int!){repository(owner:$owner,name:$name){pullRequests(first:$limit,orderBy:{field:UPDATED_AT,direction:DESC},states:[OPEN,MERGED,CLOSED]){nodes{number state isDraft createdAt updatedAt mergedAt author{login} comments{totalCount} reviews(first:50){nodes{createdAt state author{login}}}}}}}";
+  const raw = run(
+    `gh api graphql -f query=${JSON.stringify(query)} -F owner=${JSON.stringify(parts.owner)} -F name=${JSON.stringify(parts.name)} -F limit=${limit}`,
+    { allowFailure: true }
+  );
+  if (!raw) return null;
+
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  const nodes = payload?.data?.repository?.pullRequests?.nodes;
+  if (!Array.isArray(nodes)) return null;
+
+  const cutoff = parseSinceDate(since);
+  const filtered = nodes.filter((pr) => !cutoff || new Date(pr.updatedAt) >= cutoff);
+  const merged = filtered.filter((pr) => Boolean(pr.mergedAt));
+  const open = filtered.filter((pr) => pr.state === "OPEN");
+  const closedUnmerged = filtered.filter((pr) => pr.state === "CLOSED" && !pr.mergedAt);
+  const draft = filtered.filter((pr) => Boolean(pr.isDraft));
+  const withReviews = filtered.filter((pr) => Array.isArray(pr.reviews?.nodes) && pr.reviews.nodes.length > 0);
+  const avgTimeToMergeHours = merged.length
+    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.mergedAt) - new Date(pr.createdAt)) / 36e5), 0) / merged.length)
+    : 0;
+  const avgConversationCount = filtered.length
+    ? round(filtered.reduce((sum, pr) => sum + Number(pr.comments?.totalCount || 0) + Number(pr.reviews?.nodes?.length || 0), 0) / filtered.length)
+    : 0;
+  const oldestOpenAgeHours = open.length
+    ? round(Math.max(...open.map((pr) => (Date.now() - new Date(pr.createdAt).getTime()) / 36e5)))
+    : 0;
+  const avgFirstReviewLatencyHours = withReviews.length
+    ? round(withReviews.reduce((sum, pr) => {
+      const sorted = [...pr.reviews.nodes].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      return sum + ((new Date(sorted[0].createdAt) - new Date(pr.createdAt)) / 36e5);
+    }, 0) / withReviews.length)
+    : 0;
+  const pendingReviewCount = open.filter((pr) => (!pr.reviews?.nodes?.length) && ((Date.now() - new Date(pr.createdAt).getTime()) / 36e5 >= 24)).length;
+  const avgReviewsPerPr = filtered.length
+    ? round(filtered.reduce((sum, pr) => sum + Number(pr.reviews?.nodes?.length || 0), 0) / filtered.length)
+    : 0;
+
+  return {
+    enabled: true,
+    reason: "ok",
+    source: "graphql",
+    repo,
+    scannedCount: filtered.length,
+    mergedCount: merged.length,
+    openCount: open.length,
+    closedUnmergedCount: closedUnmerged.length,
+    draftCount: draft.length,
+    avgTimeToMergeHours,
+    avgConversationCount,
+    oldestOpenAgeHours,
+    avgFirstReviewLatencyHours,
+    pendingReviewCount,
+    avgReviewsPerPr,
+    topAuthors: topCounts(filtered, (pr) => pr.author?.login || "", 5),
+    topReviewers: topCounts(
+      filtered.flatMap((pr) => (pr.reviews?.nodes || []).map((review) => ({ reviewer: review.author?.login || "" }))),
+      (item) => item.reviewer,
+      5
+    ),
+  };
+}
+
 function fetchGithubAnalytics({ repo, since, limit }) {
   if (!repo) {
     return { enabled: false, reason: "repo-unresolved", repo: "" };
   }
   if (!commandExists("gh")) {
     return { enabled: false, reason: "gh-missing", repo };
+  }
+
+  const graphql = fetchGithubAnalyticsGraphql({ repo, since, limit });
+  if (graphql) {
+    return graphql;
   }
 
   const raw = run(`gh api repos/${repo}/pulls?state=all&per_page=${limit}&sort=updated&direction=desc`, { allowFailure: true });
@@ -196,6 +280,7 @@ function fetchGithubAnalytics({ repo, since, limit }) {
   return {
     enabled: true,
     reason: "ok",
+    source: "rest",
     repo,
     scannedCount: filtered.length,
     mergedCount: merged.length,
@@ -205,11 +290,18 @@ function fetchGithubAnalytics({ repo, since, limit }) {
     avgTimeToMergeHours,
     avgConversationCount,
     oldestOpenAgeHours,
+    avgFirstReviewLatencyHours: 0,
+    pendingReviewCount: 0,
+    avgReviewsPerPr: 0,
     topAuthors: topCounts(filtered, (pr) => pr.user?.login || "", 5),
+    topReviewers: [],
   };
 }
 
 function recommendation(summary) {
+  if (summary.github.enabled && summary.github.pendingReviewCount >= 3) {
+    return `${summary.github.pendingReviewCount} open PRs have been waiting at least 24 hours for a first review. Rebalance reviewer load before opening new work.`;
+  }
   if (summary.github.enabled && summary.github.oldestOpenAgeHours >= 72) {
     return `At least one open PR has been waiting for ${summary.github.oldestOpenAgeHours} hours. Clear review debt before new work piles up.`;
   }
@@ -235,10 +327,14 @@ function toMarkdown(summary) {
   const subjectLines = summary.recentSubjects.length
     ? summary.recentSubjects.map((item) => `- ${item.subject}`).join("\n")
     : "- none";
+  const reviewerLines = summary.github.enabled && summary.github.topReviewers.length
+    ? summary.github.topReviewers.map((item) => `- ${item.name}: ${item.count} reviews`).join("\n")
+    : "- none";
   const githubSection = summary.github.enabled
     ? `## GitHub PR analytics
 
 - Repo: ${summary.github.repo}
+- Source: ${summary.github.source}
 - PRs scanned: ${summary.github.scannedCount}
 - Merged: ${summary.github.mergedCount}
 - Open: ${summary.github.openCount}
@@ -246,7 +342,11 @@ function toMarkdown(summary) {
 - Draft: ${summary.github.draftCount}
 - Avg time to merge: ${summary.github.avgTimeToMergeHours} hours
 - Avg conversation count: ${summary.github.avgConversationCount}
+- Avg first review latency: ${summary.github.avgFirstReviewLatencyHours} hours
+- Avg reviews per PR: ${summary.github.avgReviewsPerPr}
+- Pending review backlog (>24h, no reviews): ${summary.github.pendingReviewCount}
 - Oldest open PR age: ${summary.github.oldestOpenAgeHours} hours
+\n### Top reviewers\n\n${reviewerLines}
 `
     : `## GitHub PR analytics
 

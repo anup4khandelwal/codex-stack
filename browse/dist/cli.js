@@ -9,6 +9,7 @@ const STATE_DIR = path.join(ROOT_DIR, "browse");
 const STATE_PATH = path.join(STATE_DIR, "state.json");
 const SESSION_DIR = path.join(STATE_DIR, "sessions");
 const FLOW_DIR = path.join(STATE_DIR, "flows");
+const REPO_FLOW_DIR = path.resolve(process.cwd(), "browse", "flows");
 
 function usage() {
   console.log(`codex-stack browse
@@ -19,6 +20,7 @@ Usage:
   codex-stack browse sessions
   codex-stack browse flows
   codex-stack browse save-flow <name> <json-steps>
+  codex-stack browse save-repo-flow <name> <json-steps>
   codex-stack browse show-flow <name>
   codex-stack browse delete-flow <name>
   codex-stack browse clear-session [name]
@@ -91,6 +93,10 @@ function flowPath(name) {
   return path.join(FLOW_DIR, `${name}.json`);
 }
 
+function repoFlowPath(name) {
+  return path.join(REPO_FLOW_DIR, `${name}.json`);
+}
+
 function assertFlowName(name) {
   if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
     throw new Error("Flow names may only contain letters, numbers, dot, underscore, and dash.");
@@ -122,38 +128,69 @@ function parseFlow(jsonText) {
   }
 }
 
-function listNamedFlows() {
-  ensureDir(FLOW_DIR);
-  return fs.readdirSync(FLOW_DIR)
+function readFlowDirectory(dirPath, source) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath)
     .filter((name) => name.endsWith(".json"))
     .map((name) => {
-      const fullPath = path.join(FLOW_DIR, name);
+      const fullPath = path.join(dirPath, name);
       const steps = readJson(fullPath, []);
       return {
         name: name.replace(/\.json$/, ""),
         steps: Array.isArray(steps) ? steps.length : 0,
         path: fullPath,
+        source,
       };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    });
+}
+
+function listNamedFlows() {
+  ensureDir(FLOW_DIR);
+  const map = new Map();
+  for (const entry of readFlowDirectory(REPO_FLOW_DIR, "repo")) {
+    map.set(entry.name, entry);
+  }
+  for (const entry of readFlowDirectory(FLOW_DIR, "local")) {
+    map.set(entry.name, entry);
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function resolveNamedFlow(name) {
+  assertFlowName(name);
+  const localPath = flowPath(name);
+  if (fs.existsSync(localPath)) {
+    const steps = readJson(localPath, []);
+    if (!Array.isArray(steps)) {
+      throw new Error(`Stored local flow is invalid JSON array: ${name}`);
+    }
+    return { name, source: "local", path: localPath, steps };
+  }
+
+  const checkedInPath = repoFlowPath(name);
+  if (fs.existsSync(checkedInPath)) {
+    const steps = readJson(checkedInPath, []);
+    if (!Array.isArray(steps)) {
+      throw new Error(`Stored repo flow is invalid JSON array: ${name}`);
+    }
+    return { name, source: "repo", path: checkedInPath, steps };
+  }
+
+  throw new Error(`Unknown flow: ${name}`);
 }
 
 function loadNamedFlow(name) {
-  assertFlowName(name);
-  const fullPath = flowPath(name);
-  if (!fs.existsSync(fullPath)) {
-    throw new Error(`Unknown flow: ${name}`);
-  }
-  const steps = readJson(fullPath, []);
-  if (!Array.isArray(steps)) {
-    throw new Error(`Stored flow is invalid JSON array: ${name}`);
-  }
-  return steps;
+  return resolveNamedFlow(name).steps;
 }
 
 function saveNamedFlow(name, steps) {
   assertFlowName(name);
   writeJson(flowPath(name), steps);
+}
+
+function saveRepoFlow(name, steps) {
+  assertFlowName(name);
+  writeJson(repoFlowPath(name), steps);
 }
 
 function recordSession(sessionName, patch) {
@@ -331,7 +368,9 @@ async function main() {
     console.log(`- session root: ${SESSION_DIR}`);
     console.log(`- flow root: ${FLOW_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, show-flow, delete-flow, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, show-flow, delete-flow, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
+    console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- browser install: run `npx playwright install chromium` after npm install");
     return;
   }
@@ -364,10 +403,20 @@ async function main() {
     return;
   }
 
+  if (command === "save-repo-flow") {
+    const [name, jsonSteps] = rest;
+    if (!name || !jsonSteps) usage();
+    const steps = parseFlow(jsonSteps);
+    assertCondition(Boolean(steps), "Invalid JSON steps. Example: [{\"action\":\"click\",\"selector\":\"button\"}]");
+    saveRepoFlow(name, steps);
+    console.log(`saved repo flow ${name}`);
+    return;
+  }
+
   if (command === "show-flow") {
     const [name] = rest;
     if (!name) usage();
-    printJson(loadNamedFlow(name));
+    printJson(resolveNamedFlow(name));
     return;
   }
 
@@ -375,8 +424,16 @@ async function main() {
     const [name] = rest;
     if (!name) usage();
     assertFlowName(name);
-    fs.rmSync(flowPath(name), { force: true });
-    console.log(`deleted flow ${name}`);
+    const target = flowPath(name);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { force: true });
+      console.log(`deleted flow ${name}`);
+      return;
+    }
+    if (fs.existsSync(repoFlowPath(name))) {
+      throw new Error(`Flow ${name} is checked into the repo. Edit or delete ${repoFlowPath(name)} directly.`);
+    }
+    throw new Error(`Unknown flow: ${name}`);
     return;
   }
 

@@ -1,0 +1,16 @@
+[
+  {
+    "action": "assert-visible",
+    "selector": "body"
+  },
+  {
+    "action": "assert-text",
+    "selector": "h1",
+    "value": "Example"
+  },
+  {
+    "action": "assert-count",
+    "selector": "a",
+    "count": 1
+  }
+]

@@ -485,6 +485,51 @@ function getCurrentGitHubLogin() {
   return cleanSubject(run("gh api user --jq .login", { allowFailure: true }));
 }
 
+function inferGithubRepo() {
+  const remote = run("git remote get-url origin", { allowFailure: true });
+  const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
+  return match ? match[1] : "";
+}
+
+function labelSpec(label) {
+  const normalized = String(label || "").toLowerCase();
+  const presets = {
+    feature: { color: "1f6feb", description: "Feature work" },
+    bugfix: { color: "d73a4a", description: "Bug fix" },
+    docs: { color: "0e8a16", description: "Documentation change" },
+    ci: { color: "5319e7", description: "CI or workflow change" },
+    infra: { color: "0052cc", description: "Infrastructure or platform change" },
+    frontend: { color: "fbca04", description: "Frontend change" },
+    backend: { color: "c2e0c6", description: "Backend change" },
+    tests: { color: "bfd4f2", description: "Test coverage or test-only change" },
+    chore: { color: "d4c5f9", description: "Maintenance task" },
+    refactor: { color: "c5def5", description: "Refactor" },
+    release: { color: "b60205", description: "Release activity" },
+  };
+  return presets[normalized] || {
+    color: "ededed",
+    description: `codex-stack ship label for ${label}`,
+  };
+}
+
+function ensureLabelExists(repo, label, result) {
+  if (!repo || !label) return;
+  const encoded = encodeURIComponent(label);
+  const exists = run(`gh api repos/${repo}/labels/${encoded}`, { allowFailure: true });
+  if (exists) return;
+  const spec = labelSpec(label);
+  try {
+    run(
+      `gh api repos/${repo}/labels -X POST -f name=${quote(label)} -f color=${quote(spec.color)} -f description=${quote(spec.description)}`,
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    result.automation.createdLabels.push(label);
+  } catch (error) {
+    result.status = result.status === "ok" ? "warning" : result.status;
+    result.warnings.push(`create label ${label}: ${cleanSubject(error.message)}`);
+  }
+}
+
 function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
   const autoLabels = args.noAutoLabels ? [] : inferLabels(branch, diffContext.changedFiles);
   const codeowners = args.noAutoReviewers
@@ -497,6 +542,7 @@ function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
   const teamReviewers = uniq([...args.teamReviewers, ...codeowners.teams]);
 
   return {
+    repo: inferGithubRepo(),
     labels,
     manualLabels: args.labels,
     autoLabels,
@@ -507,6 +553,7 @@ function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
     autoReviewerSource: codeowners.source,
     matchedCodeownersRules: codeowners.matchedRules,
     milestone: cleanSubject(args.milestone),
+    createdLabels: [],
   };
 }
 
@@ -539,6 +586,9 @@ function printText(result) {
   }
   if (result.automation.milestone) {
     console.log(`- Milestone: ${result.automation.milestone}`);
+  }
+  if (result.automation.createdLabels.length) {
+    console.log(`- Created labels: ${result.automation.createdLabels.join(", ")}`);
   }
   console.log();
   for (const step of result.steps) {
@@ -577,6 +627,8 @@ const result = {
     autoReviewerSource: "none",
     matchedCodeownersRules: 0,
     milestone: "",
+    repo: "",
+    createdLabels: [],
   },
   warnings: [],
   steps: [],
@@ -686,6 +738,9 @@ if (args.pr) {
       result.prUrl = run(prCmd.join(" "), { stdio: ["ignore", "pipe", "pipe"] }).split(/\r?\n/).at(-1) || "";
 
       if (result.prUrl && result.automation.labels.length) {
+        for (const label of result.automation.labels) {
+          ensureLabelExists(result.automation.repo, label, result);
+        }
         safeGhEdit(
           result,
           "apply labels",

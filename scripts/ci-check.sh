@@ -20,6 +20,7 @@ echo "[4/6] browse flow registry"
 node browse/dist/cli.js save-flow smoke '[{"action":"wait","ms":1},{"action":"assert-url","value":"example.com"}]' >/tmp/codex-stack-flow-save.log
 node browse/dist/cli.js show-flow smoke >/tmp/codex-stack-flow-show.log
 node browse/dist/cli.js flows >/tmp/codex-stack-flow-list.log
+grep -q '"source": "repo"' /tmp/codex-stack-flow-list.log
 node browse/dist/cli.js delete-flow smoke >/tmp/codex-stack-flow-delete.log
 
 echo "[5/6] review, ship, and retro interfaces"

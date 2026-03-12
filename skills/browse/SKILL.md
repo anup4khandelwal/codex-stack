@@ -21,6 +21,7 @@ Give the agent eyes for QA and deployment checks.
 - `sessions`
 - `flows`
 - `save-flow <name> <json-steps>`
+- `save-repo-flow <name> <json-steps>`
 - `show-flow <name>`
 - `delete-flow <name>`
 - `clear-session`
@@ -46,6 +47,7 @@ Give the agent eyes for QA and deployment checks.
 ```bash
 node dist/cli.js browse text https://example.com --session staging
 node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
 node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
@@ -57,3 +59,4 @@ node dist/cli.js browse sessions
 - Do not claim visual validation without screenshots or runtime output.
 - Prefer deterministic selectors and stable flows.
 - Reuse named sessions for authenticated flows so login state persists.
+- Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.

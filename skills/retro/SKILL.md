@@ -39,6 +39,7 @@ node dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
 - Workstream breakdown
 - Bottlenecks
 - Rework or churn signals
+- Review latency and reviewer load when GitHub data is available
 - Actions for next week
 
 ## Guardrails

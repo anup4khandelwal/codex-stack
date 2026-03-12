@@ -69,8 +69,10 @@ node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer 
 node dist/cli.js retro --json
 node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 node dist/cli.js browse doctor
+node dist/cli.js browse flows
 node dist/cli.js browse text https://example.com --session staging
 node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+node dist/cli.js browse save-repo-flow checkout-smoke '[{"action":"assert-visible","selector":"main"}]'
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-visible https://example.com "main" --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
@@ -83,6 +85,7 @@ node dist/cli.js doctor
 ```text
 codex-stack/
   browse/
+  browse/flows/
   dist/
   docs/
   skills/
@@ -102,6 +105,7 @@ This scaffold prioritizes:
 6. CODEOWNERS-aware reviewer suggestions and auto-label planning in `ship`
 7. retrospective snapshots automatically written into `.codex-stack/retros/`
 8. optional GitHub PR analytics inside `retro`
+9. checked-in reusable flow files under `browse/flows/`
 
 ## Roadmap
 
