@@ -14,20 +14,24 @@ Use this mode when the agent needs to inspect a real web page, click through a f
 
 Give the agent eyes for QA and deployment checks.
 
-## Current state
+## Available commands
 
-This repo currently scaffolds the browser mode. The runtime is not fully implemented in `v0.1.0`.
+- `doctor`
+- `status`
+- `text <url>`
+- `html <url> [selector]`
+- `links <url>`
+- `screenshot <url> [path]`
+- `eval <url> <expression>`
+- `flow <url> <json-steps>`
 
-## Planned commands
+## Example
 
-- `goto`
-- `text`
-- `snapshot`
-- `click`
-- `fill`
-- `console`
-- `network`
-- `screenshot`
+```bash
+node dist/cli.js browse text https://example.com
+node dist/cli.js browse screenshot https://example.com /tmp/example.png
+node dist/cli.js browse flow https://example.com '[{"action":"click","selector":"a"}]'
+```
 
 ## Guardrails
 

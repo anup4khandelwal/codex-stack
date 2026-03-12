@@ -6,6 +6,14 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "[codex-stack] running environment checks"
 bash "$ROOT_DIR/scripts/doctor.sh"
 
+if [ "${SKIP_INSTALL:-0}" != "1" ] && [ ! -d "$ROOT_DIR/node_modules/playwright" ]; then
+  echo "[codex-stack] installing npm dependencies"
+  (
+    cd "$ROOT_DIR"
+    npm install
+  )
+fi
+
 mkdir -p "$ROOT_DIR/.codex-stack/bin"
 ln -snf "$ROOT_DIR/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack"
 ln -snf "$ROOT_DIR/browse/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack-browse"
@@ -16,5 +24,6 @@ echo "  $ROOT_DIR/.codex-stack/bin/codex-stack-browse"
 echo
 echo "Next steps:"
 echo "  1. node dist/cli.js list"
-echo "  2. bash scripts/install-skills.sh user"
-echo "  3. node dist/cli.js show review"
+echo "  2. npx playwright install chromium"
+echo "  3. bash scripts/install-skills.sh user"
+echo "  4. node dist/cli.js review"

@@ -18,7 +18,7 @@
 - Codex-oriented skill files under `skills/`
 - A small local CLI under `dist/cli.js`
 - Install and linking scripts for `~/.codex/skills`
-- A scaffolded browser runtime under `browse/`
+- A functional Playwright-backed browser runtime under `browse/`
 
 ## Quick start
 
@@ -27,6 +27,7 @@ cd codex-stack
 ./setup
 node dist/cli.js list
 node dist/cli.js show review
+node dist/cli.js review
 ```
 
 ## Install skills for Codex
@@ -55,7 +56,9 @@ This creates symlinks such as:
 node dist/cli.js list
 node dist/cli.js show product
 node dist/cli.js path review
+node dist/cli.js review --json
 node dist/cli.js browse doctor
+node dist/cli.js browse text https://example.com
 node dist/cli.js doctor
 ```
 
@@ -78,9 +81,7 @@ This scaffold prioritizes:
 1. installable skill definitions
 2. a command router for local discovery
 3. a review-first workflow
-4. a placeholder browser runtime structure for the next milestone
-
-The browser runtime is intentionally scaffolded, not fully implemented, in this initial cut.
+4. a practical browser runtime for text, links, HTML, screenshots, and scripted flows
 
 ## Roadmap
 
@@ -93,9 +94,9 @@ The browser runtime is intentionally scaffolded, not fully implemented, in this 
 
 ### v0.2.0
 
-- real Playwright-backed `browse` runtime
 - richer `ship` automation
 - project-local mode aliases
+- persistent browser sessions and multi-page QA flows
 
 ### v0.3.0
 

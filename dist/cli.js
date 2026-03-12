@@ -17,6 +17,7 @@ Usage:
   codex-stack show <mode>
   codex-stack path <mode>
   codex-stack doctor
+  codex-stack review [--json] [--base <ref>]
   codex-stack browse <args...>
 `);
   process.exit(1);
@@ -31,6 +32,12 @@ function runDoctor() {
 function runBrowse(args) {
   const browsePath = path.resolve(__dirname, "..", "browse", "dist", "cli.js");
   const result = spawnSync("node", [browsePath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 0);
+}
+
+function runReview(args) {
+  const reviewPath = path.resolve(__dirname, "..", "scripts", "review-diff.mjs");
+  const result = spawnSync("node", [reviewPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
@@ -71,6 +78,10 @@ if (command === "doctor") {
 
 if (command === "browse") {
   runBrowse(rest);
+}
+
+if (command === "review") {
+  runReview(rest);
 }
 
 usage();

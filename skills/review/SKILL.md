@@ -26,6 +26,14 @@ Find the problems that pass CI but still create outages, regressions, or broken 
 4. Output findings ordered by severity.
 5. Recommend concrete fixes and tests.
 
+## CLI
+
+```bash
+node dist/cli.js review
+node dist/cli.js review --json
+node dist/cli.js review --base origin/main
+```
+
 ## Output format
 
 - Critical findings

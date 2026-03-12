@@ -22,8 +22,8 @@ else
   echo "[doctor] tsc: missing (checked-in dist is still usable)"
 fi
 
-if command -v playwright >/dev/null 2>&1; then
-  echo "[doctor] playwright: installed"
+if [ -d "node_modules/playwright" ] || [ -d "$(cd "$(dirname "$0")/.." && pwd)/node_modules/playwright" ]; then
+  echo "[doctor] playwright package: installed"
 else
-  echo "[doctor] playwright: not on PATH (browse runtime is scaffold-only right now)"
+  echo "[doctor] playwright package: missing"
 fi

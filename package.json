@@ -11,8 +11,15 @@
   },
   "scripts": {
     "doctor": "bash scripts/doctor.sh",
-    "smoke": "node dist/cli.js list && node dist/cli.js path review && node browse/dist/cli.js doctor",
-    "build": "node -e \"console.log('Checked-in dist/ is ready. Install TypeScript and Playwright before enabling a real build pipeline.')\""
+    "smoke": "bash scripts/ci-check.sh",
+    "review": "node scripts/review-diff.mjs",
+    "browse:doctor": "node browse/dist/cli.js doctor",
+    "browse:text": "node browse/dist/cli.js text",
+    "browse:screenshot": "node browse/dist/cli.js screenshot",
+    "build": "node -e \"console.log('Checked-in dist/ is ready. Install TypeScript before enabling a transpile build.')\""
+  },
+  "dependencies": {
+    "playwright": "^1.53.2"
   },
   "engines": {
     "node": ">=20.0.0",

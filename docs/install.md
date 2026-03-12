@@ -6,6 +6,12 @@
 ./setup
 ```
 
+Then install a browser for Playwright:
+
+```bash
+npx playwright install chromium
+```
+
 ## Install Codex skills
 
 User-level:
