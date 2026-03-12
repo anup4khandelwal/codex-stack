@@ -18,8 +18,8 @@ Usage:
   codex-stack path <mode>
   codex-stack doctor
   codex-stack review [--json] [--base <ref>]
-  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr]
-  codex-stack retro [--since <range>] [--out <path>] [--json]
+  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--draft]
+  codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts]
   codex-stack browse <args...>
 `);
   process.exit(1);

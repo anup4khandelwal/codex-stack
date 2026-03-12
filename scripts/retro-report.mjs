@@ -8,7 +8,7 @@ function usage() {
   console.log(`retro-report
 
 Usage:
-  node scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>]
+  node scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts]
 `);
   process.exit(0);
 }
@@ -27,12 +27,27 @@ function run(cmd, options = {}) {
   }
 }
 
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeFile(targetPath, content) {
+  ensureDir(path.dirname(targetPath));
+  fs.writeFileSync(targetPath, content);
+}
+
+function timestampSlug() {
+  return new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
+}
+
 function parseArgs(argv) {
   const out = {
     since: "7 days ago",
     out: "",
     json: false,
     jsonOut: "",
+    artifactDir: path.resolve(process.cwd(), ".codex-stack", "retros"),
+    noArtifacts: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -47,6 +62,11 @@ function parseArgs(argv) {
     } else if (arg === "--json-out") {
       out.jsonOut = argv[i + 1] || "";
       i += 1;
+    } else if (arg === "--artifact-dir") {
+      out.artifactDir = path.resolve(process.cwd(), argv[i + 1] || out.artifactDir);
+      i += 1;
+    } else if (arg === "--no-artifacts") {
+      out.noArtifacts = true;
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
@@ -139,6 +159,27 @@ ${subjectLines}
 `;
 }
 
+function writeArtifacts(summary, markdown, artifactDir) {
+  ensureDir(artifactDir);
+  const stamp = timestampSlug();
+  const latestMarkdown = path.join(artifactDir, "latest.md");
+  const latestJson = path.join(artifactDir, "latest.json");
+  const snapshotMarkdown = path.join(artifactDir, `${stamp}.md`);
+  const snapshotJson = path.join(artifactDir, `${stamp}.json`);
+
+  writeFile(latestMarkdown, markdown);
+  writeFile(latestJson, JSON.stringify(summary, null, 2));
+  writeFile(snapshotMarkdown, markdown);
+  writeFile(snapshotJson, JSON.stringify(summary, null, 2));
+
+  return {
+    latestMarkdown,
+    latestJson,
+    snapshotMarkdown,
+    snapshotJson,
+  };
+}
+
 const args = parseArgs(process.argv.slice(2));
 const logRaw = run(`git log --since=${JSON.stringify(args.since)} --date=iso --pretty=format:%H%x09%an%x09%ad%x09%s`, { allowFailure: true });
 const commits = bucketCommits(logRaw);
@@ -156,19 +197,22 @@ const summary = {
   topAreas,
   recentSubjects: commits.slice(0, 10).map((commit) => ({ subject: commit.subject, author: commit.author })),
   recommendation: "",
+  artifacts: {},
 };
 summary.recommendation = recommendation(summary);
 
 const markdown = toMarkdown(summary);
 
+if (!args.noArtifacts) {
+  summary.artifacts = writeArtifacts(summary, markdown, args.artifactDir);
+}
+
 if (args.out) {
-  fs.mkdirSync(path.dirname(args.out), { recursive: true });
-  fs.writeFileSync(args.out, markdown);
+  writeFile(args.out, markdown);
 }
 
 if (args.jsonOut) {
-  fs.mkdirSync(path.dirname(args.jsonOut), { recursive: true });
-  fs.writeFileSync(args.jsonOut, JSON.stringify(summary, null, 2));
+  writeFile(args.jsonOut, JSON.stringify(summary, null, 2));
 }
 
 if (args.json) console.log(JSON.stringify(summary, null, 2));

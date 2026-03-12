@@ -28,7 +28,8 @@ Summarize throughput, hotspots, review bottlenecks, and recurring failure patter
 ```bash
 node dist/cli.js retro --since "7 days ago"
 node dist/cli.js retro --since "30 days ago" --json
-node dist/cli.js retro --since "14 days ago" --out .codex-stack/retros/latest.md
+node dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
+node dist/cli.js retro --since "14 days ago" --no-artifacts
 ```
 
 ## Output format
@@ -43,3 +44,4 @@ node dist/cli.js retro --since "14 days ago" --out .codex-stack/retros/latest.md
 
 - Focus on evidence, not vague culture commentary.
 - Keep recommendations operational and measurable.
+- Keep the generated markdown/json snapshots under `.codex-stack/retros/` unless the operator explicitly disables artifacts.

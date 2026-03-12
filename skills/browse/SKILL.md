@@ -19,18 +19,30 @@ Give the agent eyes for QA and deployment checks.
 - `doctor`
 - `status`
 - `sessions`
+- `flows`
+- `save-flow <name> <json-steps>`
+- `show-flow <name>`
+- `delete-flow <name>`
 - `clear-session`
 - `text <url>`
 - `html <url> [selector]`
 - `links <url>`
 - `screenshot <url> [path]`
 - `eval <url> <expression>`
+- `click <url> <selector>`
+- `fill <url> <selector> <value>`
+- `wait <url> [selector|ms:<n>|url:<target>]`
+- `press <url> <selector> <key>`
 - `flow <url> <json-steps>`
+- `run-flow <url> <name>`
+- `login <url> <name>`
 
 ## Example
 
 ```bash
 node dist/cli.js browse text https://example.com --session staging
+node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
 node dist/cli.js browse sessions
 ```

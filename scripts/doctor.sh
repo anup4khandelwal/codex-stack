@@ -4,6 +4,13 @@ set -euo pipefail
 echo "[doctor] node: $(node -v)"
 echo "[doctor] npm: $(npm -v)"
 
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  echo "[doctor] node support: expected Node 24+, current runtime is below target"
+else
+  echo "[doctor] node support: ok (Node 24+)"
+fi
+
 if command -v git >/dev/null 2>&1; then
   echo "[doctor] git: $(git --version)"
 else

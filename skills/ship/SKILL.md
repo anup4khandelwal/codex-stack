@@ -21,8 +21,9 @@ Run the shipping checklist with minimal back-and-forth.
 2. Sync latest `main`.
 3. Run project validation commands.
 4. Summarize failures or proceed.
-5. Stage, commit, push, and open PR if requested.
-6. Report the exact commands executed.
+5. Build a PR title/body from the branch diff or merge the diff summary into a PR template if present.
+6. Stage, commit, push, and open PR if requested.
+7. Report the exact commands executed.
 
 ## CLI
 
@@ -30,6 +31,7 @@ Run the shipping checklist with minimal back-and-forth.
 node dist/cli.js ship --dry-run
 node dist/cli.js ship --message "feat: ready for review" --push
 node dist/cli.js ship --message "feat: ready for review" --push --pr
+node dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 ```
 
 ## Output format

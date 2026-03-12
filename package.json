@@ -24,7 +24,7 @@
     "playwright": "^1.53.2"
   },
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=24.0.0",
     "npm": ">=10.0.0"
   },
   "keywords": [

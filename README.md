@@ -2,6 +2,8 @@
 
 `codex-stack` turns Codex from one generic coding agent into a set of specialist workflow modes you can invoke on demand.
 
+Node target: `24`
+
 ## Modes
 
 | Mode | Role | Outcome |
@@ -24,6 +26,7 @@
 
 ```bash
 cd codex-stack
+nvm use 24
 ./setup
 node dist/cli.js list
 node dist/cli.js show review
@@ -61,9 +64,12 @@ node dist/cli.js path review
 node dist/cli.js review --json
 node dist/cli.js ship --dry-run
 node dist/cli.js ship --message "feat: ready for review" --push --pr
+node dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 node dist/cli.js retro --json
 node dist/cli.js browse doctor
 node dist/cli.js browse text https://example.com --session staging
+node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse sessions
 node dist/cli.js doctor
 ```
@@ -88,6 +94,8 @@ This scaffold prioritizes:
 2. a command router for local discovery
 3. a review-first workflow
 4. a practical browser runtime for text, links, HTML, screenshots, scripted flows, and named session persistence
+5. shipping automation with generated PR titles and template-aware PR bodies
+6. retrospective snapshots automatically written into `.codex-stack/retros/`
 
 ## Roadmap
 
@@ -103,6 +111,7 @@ This scaffold prioritizes:
 - project-local mode aliases
 - richer multi-step QA helpers
 - release templates and PR body generation
+- named reusable login flows
 
 ### v0.3.0
 

@@ -3,8 +3,11 @@
 ## Local setup
 
 ```bash
+nvm use 24
 ./setup
 ```
+
+This repo targets Node `24`.
 
 Then install a browser for Playwright:
 
