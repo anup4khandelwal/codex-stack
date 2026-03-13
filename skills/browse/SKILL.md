@@ -41,6 +41,7 @@ Give the agent eyes for QA and deployment checks.
 - `flow <url> <json-steps>`
 - `run-flow <url> <name>`
 - `login <url> <name>`
+- flow step action: `use-flow`
 
 ## Example
 
@@ -60,3 +61,4 @@ node dist/cli.js browse sessions
 - Prefer deterministic selectors and stable flows.
 - Reuse named sessions for authenticated flows so login state persists.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
+- Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.

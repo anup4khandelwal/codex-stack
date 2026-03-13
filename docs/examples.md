@@ -47,6 +47,7 @@ npm run demo:start
 node dist/cli.js browse flows
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 node dist/cli.js browse screenshot http://127.0.0.1:4173/dashboard /tmp/customer-portal-demo.png --session friend-demo
 ```
 
@@ -57,4 +58,5 @@ node dist/cli.js retro --since "7 days ago"
 node dist/cli.js retro --since "14 days ago" --json
 node dist/cli.js retro --since "7 days ago" --artifact-dir .codex-stack/retros
 node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
+npm run weekly
 ```

@@ -9,6 +9,15 @@ nvm use 24
 
 This repo targets Node `24`.
 
+`./setup` also creates project-local wrappers under `.codex-stack/bin/` for:
+
+- `product`
+- `tech`
+- `review`
+- `ship`
+- `browse`
+- `retro`
+
 Then install a browser for Playwright:
 
 ```bash

@@ -28,6 +28,7 @@ http://127.0.0.1:4173
 node dist/cli.js browse flows
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 ```
 
 ## Recommended login

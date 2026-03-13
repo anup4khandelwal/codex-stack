@@ -2,6 +2,19 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOCAL_BIN="$ROOT_DIR/.codex-stack/bin"
+
+write_wrapper() {
+  local name="$1"
+  local command="$2"
+  cat > "$LOCAL_BIN/$name" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="\$(cd \"\$(dirname \"\$0\")/../..\" && pwd)"
+exec node "\$ROOT_DIR/dist/cli.js" $command "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/$name"
+}
 
 echo "[codex-stack] running environment checks"
 bash "$ROOT_DIR/scripts/doctor.sh"
@@ -14,13 +27,21 @@ if [ "${SKIP_INSTALL:-0}" != "1" ] && [ ! -d "$ROOT_DIR/node_modules/playwright"
   )
 fi
 
-mkdir -p "$ROOT_DIR/.codex-stack/bin"
-ln -snf "$ROOT_DIR/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack"
-ln -snf "$ROOT_DIR/browse/dist/cli.js" "$ROOT_DIR/.codex-stack/bin/codex-stack-browse"
+mkdir -p "$LOCAL_BIN"
+ln -snf "$ROOT_DIR/dist/cli.js" "$LOCAL_BIN/codex-stack"
+ln -snf "$ROOT_DIR/browse/dist/cli.js" "$LOCAL_BIN/codex-stack-browse"
+
+write_wrapper "product" "show product"
+write_wrapper "tech" "show tech"
+write_wrapper "review" "review"
+write_wrapper "ship" "ship"
+write_wrapper "browse" "browse"
+write_wrapper "retro" "retro"
 
 echo "[codex-stack] local wrappers ready:"
-echo "  $ROOT_DIR/.codex-stack/bin/codex-stack"
-echo "  $ROOT_DIR/.codex-stack/bin/codex-stack-browse"
+echo "  $LOCAL_BIN/codex-stack"
+echo "  $LOCAL_BIN/codex-stack-browse"
+echo "  $LOCAL_BIN/{product,tech,review,ship,browse,retro}"
 echo
 echo "Next steps:"
 echo "  1. node dist/cli.js list"

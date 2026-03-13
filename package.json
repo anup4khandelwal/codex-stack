@@ -17,6 +17,7 @@
     "review": "node scripts/review-diff.mjs",
     "ship:dry": "node scripts/ship-branch.mjs --dry-run",
     "retro": "node scripts/retro-report.mjs --since '7 days ago'",
+    "weekly": "node scripts/weekly-digest.mjs --since '7 days ago' --no-github",
     "browse:doctor": "node browse/dist/cli.js doctor",
     "browse:text": "node browse/dist/cli.js text",
     "browse:screenshot": "node browse/dist/cli.js screenshot",

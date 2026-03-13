@@ -89,8 +89,10 @@ Then demo these commands:
 node dist/cli.js browse flows
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 node dist/cli.js ship --dry-run --pr
 node dist/cli.js retro --since "30 days ago" --no-github
+npm run weekly
 ```
 
 The demo app is small on purpose: it gives you a real login and dashboard flow to browser-test without needing a backend.
@@ -120,6 +122,7 @@ npm run doctor
 npm run smoke
 npm run demo:start
 npm run demo:smoke
+npm run weekly
 npm run review
 npm run ship:dry
 npm run retro
@@ -146,6 +149,7 @@ npm run browse:doctor
 - Local session state and user-created flows live under `.codex-stack/browse/`.
 - Checked-in shared flows live under `browse/flows/`.
 - Local flows override repo flows with the same name, which makes ad hoc QA safe without mutating shared fixtures.
+- Checked-in flows can compose other flows with `use-flow`, which makes login + dashboard sequences reusable.
 
 Examples:
 
@@ -154,6 +158,7 @@ node dist/cli.js browse text https://example.com --session staging
 node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session staging
 ```
 
 ### Retro
@@ -161,6 +166,7 @@ node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --
 - `retro` summarizes throughput, merge churn, top work areas, and authors from git history.
 - By default it writes `latest.md`, `latest.json`, and timestamped snapshots under `.codex-stack/retros/`.
 - When `gh` is installed and repo access is available, it also adds PR analytics such as merge time, first-review latency, backlog, and reviewer load.
+- `weekly-digest.mjs` builds a friendlier markdown summary for status updates and demo wrap-ups.
 
 ## Repository Layout
 

@@ -128,6 +128,24 @@ function parseFlow(jsonText) {
   }
 }
 
+function expandFlowSteps(steps, stack = []) {
+  const expanded = [];
+  for (const step of steps) {
+    if (step && typeof step === "object" && String(step.action || "") === "use-flow") {
+      const flowName = String(step.name || step.flow || "").trim();
+      assertCondition(Boolean(flowName), "use-flow steps require a flow name.");
+      if (stack.includes(flowName)) {
+        throw new Error(`Detected recursive flow reference: ${[...stack, flowName].join(" -> ")}`);
+      }
+      const nested = loadNamedFlow(flowName);
+      expanded.push(...expandFlowSteps(nested, [...stack, flowName]));
+      continue;
+    }
+    expanded.push(step);
+  }
+  return expanded;
+}
+
 function readFlowDirectory(dirPath, source) {
   if (!fs.existsSync(dirPath)) return [];
   return fs.readdirSync(dirPath)
@@ -330,14 +348,18 @@ async function runStep(page, step, sessionName) {
     assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     return { action, selector, expectedCount, count, status: "ok" };
   }
+  if (action === "use-flow") {
+    return { action, name: step.name || step.flow, status: "expanded" };
+  }
 
   return { action, status: "unsupported" };
 }
 
 async function executeFlow({ sessionName, url, steps, recordName, authenticated = false }) {
+  const expandedSteps = expandFlowSteps(steps);
   const results = await withPage(sessionName, url, async ({ page }) => {
     const entries = [];
-    for (const step of steps) {
+    for (const step of expandedSteps) {
       entries.push(await runStep(page, step, sessionName));
     }
     return entries;
@@ -347,7 +369,7 @@ async function executeFlow({ sessionName, url, steps, recordName, authenticated 
     lastUrl: url,
     lastFlow: recordName,
     authenticated,
-    output: `${steps.length} steps`,
+    output: `${expandedSteps.length} steps`,
   });
   return results;
 }

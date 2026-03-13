@@ -28,6 +28,7 @@ node dist/cli.js browse wait https://example.com/dashboard "text=Dashboard" --se
 node dist/cli.js browse assert-visible https://example.com "main" --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
 node dist/cli.js browse assert-count https://example.com "a" 1 --session staging
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 node dist/cli.js browse sessions
 node dist/cli.js browse clear-session staging
 node dist/cli.js browse screenshot https://example.com /tmp/example.png
@@ -69,6 +70,7 @@ node scripts/retro-report.mjs --since "7 days ago" --artifact-dir .codex-stack/r
 node scripts/retro-report.mjs --since "7 days ago" --no-artifacts
 node scripts/retro-report.mjs --since "7 days ago" --repo anup4khandelwal/codex-stack
 node scripts/retro-report.mjs --since "7 days ago" --no-github
+node scripts/weekly-digest.mjs --since "7 days ago" --no-github
 ```
 
 Notes:
@@ -92,3 +94,4 @@ Notes:
 
 - Checked-in flows live under `browse/flows/`.
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
+- Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
