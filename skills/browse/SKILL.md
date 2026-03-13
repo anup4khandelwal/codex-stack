@@ -68,3 +68,4 @@ node dist/cli.js browse sessions
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.
 - Prefer Markdown or YAML exports when flows need code review, because they diff more cleanly than inline JSON strings.
+- For repeatable authenticated demos, start the flow with a `clear-storage` step so persistent sessions do not skip the login screen.

@@ -297,6 +297,11 @@ function exportFlowDocument(name, targetPath, flow) {
   return { absolute, format };
 }
 
+function isPreNavigationStep(step) {
+  const action = String(step?.action || "");
+  return action === "clear-storage";
+}
+
 function expandFlowSteps(steps, stack = []) {
   const expanded = [];
   for (const step of steps) {
@@ -517,6 +522,19 @@ async function runStep(page, step, sessionName) {
     assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     return { action, selector, expectedCount, count, status: "ok" };
   }
+  if (action === "clear-storage") {
+    const scope = String(step.scope || "both");
+    const key = step.key === undefined || step.key === null ? "" : String(step.key);
+    await page.evaluate(({ scope, key }) => {
+      const clearBucket = (storage) => {
+        if (key) storage.removeItem(key);
+        else storage.clear();
+      };
+      if (scope === "local" || scope === "both") clearBucket(window.localStorage);
+      if (scope === "session" || scope === "both") clearBucket(window.sessionStorage);
+    }, { scope, key });
+    return { action, scope, key: key || "*", status: "ok" };
+  }
   if (action === "use-flow") {
     return { action, name: step.name || step.flow, status: "expanded" };
   }
@@ -526,9 +544,28 @@ async function runStep(page, step, sessionName) {
 
 async function executeFlow({ sessionName, url, steps, recordName, authenticated = false }) {
   const expandedSteps = expandFlowSteps(steps);
-  const results = await withPage(sessionName, url, async ({ page }) => {
+  const preNavigationSteps = [];
+  const postNavigationSteps = [];
+  for (const step of expandedSteps) {
+    if (!postNavigationSteps.length && isPreNavigationStep(step)) preNavigationSteps.push(step);
+    else postNavigationSteps.push(step);
+  }
+
+  const results = await withPage(sessionName, "", async ({ page }) => {
     const entries = [];
-    for (const step of expandedSteps) {
+    if (preNavigationSteps.length) {
+      if (url) {
+        const origin = new URL(url).origin;
+        await page.goto(origin, { waitUntil: "networkidle" });
+      }
+      for (const step of preNavigationSteps) {
+        entries.push(await runStep(page, step, sessionName));
+      }
+    }
+    if (url) {
+      entries.push(await runStep(page, { action: "goto", url }, sessionName));
+    }
+    for (const step of postNavigationSteps) {
       entries.push(await runStep(page, step, sessionName));
     }
     return entries;

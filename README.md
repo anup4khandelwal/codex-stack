@@ -96,6 +96,7 @@ npm run weekly
 ```
 
 The demo app is small on purpose: it gives you a real login and dashboard flow to browser-test without needing a backend.
+The checked-in `portal-login` flow clears the demo app's stored session before it navigates, so you can re-run it safely on the same named browser session.
 
 ## CLI Overview
 

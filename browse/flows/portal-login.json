@@ -1,5 +1,10 @@
 [
   {
+    "action": "clear-storage",
+    "scope": "local",
+    "key": "codexStackDemoSession"
+  },
+  {
     "action": "fill",
     "selector": "input[name=email]",
     "value": "ops-demo@acme.dev"

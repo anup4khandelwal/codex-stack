@@ -104,3 +104,4 @@ Notes:
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
+- Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.
