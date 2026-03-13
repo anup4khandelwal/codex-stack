@@ -43,17 +43,11 @@ node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer 
 ## Browse mode
 
 ```bash
+npm run demo:start
 node dist/cli.js browse flows
-node dist/cli.js browse text https://example.com --session staging
-node dist/cli.js browse fill https://example.com/login "input[name=email]" demo@example.com --session staging
-node dist/cli.js browse click https://example.com/login "button[type=submit]" --session staging
-node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
-node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
-node dist/cli.js browse login https://example.com/login login-local --session staging
-node dist/cli.js browse assert-visible https://example.com "main" --session staging
-node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
-node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
-node dist/cli.js browse sessions
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
+node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js browse screenshot http://127.0.0.1:4173/dashboard /tmp/customer-portal-demo.png --session friend-demo
 ```
 
 ## Retro mode

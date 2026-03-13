@@ -73,6 +73,28 @@ Use codex-stack-review to audit the current branch against main and focus on pro
 Use codex-stack-browse to verify the staging login flow in a persistent browser session.
 ```
 
+## Sample Project To Demo
+
+Use the built-in demo app under `examples/customer-portal-demo/`.
+
+Start it:
+
+```bash
+npm run demo:start
+```
+
+Then demo these commands:
+
+```bash
+node dist/cli.js browse flows
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
+node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js ship --dry-run --pr
+node dist/cli.js retro --since "30 days ago" --no-github
+```
+
+The demo app is small on purpose: it gives you a real login and dashboard flow to browser-test without needing a backend.
+
 ## CLI Overview
 
 The root CLI is a router for discovery plus the `review`, `ship`, `retro`, and `browse` workflows.
@@ -96,6 +118,8 @@ Useful npm scripts:
 ```bash
 npm run doctor
 npm run smoke
+npm run demo:start
+npm run demo:smoke
 npm run review
 npm run ship:dry
 npm run retro
@@ -145,6 +169,7 @@ codex-stack/
   browse/              Playwright runtime and checked-in QA flows
   dist/                Checked-in root CLI output
   docs/                Install, command, and example docs
+  examples/            Sample apps you can use to demo codex-stack
   scripts/             Setup, install, review, ship, and retro helpers
   skills/              Installable Codex skills
   src/                 TypeScript source for the root CLI

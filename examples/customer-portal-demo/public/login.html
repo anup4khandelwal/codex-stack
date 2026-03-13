@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Operator Login</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body class="portal-auth" data-page="login">
+    <div class="page auth-shell">
+      <section class="panel auth-panel">
+        <div class="kicker">Acme ops console</div>
+        <h1>Operator sign in</h1>
+        <p class="lede">
+          Use any email and password. The demo stores a lightweight local session so Playwright flows can persist across runs.
+        </p>
+        <div class="notice" data-login-notice>Recommended demo account: <strong>ops-demo@acme.dev</strong></div>
+      </section>
+
+      <section class="panel auth-form">
+        <h2>Welcome back</h2>
+        <p class="form-help">This screen is intentionally simple so it is easy to automate during a live demo.</p>
+        <form data-login-form>
+          <label>
+            <span>Email</span>
+            <input type="email" name="email" placeholder="ops-demo@acme.dev" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" name="password" placeholder="demo-password" autocomplete="current-password" />
+          </label>
+          <button class="primary" type="submit">Sign in to dashboard</button>
+        </form>
+      </section>
+    </div>
+  </body>
+</html>

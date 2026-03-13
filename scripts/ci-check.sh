@@ -23,11 +23,12 @@ node browse/dist/cli.js flows >/tmp/codex-stack-flow-list.log
 grep -q '"source": "repo"' /tmp/codex-stack-flow-list.log
 node browse/dist/cli.js delete-flow smoke >/tmp/codex-stack-flow-delete.log
 
-echo "[5/6] review, ship, and retro interfaces"
+echo "[5/7] review, ship, retro, and demo interfaces"
 node scripts/review-diff.mjs --help >/tmp/codex-stack-review-help.log
 node scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
 node scripts/retro-report.mjs --help >/tmp/codex-stack-retro-help.log
 node scripts/retro-report.mjs --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
+node scripts/demo-smoke.mjs >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
 
@@ -59,7 +60,13 @@ grep -q '"autoReviewerSource": ".github/CODEOWNERS"' /tmp/codex-stack-ship.json
 grep -q '"docs-owner"' /tmp/codex-stack-ship.json
 grep -q '"feature"' /tmp/codex-stack-ship.json
 
-echo "[6/6] docs present"
+echo "[6/7] demo files present"
+test -f examples/customer-portal-demo/README.md
+test -f examples/customer-portal-demo/server.mjs
+test -f browse/flows/portal-login.json
+test -f browse/flows/portal-dashboard.json
+
+echo "[7/7] docs present"
 test -f README.md
 test -f docs/install.md
 test -f docs/commands.md
