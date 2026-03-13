@@ -31,6 +31,7 @@ node dist/cli.js retro --since "30 days ago" --json
 node dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
 node dist/cli.js retro --since "14 days ago" --no-artifacts
 node dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
+node scripts/weekly-digest.mjs --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
 ```
 
 ## Output format
@@ -41,6 +42,7 @@ node dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
 - Rework or churn signals
 - Review latency and reviewer load when GitHub data is available
 - Actions for next week
+- Publish-ready weekly summary outputs for Slack, email, and status posts when `weekly-digest.mjs` is used
 
 ## Guardrails
 

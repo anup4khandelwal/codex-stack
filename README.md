@@ -108,7 +108,7 @@ node dist/cli.js path browse
 node dist/cli.js doctor
 node dist/cli.js review --json --base origin/main
 node dist/cli.js ship --dry-run
-node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --label release-candidate
+node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
 node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 node dist/cli.js browse doctor
 node dist/cli.js browse flows
@@ -140,8 +140,8 @@ npm run browse:doctor
 ### Ship
 
 - `ship` can run repository validation before shipping. In this repo it will prefer `npm run smoke`.
-- It can generate a PR title/body from the branch diff, merge that content into a detected PR template, infer labels from branch and changed files, and infer reviewers from `CODEOWNERS`.
-- Supported flags include `--dry-run`, `--push`, `--pr`, `--title`, `--body`, `--body-file`, `--template`, `--reviewer`, `--team-reviewer`, `--label`, `--milestone`, `--draft`, `--no-auto-labels`, `--no-auto-reviewers`, and `--json`.
+- It can generate a PR title/body from the branch diff, merge that content into a detected PR template, infer labels from branch and changed files, infer reviewers from `CODEOWNERS`, and attach assignees/projects after PR creation.
+- Supported flags include `--dry-run`, `--push`, `--pr`, `--title`, `--body`, `--body-file`, `--template`, `--reviewer`, `--team-reviewer`, `--assignee`, `--assign-self`, `--project`, `--label`, `--milestone`, `--draft`, `--no-auto-labels`, `--no-auto-reviewers`, and `--json`.
 
 ### Browse
 
@@ -150,12 +150,15 @@ npm run browse:doctor
 - Checked-in shared flows live under `browse/flows/`.
 - Local flows override repo flows with the same name, which makes ad hoc QA safe without mutating shared fixtures.
 - Checked-in flows can compose other flows with `use-flow`, which makes login + dashboard sequences reusable.
+- Flows can now be imported from or exported to `.json`, `.yaml`, `.yml`, and `.md` files. Markdown exports include a fenced YAML block so they diff cleanly in PRs.
 
 Examples:
 
 ```bash
 node dist/cli.js browse text https://example.com --session staging
 node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+node dist/cli.js browse import-flow login-local ./docs/login-flow.md
+node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session staging
@@ -166,7 +169,7 @@ node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --
 - `retro` summarizes throughput, merge churn, top work areas, and authors from git history.
 - By default it writes `latest.md`, `latest.json`, and timestamped snapshots under `.codex-stack/retros/`.
 - When `gh` is installed and repo access is available, it also adds PR analytics such as merge time, first-review latency, backlog, and reviewer load.
-- `weekly-digest.mjs` builds a friendlier markdown summary for status updates and demo wrap-ups.
+- `weekly-digest.mjs` builds a friendlier markdown summary for status updates and demo wrap-ups, and also emits publish-ready summary, Slack, email, and manifest artifacts under `docs/weekly-digest-publish/` by default.
 
 ## Repository Layout
 

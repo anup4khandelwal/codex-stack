@@ -22,7 +22,7 @@ function usage() {
   console.log(`ship-branch
 
 Usage:
-  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--label <name>] [--milestone <title>] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -89,7 +89,10 @@ function parseArgs(argv) {
     milestone: "",
     reviewers: [],
     teamReviewers: [],
+    assignees: [],
+    projects: [],
     labels: [],
+    assignSelf: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -125,18 +128,28 @@ function parseArgs(argv) {
     } else if (arg === "--team-reviewer") {
       out.teamReviewers.push(argv[i + 1] || "");
       i += 1;
+    } else if (arg === "--assignee") {
+      out.assignees.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--project") {
+      out.projects.push(argv[i + 1] || "");
+      i += 1;
     } else if (arg === "--label") {
       out.labels.push(argv[i + 1] || "");
       i += 1;
     } else if (arg === "--milestone") {
       out.milestone = argv[i + 1] || "";
       i += 1;
+    } else if (arg === "--assign-self") {
+      out.assignSelf = true;
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
   }
   out.reviewers = uniq(out.reviewers);
   out.teamReviewers = uniq(out.teamReviewers);
+  out.assignees = uniq(out.assignees);
+  out.projects = uniq(out.projects);
   out.labels = uniq(out.labels);
   return out;
 }
@@ -535,11 +548,14 @@ function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
   const codeowners = args.noAutoReviewers
     ? { users: [], teams: [], source: "disabled", matchedRules: 0 }
     : inferReviewersFromCodeowners(diffContext.changedFiles);
+  const autoAssignees = args.assignSelf ? [currentLogin || "@me"] : [];
 
   const filteredAutoUsers = codeowners.users.filter((user) => !currentLogin || user.toLowerCase() !== currentLogin.toLowerCase());
   const labels = uniq([...args.labels, ...autoLabels]);
   const reviewers = uniq([...args.reviewers, ...filteredAutoUsers]);
   const teamReviewers = uniq([...args.teamReviewers, ...codeowners.teams]);
+  const assignees = uniq([...args.assignees, ...autoAssignees]);
+  const projects = uniq(args.projects);
 
   return {
     repo: inferGithubRepo(),
@@ -550,6 +566,11 @@ function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
     manualReviewers: args.reviewers,
     teamReviewers,
     manualTeamReviewers: args.teamReviewers,
+    assignees,
+    manualAssignees: args.assignees,
+    autoAssignees,
+    projects,
+    manualProjects: args.projects,
     autoReviewerSource: codeowners.source,
     matchedCodeownersRules: codeowners.matchedRules,
     milestone: cleanSubject(args.milestone),
@@ -583,6 +604,12 @@ function printText(result) {
   }
   if (result.automation.reviewers.length || result.automation.teamReviewers.length) {
     console.log(`- Reviewers: ${[...result.automation.reviewers, ...result.automation.teamReviewers].join(", ")}`);
+  }
+  if (result.automation.assignees.length) {
+    console.log(`- Assignees: ${result.automation.assignees.join(", ")}`);
+  }
+  if (result.automation.projects.length) {
+    console.log(`- Projects: ${result.automation.projects.join(", ")}`);
   }
   if (result.automation.milestone) {
     console.log(`- Milestone: ${result.automation.milestone}`);
@@ -624,6 +651,11 @@ const result = {
     manualReviewers: [],
     teamReviewers: [],
     manualTeamReviewers: [],
+    assignees: [],
+    manualAssignees: [],
+    autoAssignees: [],
+    projects: [],
+    manualProjects: [],
     autoReviewerSource: "none",
     matchedCodeownersRules: 0,
     milestone: "",
@@ -678,13 +710,16 @@ if (dirty && args.message) {
 }
 
 const diffContext = collectDiffContext(args.base);
-const currentLogin = !args.dryRun && args.pr ? getCurrentGitHubLogin() : "";
+const currentLogin = args.pr || args.assignSelf ? getCurrentGitHubLogin() : "";
 result.automation = buildAutomationPlan(args, result.branch, diffContext, currentLogin);
 if (result.automation.autoLabels.length) {
   result.steps.push(`infer labels ${result.automation.autoLabels.join(", ")}`);
 }
 if (result.automation.autoReviewerSource !== "none" && result.automation.autoReviewerSource !== "disabled") {
   result.steps.push(`infer reviewers from ${result.automation.autoReviewerSource}`);
+}
+if (result.automation.autoAssignees.length) {
+  result.steps.push(`infer assignees ${result.automation.autoAssignees.join(", ")}`);
 }
 
 if (args.push || args.pr) {
@@ -715,6 +750,12 @@ if (args.pr) {
   }
   if (result.automation.reviewers.length || result.automation.teamReviewers.length) {
     result.steps.push(`plan reviewers ${[...result.automation.reviewers, ...result.automation.teamReviewers].join(", ")}`);
+  }
+  if (result.automation.assignees.length) {
+    result.steps.push(`plan assignees ${result.automation.assignees.join(", ")}`);
+  }
+  if (result.automation.projects.length) {
+    result.steps.push(`plan projects ${result.automation.projects.join(", ")}`);
   }
   if (result.automation.milestone) {
     result.steps.push(`plan milestone ${result.automation.milestone}`);
@@ -754,6 +795,24 @@ if (args.pr) {
           "request reviewers",
           `gh pr edit ${quote(result.prUrl)} --add-reviewer ${quote(allReviewers.join(","))}`
         );
+      }
+      if (result.prUrl && result.automation.assignees.length) {
+        for (const assignee of result.automation.assignees) {
+          safeGhEdit(
+            result,
+            `assign ${assignee}`,
+            `gh pr edit ${quote(result.prUrl)} --add-assignee ${quote(assignee)}`
+          );
+        }
+      }
+      if (result.prUrl && result.automation.projects.length) {
+        for (const project of result.automation.projects) {
+          safeGhEdit(
+            result,
+            `add project ${project}`,
+            `gh pr edit ${quote(result.prUrl)} --add-project ${quote(project)}`
+          );
+        }
       }
       if (result.prUrl && result.automation.milestone) {
         safeGhEdit(

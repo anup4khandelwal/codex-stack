@@ -22,6 +22,9 @@ Give the agent eyes for QA and deployment checks.
 - `flows`
 - `save-flow <name> <json-steps>`
 - `save-repo-flow <name> <json-steps>`
+- `import-flow <name> <path>`
+- `import-repo-flow <name> <path>`
+- `export-flow <name> <path>`
 - `show-flow <name>`
 - `delete-flow <name>`
 - `clear-session`
@@ -49,6 +52,8 @@ Give the agent eyes for QA and deployment checks.
 node dist/cli.js browse text https://example.com --session staging
 node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
+node dist/cli.js browse import-flow login-local ./docs/login-flow.md
+node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
 node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
@@ -62,3 +67,4 @@ node dist/cli.js browse sessions
 - Reuse named sessions for authenticated flows so login state persists.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.
+- Prefer Markdown or YAML exports when flows need code review, because they diff more cleanly than inline JSON strings.

@@ -13,7 +13,7 @@ Usage:
   codex-stack path <mode>
   codex-stack doctor
   codex-stack review [--json] [--base <ref>]
-  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--label <name>] [--draft]
+  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--draft]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]
   codex-stack browse <args...>
 `);

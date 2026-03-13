@@ -21,6 +21,9 @@ Usage:
   codex-stack browse flows
   codex-stack browse save-flow <name> <json-steps>
   codex-stack browse save-repo-flow <name> <json-steps>
+  codex-stack browse import-flow <name> <path>
+  codex-stack browse import-repo-flow <name> <path>
+  codex-stack browse export-flow <name> <path>
   codex-stack browse show-flow <name>
   codex-stack browse delete-flow <name>
   codex-stack browse clear-session [name]
@@ -126,6 +129,172 @@ function parseFlow(jsonText) {
   } catch {
     return null;
   }
+}
+
+function detectFlowFormat(filePath) {
+  const ext = path.extname(String(filePath || "")).toLowerCase();
+  if (ext === ".json") return "json";
+  if (ext === ".yaml" || ext === ".yml") return "yaml";
+  if (ext === ".md" || ext === ".markdown") return "markdown";
+  throw new Error("Unsupported flow format. Use .json, .yaml, .yml, or .md.");
+}
+
+function parseYamlScalar(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (value === "") return "";
+  if (value === "null" || value === "~") return null;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (/^-?\d+$/.test(value)) return Number.parseInt(value, 10);
+  if (/^-?\d+\.\d+$/.test(value)) return Number.parseFloat(value);
+  if (value.startsWith('"')) {
+    return JSON.parse(value);
+  }
+  if (value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replace(/''/g, "'");
+  }
+  return value;
+}
+
+function parseYamlFlow(text) {
+  const steps = [];
+  let current = null;
+
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = rawLine.replace(/\t/g, "  ");
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const itemMatch = line.match(/^\s*-\s*(.*)$/);
+    if (itemMatch) {
+      if (current) steps.push(current);
+      current = {};
+      const rest = itemMatch[1].trim();
+      if (rest) {
+        const separator = rest.indexOf(":");
+        if (separator === -1) {
+          throw new Error(`Invalid YAML flow entry: ${rawLine}`);
+        }
+        const key = rest.slice(0, separator).trim();
+        const value = rest.slice(separator + 1);
+        current[key] = parseYamlScalar(value);
+      }
+      continue;
+    }
+
+    const propertyMatch = line.match(/^\s+([^:#][^:]*):(.*)$/);
+    if (propertyMatch && current) {
+      const key = propertyMatch[1].trim();
+      const value = propertyMatch[2];
+      current[key] = parseYamlScalar(value);
+      continue;
+    }
+
+    throw new Error(`Unsupported YAML flow syntax: ${rawLine}`);
+  }
+
+  if (current) steps.push(current);
+  return steps;
+}
+
+function assertFlowSteps(steps, context = "flow") {
+  assertCondition(Array.isArray(steps), `${context} must be a JSON/YAML array of step objects.`);
+  for (const [index, step] of steps.entries()) {
+    assertCondition(step && typeof step === "object" && !Array.isArray(step), `${context} step ${index + 1} must be an object.`);
+  }
+}
+
+function parseMarkdownFlow(text) {
+  const matches = [...String(text || "").matchAll(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g)];
+  for (const match of matches) {
+    const language = String(match[1] || "").toLowerCase();
+    const block = match[2];
+    if (language === "json") {
+      const steps = parseFlow(block);
+      if (steps) return steps;
+      continue;
+    }
+    if (language === "yaml" || language === "yml" || !language) {
+      const trimmed = block.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith("[")) {
+        const steps = parseFlow(trimmed);
+        if (steps) return steps;
+      }
+      return parseYamlFlow(block);
+    }
+  }
+  throw new Error("Markdown flow files must contain a fenced ```json or ```yaml block.");
+}
+
+function loadFlowDocument(filePath) {
+  const absolute = path.resolve(process.cwd(), filePath);
+  const format = detectFlowFormat(absolute);
+  const content = fs.readFileSync(absolute, "utf8");
+  let steps;
+  if (format === "json") {
+    steps = parseFlow(content);
+  } else if (format === "yaml") {
+    steps = parseYamlFlow(content);
+  } else {
+    steps = parseMarkdownFlow(content);
+  }
+  assertFlowSteps(steps, path.basename(absolute));
+  return { absolute, format, steps };
+}
+
+function yamlScalar(value) {
+  if (value === null) return "null";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(String(value ?? ""));
+}
+
+function toYamlFlow(steps) {
+  return steps.map((step) => {
+    const entries = Object.entries(step);
+    if (!entries.length) return "- {}";
+    return entries.map(([key, value], index) => (
+      index === 0
+        ? `- ${key}: ${yamlScalar(value)}`
+        : `  ${key}: ${yamlScalar(value)}`
+    )).join("\n");
+  }).join("\n");
+}
+
+function toMarkdownFlow(name, steps, source) {
+  return `# Flow: ${name}
+
+Exported from codex-stack browse.
+
+- Source: ${source}
+- Steps: ${steps.length}
+
+\`\`\`yaml
+${toYamlFlow(steps)}
+\`\`\`
+
+Run it with:
+
+\`\`\`bash
+node dist/cli.js browse run-flow <url> ${name} --session demo
+\`\`\`
+`;
+}
+
+function exportFlowDocument(name, targetPath, flow) {
+  const absolute = path.resolve(process.cwd(), targetPath);
+  const format = detectFlowFormat(absolute);
+  let content = "";
+  if (format === "json") {
+    content = `${JSON.stringify(flow.steps, null, 2)}\n`;
+  } else if (format === "yaml") {
+    content = `${toYamlFlow(flow.steps)}\n`;
+  } else {
+    content = toMarkdownFlow(name, flow.steps, flow.source);
+  }
+  ensureDir(path.dirname(absolute));
+  fs.writeFileSync(absolute, content);
+  return { absolute, format };
 }
 
 function expandFlowSteps(steps, stack = []) {
@@ -390,9 +559,10 @@ async function main() {
     console.log(`- session root: ${SESSION_DIR}`);
     console.log(`- flow root: ${FLOW_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, show-flow, delete-flow, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
+    console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
     console.log("- browser install: run `npx playwright install chromium` after npm install");
     return;
   }
@@ -420,6 +590,7 @@ async function main() {
     if (!name || !jsonSteps) usage();
     const steps = parseFlow(jsonSteps);
     assertCondition(Boolean(steps), "Invalid JSON steps. Example: [{\"action\":\"click\",\"selector\":\"button\"}]");
+    assertFlowSteps(steps, name);
     saveNamedFlow(name, steps);
     console.log(`saved flow ${name}`);
     return;
@@ -430,8 +601,31 @@ async function main() {
     if (!name || !jsonSteps) usage();
     const steps = parseFlow(jsonSteps);
     assertCondition(Boolean(steps), "Invalid JSON steps. Example: [{\"action\":\"click\",\"selector\":\"button\"}]");
+    assertFlowSteps(steps, name);
     saveRepoFlow(name, steps);
     console.log(`saved repo flow ${name}`);
+    return;
+  }
+
+  if (command === "import-flow" || command === "import-repo-flow") {
+    const [name, sourcePath] = rest;
+    if (!name || !sourcePath) usage();
+    const loaded = loadFlowDocument(sourcePath);
+    if (command === "import-repo-flow") {
+      saveRepoFlow(name, loaded.steps);
+    } else {
+      saveNamedFlow(name, loaded.steps);
+    }
+    console.log(`imported ${command === "import-repo-flow" ? "repo " : ""}flow ${name} from ${loaded.absolute} (${loaded.format})`);
+    return;
+  }
+
+  if (command === "export-flow") {
+    const [name, targetPath] = rest;
+    if (!name || !targetPath) usage();
+    const flow = resolveNamedFlow(name);
+    const exported = exportFlowDocument(name, targetPath, flow);
+    console.log(`exported flow ${name} to ${exported.absolute} (${exported.format})`);
     return;
   }
 

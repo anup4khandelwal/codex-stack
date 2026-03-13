@@ -21,7 +21,19 @@ node browse/dist/cli.js save-flow smoke '[{"action":"wait","ms":1},{"action":"as
 node browse/dist/cli.js show-flow smoke >/tmp/codex-stack-flow-show.log
 node browse/dist/cli.js flows >/tmp/codex-stack-flow-list.log
 grep -q '"source": "repo"' /tmp/codex-stack-flow-list.log
+cat > /tmp/codex-stack-flow-import.yaml <<'YAML'
+- action: "wait"
+  ms: 1
+- action: "assert-url"
+  value: "example.com"
+YAML
+node browse/dist/cli.js import-flow imported-smoke /tmp/codex-stack-flow-import.yaml >/tmp/codex-stack-flow-import.log
+node browse/dist/cli.js export-flow imported-smoke /tmp/codex-stack-flow-export.md >/tmp/codex-stack-flow-export.log
+grep -q '```yaml' /tmp/codex-stack-flow-export.md
+node browse/dist/cli.js import-flow imported-smoke-md /tmp/codex-stack-flow-export.md >/tmp/codex-stack-flow-import-md.log
 node browse/dist/cli.js delete-flow smoke >/tmp/codex-stack-flow-delete.log
+node browse/dist/cli.js delete-flow imported-smoke >/tmp/codex-stack-flow-delete-imported.log
+node browse/dist/cli.js delete-flow imported-smoke-md >/tmp/codex-stack-flow-delete-imported-md.log
 bash ./setup >/tmp/codex-stack-setup.log
 test -x .codex-stack/bin/review
 test -x .codex-stack/bin/ship
@@ -32,12 +44,17 @@ node scripts/review-diff.mjs --help >/tmp/codex-stack-review-help.log
 node scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
 node scripts/retro-report.mjs --help >/tmp/codex-stack-retro-help.log
 node scripts/retro-report.mjs --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
-node scripts/weekly-digest.mjs --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --no-github >/tmp/codex-stack-weekly.log
+node scripts/weekly-digest.mjs --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --publish-dir /tmp/codex-stack-weekly-publish --no-github >/tmp/codex-stack-weekly.log
 node scripts/demo-smoke.mjs >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
 test -f /tmp/codex-stack-weekly.md
 test -f /tmp/codex-stack-weekly.json
+test -f /tmp/codex-stack-weekly-publish/summary.txt
+test -f /tmp/codex-stack-weekly-publish/slack.md
+test -f /tmp/codex-stack-weekly-publish/slack.json
+test -f /tmp/codex-stack-weekly-publish/email.md
+test -f /tmp/codex-stack-weekly-publish/manifest.json
 
 git -C "$TMP_REPO" init -b main >/tmp/codex-stack-temp-git-init.log
 git -C "$TMP_REPO" config user.email "smoke@example.com"
@@ -60,12 +77,15 @@ git -C "$TMP_REPO" add package.json README.md .github/CODEOWNERS
 git -C "$TMP_REPO" commit -m "chore: baseline" >/tmp/codex-stack-temp-git-commit.log
 git -C "$TMP_REPO" checkout -b feat/generated-pr >/tmp/codex-stack-temp-git-branch.log
 echo "feature" >> "$TMP_REPO/README.md"
-(cd "$TMP_REPO" && node "$ROOT_DIR/scripts/ship-branch.mjs" --dry-run --base main --pr --json >/tmp/codex-stack-ship.json)
+(cd "$TMP_REPO" && node "$ROOT_DIR/scripts/ship-branch.mjs" --dry-run --base main --pr --assign-self --assignee release-bot --project "Engineering Roadmap" --json >/tmp/codex-stack-ship.json)
 grep -q '"title"' /tmp/codex-stack-ship.json
 grep -q '"bodySource"' /tmp/codex-stack-ship.json
 grep -q '"autoReviewerSource": ".github/CODEOWNERS"' /tmp/codex-stack-ship.json
 grep -q '"docs-owner"' /tmp/codex-stack-ship.json
 grep -q '"feature"' /tmp/codex-stack-ship.json
+grep -q '"assignees"' /tmp/codex-stack-ship.json
+grep -q '"release-bot"' /tmp/codex-stack-ship.json
+grep -q '"Engineering Roadmap"' /tmp/codex-stack-ship.json
 
 echo "[6/7] demo files present"
 test -f examples/customer-portal-demo/README.md
