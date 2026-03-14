@@ -3,9 +3,19 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { buildPreviewSite } from "./build-preview-site.ts";
 
 const fixtureRoot = path.resolve(process.cwd(), "examples", "customer-portal-demo", "public");
+const appBundle = path.join(fixtureRoot, "app.js");
+if (!fs.existsSync(appBundle)) {
+  const result = spawnSync(process.execPath || "bun", ["run", "build"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.equal(result.status, 0, result.stderr || "Expected `bun run build` to succeed before building preview fixtures.");
+}
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-preview-site-"));
 
 const result = buildPreviewSite({
