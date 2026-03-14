@@ -1,0 +1,48 @@
+name: preview-cleanup
+
+on:
+  pull_request:
+    types: [closed]
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: .gh-pages
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.5"
+
+      - name: Remove PR preview directory
+        id: cleanup
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          bun scripts/cleanup-preview-site.ts --site-dir .gh-pages --pr "${PR_NUMBER}" --json > cleanup.json
+          cat cleanup.json >> "$GITHUB_STEP_SUMMARY"
+          removed=$(bun -e 'const fs = require("node:fs"); const payload = JSON.parse(fs.readFileSync("cleanup.json", "utf8")); console.log(payload.removed ? "true" : "false");')
+          echo "removed=${removed}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish cleaned gh-pages branch
+        if: steps.cleanup.outputs.removed == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4.8.0
+        with:
+          branch: gh-pages
+          folder: .gh-pages
+          clean: true
+          force: true
+          single-commit: true
+          attempt-limit: 3

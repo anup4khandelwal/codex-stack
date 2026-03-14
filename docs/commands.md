@@ -162,6 +162,7 @@ Notes:
 ```bash
 bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url https://preview.example.com --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --json
 ```
 
@@ -170,13 +171,16 @@ Notes:
 - `preview-verify.ts` resolves the preview URL from either `--url` or `--url-template`.
 - Template placeholders support `{repo}`, `{owner}`, `{repo_name}`, `{pr}`, `{branch}`, `{branch_slug}`, `{sha}`, and `{short_sha}`.
 - The script polls preview readiness before it delegates to `deploy-verify.ts`.
+- `--session-bundle <path>` imports an exported browser session into the named preview session before live checks run.
 - `preview-verify.yml` is the manual rerun path. `pr-review.yml` is the automatic PR-time path and publishes the GitHub Pages preview before verification.
+- Both preview workflows can consume the repo secret `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64` and decode it to a temp bundle file without exposing the contents in logs.
 - The workflow uploads `preview.md`, `preview.json`, `preview-comment.md`, and the published deploy artifacts as a workflow artifact, then updates a stable PR comment.
 
 ## Deploy workflow
 
 ```bash
 bun scripts/deploy-verify.ts --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
+bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
 bun scripts/deploy-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device mobile --strict-console --strict-http --json
 ```
 
@@ -185,6 +189,7 @@ Notes:
 - `deploy-verify.ts` resolves the live deploy URL from either `--url` or `--url-template`.
 - It waits for readiness, verifies every requested `path x device` combination, and captures screenshots plus console evidence.
 - Flow and snapshot checks are delegated to the existing QA runtime so the deploy report reuses the same finding model and artifacts.
+- `--session-bundle <path>` validates the bundle up front, imports it into the named deploy session when live browser checks need it, and passes it through to `qa-run.ts`.
 - The script writes `report.md`, `report.json`, `comment.md`, and `screenshots.json` under the publish directory even when you do not pass explicit output paths.
 
 ## Retro workflow
@@ -237,6 +242,7 @@ bun browse/src/cli.ts import-flow smoke-login ./docs/smoke-login.yaml
 bun browse/src/cli.ts export-flow portal-full-demo ./docs/portal-full-demo.md
 bun browse/src/cli.ts export-session ./tmp/staging-session.json --session staging
 bun browse/src/cli.ts import-session ./tmp/staging-session.json --session staging-copy
+bun browse/src/cli.ts import-browser-cookies chrome --session staging --profile Default
 bun browse/src/cli.ts probe https://example.com/settings --session staging
 bun browse/src/cli.ts snapshot https://example.com marketing-home --session staging
 bun browse/src/cli.ts compare-snapshot https://example.com marketing-home --session staging
@@ -251,6 +257,7 @@ Notes:
 - Checked-in flows live under `browse/flows/`.
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
 - Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
+- `import-browser-cookies` is the local macOS path for Chrome, Arc, Brave, and Edge profiles when you need to bootstrap an authenticated session without replaying login flows manually.
 - `upload`, `dialog`, and the expanded assertion set are available both as direct commands and as flow actions.
 - `wait` supports `load:<state>` plus `state:<visible|hidden|attached|detached>:<selector>` for richer synchronization.
 - Selector arguments accept semantic prefixes as well as CSS: `role:<role>[:<name>]`, `label:<text>`, `placeholder:<text>`, `text:<text>`, and `testid:<value>`.
@@ -265,3 +272,16 @@ Notes:
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.
 - Snapshots are stored under `.codex-stack/browse/snapshots/`; comparison artifacts are stored under `.codex-stack/browse/artifacts/`.
+
+## Authenticated preview setup
+
+```bash
+bun src/cli.ts browse import-browser-cookies chrome --session preview-auth --profile Default
+bun src/cli.ts browse export-session .codex-stack/private/preview-auth.json --session preview-auth
+base64 < .codex-stack/private/preview-auth.json > /tmp/codex-stack-preview-auth.b64
+```
+
+Notes:
+
+- Save the base64 output as the repo secret `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64` when PR preview verification also needs authentication.
+- `preview-cleanup.yml` removes `gh-pages/pr-preview/pr-<number>/` automatically on `pull_request.closed` and leaves the root QA site intact.

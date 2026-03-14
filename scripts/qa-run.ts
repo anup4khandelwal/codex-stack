@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { readSessionBundle } from "../browse/src/session-bundle.ts";
 import { inferChangedRoutes, type RouteCandidate } from "./qa-diff.ts";
 import { writeQaTrendArtifacts } from "./qa-trends.ts";
 
@@ -18,6 +19,7 @@ interface QaArgs {
   snapshot: string;
   updateSnapshot: boolean;
   session: string;
+  sessionBundle: string;
   mode: QaMode;
   baseRef: string;
   json: boolean;
@@ -241,7 +243,7 @@ function usage(): never {
   console.log(`qa-run
 
 Usage:
-  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--publish-dir <path>] [--json]
+  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--publish-dir <path>] [--json]
   bun scripts/qa-run.ts --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
@@ -254,6 +256,7 @@ function parseArgs(argv: string[]): QaArgs {
     snapshot: "",
     updateSnapshot: false,
     session: "qa",
+    sessionBundle: "",
     mode: "full",
     baseRef: process.env.CODEX_STACK_QA_BASE_REF || "origin/main",
     json: false,
@@ -276,6 +279,8 @@ function parseArgs(argv: string[]): QaArgs {
       out.updateSnapshot = true;
     } else if (arg === "--session") {
       out.session = copy.shift() || out.session;
+    } else if (arg === "--session-bundle") {
+      out.sessionBundle = copy.shift() || "";
     } else if (arg === "--mode") {
       out.mode = copy.shift() || out.mode;
     } else if (arg === "--base-ref") {
@@ -417,6 +422,31 @@ function finding(
   evidence: Record<string, string> = {},
 ): QaFinding {
   return { severity, category, title, detail, evidence };
+}
+
+function cleanSubject(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function resolveSessionBundle(sessionBundlePath: string, session: string): string {
+  const absolute = path.resolve(process.cwd(), sessionBundlePath);
+  try {
+    readSessionBundle(absolute, session);
+  } catch {
+    throw new Error("Invalid session bundle. Export a fresh bundle with `bun src/cli.ts browse export-session <path>` and retry.");
+  }
+  return absolute;
+}
+
+function prepareSessionBundle(args: QaArgs): string {
+  if (!args.sessionBundle) return "";
+  const resolved = resolveSessionBundle(args.sessionBundle, args.session);
+  if (args.fixture) return resolved;
+  const imported = runBrowse(["import-session", resolved, "--session", args.session]);
+  if (!imported.ok) {
+    throw new Error(cleanSubject(imported.stderr || imported.stdout || "Unable to import the session bundle into the QA browser session."));
+  }
+  return resolved;
 }
 
 function scoreFindings(findings: QaFinding[]): number {
@@ -1107,6 +1137,7 @@ function snapshotEvidenceFromFixture(snapshot: QaFixtureSnapshot, snapshotName: 
 }
 
 const args = parseArgs(process.argv.slice(2));
+prepareSessionBundle(args);
 let report: QaReport;
 let fixture: QaFixture | null = null;
 

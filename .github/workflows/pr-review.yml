@@ -66,8 +66,16 @@ jobs:
           CODEX_STACK_PREVIEW_FLOW: ${{ vars.CODEX_STACK_PREVIEW_FLOW }}
           CODEX_STACK_PREVIEW_SNAPSHOT: ${{ vars.CODEX_STACK_PREVIEW_SNAPSHOT }}
           CODEX_STACK_PREVIEW_WAIT_TIMEOUT: ${{ vars.CODEX_STACK_PREVIEW_WAIT_TIMEOUT }}
+          CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64: ${{ secrets.CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64 }}
         run: |
           set -euo pipefail
+          session_bundle_file=""
+          cleanup() {
+            if [ -n "${session_bundle_file}" ]; then
+              rm -f "${session_bundle_file}"
+            fi
+          }
+          trap cleanup EXIT
           owner="${GITHUB_REPOSITORY%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           preview_url="https://${owner}.github.io/${repo}/pr-preview/pr-${PR_NUMBER}/"
@@ -109,6 +117,11 @@ jobs:
           fi
           if [ -n "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}" ]; then
             args+=("--wait-timeout" "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}")
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64}" ]; then
+            session_bundle_file="$(mktemp)"
+            printf '%s' "${CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64}" | base64 --decode > "${session_bundle_file}"
+            args+=("--session-bundle" "${session_bundle_file}")
           fi
 
           bun scripts/preview-verify.ts "${args[@]}"

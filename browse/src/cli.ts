@@ -5,6 +5,10 @@ import path from "node:path";
 import process from "node:process";
 import { createHash } from "node:crypto";
 import {
+  importBrowserCookies,
+  browserProfileSpec,
+} from "./browser-profile.ts";
+import {
   normalizeSessionBundle,
   readSessionBundle,
   writeSessionBundle,
@@ -187,6 +191,7 @@ Usage:
   codex-stack browse export-session <path> [--url <url>] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse import-session <path> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse import-cookies <path> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse import-browser-cookies <browser> [--profile <name>] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse snapshot <url> [name] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse compare-snapshot <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse probe <url> [--session <name>] [--device <desktop|tablet|mobile>]
@@ -1498,11 +1503,17 @@ async function main(): Promise<void> {
     console.log(`- snapshot root: ${SNAPSHOT_DIR}`);
     console.log(`- artifact root: ${ARTIFACT_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, upload, dialog, wait, press, assert-visible, assert-hidden, assert-enabled, assert-disabled, assert-checked, assert-editable, assert-focused, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, import-browser-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, upload, dialog, wait, press, assert-visible, assert-hidden, assert-enabled, assert-disabled, assert-checked, assert-editable, assert-focused, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
     console.log("- browser install: run `bunx playwright install chromium` after bun install");
+    try {
+      const supported = ["chrome", "arc", "brave", "edge"].map((name) => `${name}=${browserProfileSpec(name).userDataDir}`);
+      console.log(`- browser profile import: ${supported.join(", ")}`);
+    } catch {
+      console.log("- browser profile import: macOS only");
+    }
     return;
   }
 
@@ -1640,6 +1651,34 @@ async function main(): Promise<void> {
       cookies: bundle.storageState.cookies.length,
       origins: bundle.storageState.origins.length,
       source: path.relative(process.cwd(), path.resolve(process.cwd(), sourcePath)),
+    });
+    return;
+  }
+
+  if (command === "import-browser-cookies") {
+    const browser = rest[0];
+    if (!browser) usage();
+    const profileFlagIndex = rest.indexOf("--profile");
+    const profile = profileFlagIndex >= 0 ? String(rest[profileFlagIndex + 1] || "") : "";
+    const imported = await importBrowserCookies({
+      browser,
+      profile,
+      session,
+    });
+    await applySessionBundle(session, imported.bundle);
+    recordSession(session, {
+      lastCommand: "import-browser-cookies",
+      authenticated: Boolean(imported.bundle.storageState.cookies.length || imported.bundle.metadata.authenticated),
+      output: `${imported.browser}:${imported.profile}`,
+    });
+    printJson({
+      status: "imported",
+      session,
+      browser: imported.browser,
+      profile: imported.profile,
+      cookies: imported.bundle.storageState.cookies.length,
+      origins: imported.bundle.storageState.origins.length,
+      source: imported.bundle.source.exportedFrom || `${imported.browser}:${imported.profile}`,
     });
     return;
   }

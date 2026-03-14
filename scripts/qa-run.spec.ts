@@ -14,9 +14,11 @@ async function main(): Promise<void> {
   const browseDir = path.join(fixtureRoot, "browse", "src");
   fs.mkdirSync(browseDir, { recursive: true });
 
-  const baselinePath = path.join(fixtureRoot, "baseline.json");
-  const currentPath = path.join(fixtureRoot, "current.json");
-  const screenshotPath = path.join(fixtureRoot, "screenshot.png");
+const baselinePath = path.join(fixtureRoot, "baseline.json");
+const currentPath = path.join(fixtureRoot, "current.json");
+const screenshotPath = path.join(fixtureRoot, "screenshot.png");
+const bundlePath = path.join(fixtureRoot, "session-bundle.json");
+const importMarker = path.join(fixtureRoot, "imported-session.json");
 
   fs.writeFileSync(
     screenshotPath,
@@ -47,11 +49,49 @@ async function main(): Promise<void> {
       2,
     ),
   );
+  fs.writeFileSync(
+    bundlePath,
+    JSON.stringify(
+      {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        session: "qa",
+        metadata: {
+          name: "qa",
+          authenticated: true,
+        },
+        storageState: {
+          cookies: [
+            {
+              name: "session",
+              value: "demo",
+              domain: "example.com",
+              path: "/",
+            },
+          ],
+          origins: [],
+        },
+        source: {
+          type: "manual",
+          exportedFrom: "spec",
+        },
+      },
+      null,
+      2,
+    ),
+  );
 
   fs.writeFileSync(
     path.join(browseDir, "cli.ts"),
     `#!/usr/bin/env bun
+import fs from "node:fs";
 const [command, url, name] = process.argv.slice(2);
+if (command === "import-session") {
+  const [sourcePath, sessionFlag, sessionName] = process.argv.slice(3);
+  fs.writeFileSync(${JSON.stringify(importMarker)}, JSON.stringify({ sourcePath, sessionFlag, sessionName }, null, 2));
+  console.log(JSON.stringify({ status: "imported", sourcePath, sessionName }, null, 2));
+  process.exit(0);
+}
 if (command === "run-flow") {
   console.log(JSON.stringify([{ action: "goto", url }, { action: "assert-text", selector: "h1" }]));
   process.exit(0);
@@ -87,6 +127,8 @@ process.exit(1);
       "login-smoke",
       "--snapshot",
       "landing-home",
+      "--session-bundle",
+      bundlePath,
       "--json",
     ],
     {
@@ -118,6 +160,10 @@ process.exit(1);
   assert.ok(report.findings?.some((item) => item.evidence?.annotation));
   assert.ok(report.artifacts?.annotation);
   assert.ok(fs.existsSync(path.join(fixtureRoot, String(report.artifacts?.annotation))));
+  const imported = JSON.parse(fs.readFileSync(importMarker, "utf8")) as { sourcePath?: string; sessionFlag?: string; sessionName?: string };
+  assert.equal(imported.sourcePath, bundlePath);
+  assert.equal(imported.sessionFlag, "--session");
+  assert.equal(imported.sessionName, "qa");
 
   console.log("qa-run spec passed");
 }
