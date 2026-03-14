@@ -67,6 +67,7 @@ run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
+run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
 grep -q '"overallStatus"' /tmp/codex-stack-upgrade.json
 grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
@@ -248,6 +249,7 @@ test -f .github/workflows/daily-update-check.yml
 test -f .github/ISSUE_TEMPLATE/work-item.yml
 test -f scripts/issue-flow.ts
 test -f scripts/upgrade-check.ts
+test -f scripts/upgrade-check.spec.ts
 test -f scripts/render-pr-review.ts
 test -f .github/workflows/qa-pages.yml
 test -f scripts/render-qa-pages.ts
