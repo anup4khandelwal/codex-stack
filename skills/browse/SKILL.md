@@ -40,6 +40,8 @@ Give the agent eyes for QA and deployment checks.
 - `screenshot <url> [path]`
 - `mock <url> <pattern> <json-config>`
 - `block <url> <pattern>`
+- `download <url> <selector> [path]`
+- `assert-download <url> <selector> <expected-name-fragment> [path]`
 - `eval <url> <expression>`
 - `click <url> <selector>`
 - `fill <url> <selector> <value>`
@@ -63,6 +65,8 @@ Give the agent eyes for QA and deployment checks.
 - flow step action: `use-flow`
 - flow step action: `route`
 - flow step action: `clear-routes`
+- flow step action: `download`
+- flow step action: `assert-download`
 
 ## Example
 
@@ -85,6 +89,8 @@ bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --se
 bun src/cli.ts browse click https://example.com/checkout "role:button:Pay now" --session staging --frame "name:payment"
 bun src/cli.ts browse mock https://example.com/app "**/api/profile" '{"status":503,"json":{"error":"offline"}}' --session staging
 bun src/cli.ts browse block https://example.com/app "**/analytics/**" --session staging
+bun src/cli.ts browse download https://example.com/reports "role:button:Export CSV" ./artifacts/report.csv --session staging
+bun src/cli.ts browse assert-download https://example.com/reports "role:button:Export CSV" report.csv ./artifacts/report.csv --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse login https://example.com/login login-local --session staging
@@ -102,6 +108,7 @@ bun src/cli.ts browse sessions
 - Prefer semantic selectors when possible: `role:button:Save`, `label:Email`, `placeholder:Search`, `text:Welcome back`, `testid:hero`.
 - Use `--frame name:<name>`, `--frame url:<fragment>`, or `--frame <iframe-selector>` when the target element lives inside an iframe.
 - Use `route` / `clear-routes` flow steps or the `mock` / `block` commands to stabilize flaky third-party calls and test failure paths before navigation starts.
+- Use `download` / `assert-download` when the flow should prove that an export file was actually saved, not just that the export button was clicked.
 - Reuse named sessions for authenticated flows so login state persists.
 - Use `--device mobile|tablet|desktop` when the check is viewport-sensitive or when a bug only reproduces responsively.
 - Export/import session bundles when authenticated QA needs to move between machines or named sessions.

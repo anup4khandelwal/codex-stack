@@ -85,6 +85,7 @@ bun src/cli.ts browse fill http://127.0.0.1:4173/login "label:Email" demo@exampl
 bun src/cli.ts browse assert-visible http://127.0.0.1:4173/dashboard "testid:hero" --session friend-demo
 bun src/cli.ts browse click http://127.0.0.1:4173/checkout "role:button:Pay now" --session friend-demo --frame "name:payment"
 bun src/cli.ts browse mock http://127.0.0.1:4173/dashboard "**/api/profile" '{"status":503,"json":{"error":"offline"}}' --session friend-demo
+bun src/cli.ts browse download http://127.0.0.1:4173/reports "role:button:Export CSV" ./artifacts/report.csv --session friend-demo
 bun src/cli.ts browse assert-focused http://127.0.0.1:4173/login "input[name=email]" --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo

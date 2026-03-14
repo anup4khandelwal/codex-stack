@@ -43,7 +43,7 @@ Use the repo in this order:
 
 - Installable Codex skills under `skills/`
 - Checked-in root CLI under `src/cli.ts`
-- Playwright-backed browser runtime under `browse/src/cli.ts` with semantic selectors, device presets, iframe targeting, request mocking/blocking, upload, dialog, wait-state, and element-state assertions
+- Playwright-backed browser runtime under `browse/src/cli.ts` with semantic selectors, device presets, iframe targeting, request mocking/blocking, download capture, upload, dialog, wait-state, and element-state assertions
 - Persistent named browser sessions
 - Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
@@ -178,6 +178,7 @@ bun src/cli.ts browse fill https://example.com/login "label:Email" demo@example.
 bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --session staging
 bun src/cli.ts browse click https://example.com/checkout "role:button:Pay now" --session staging --frame "name:payment"
 bun src/cli.ts browse mock https://example.com/app "**/api/profile" '{"status":503,"json":{"error":"offline"}}' --session staging
+bun src/cli.ts browse download https://example.com/reports "role:button:Export CSV" ./artifacts/report.csv --session staging
 bun src/cli.ts browse assert-focused https://example.com/login "input[name=email]" --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
@@ -216,6 +217,7 @@ Use `browse` when you want raw control:
 - semantic selectors and responsive viewport presets
 - iframe targeting by frame name, URL fragment, or iframe selector
 - request blocking and mocked responses for repeatable QA and failure-path testing
+- download capture and filename assertions for export flows
 - screenshots and artifacts
 
 Use `qa` when you want a decision-ready report:
