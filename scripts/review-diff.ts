@@ -53,6 +53,23 @@ function resolveBaseRef(explicitBase) {
   return "";
 }
 
+function resolveBranchName(): string {
+  const envBranch = String(process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || "").trim();
+  if (envBranch && envBranch !== "HEAD") {
+    return envBranch;
+  }
+  const current = run("git branch --show-current", { allowFailure: true });
+  if (current && current !== "HEAD") {
+    return current;
+  }
+  const fallback = run("git rev-parse --abbrev-ref HEAD", { allowFailure: true });
+  if (fallback && fallback !== "HEAD") {
+    return fallback;
+  }
+  const shortSha = run("git rev-parse --short HEAD", { allowFailure: true });
+  return shortSha ? `detached-${shortSha}` : "";
+}
+
 function readChecklist() {
   const filePath = path.join(process.cwd(), "skills", "review", "checklist.md");
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
@@ -192,7 +209,7 @@ function printText(result) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const branch = run("git branch --show-current");
+const branch = resolveBranchName();
 
 if (!branch) {
   console.error("Unable to determine current branch.");

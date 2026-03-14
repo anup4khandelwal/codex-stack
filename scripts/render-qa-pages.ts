@@ -1,11 +1,75 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync } from "node:child_process";
+import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
-function usage() {
+interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {}
+
+interface ParsedArgs {
+  source: string;
+  out: string;
+  baseUrl: string;
+  json: boolean;
+}
+
+interface QaFinding {
+  severity?: string;
+  title?: string;
+  detail?: string;
+  evidence?: Record<string, unknown>;
+}
+
+interface QaFlowResult {
+  name?: string;
+  status?: string;
+  steps?: string | number;
+}
+
+interface QaSnapshotResult {
+  name?: string;
+  status?: string;
+  baseline?: string;
+  current?: string;
+}
+
+interface QaReportData extends Record<string, unknown> {
+  status?: string;
+  recommendation?: string;
+  healthScore?: string | number;
+  generatedAt?: string;
+  url?: string;
+  session?: string;
+  mode?: string;
+  findings?: QaFinding[];
+  flowResults?: QaFlowResult[];
+  snapshotResult?: QaSnapshotResult;
+}
+
+interface CollectedReport {
+  slug: string;
+  data: QaReportData;
+  sourceDir: string;
+  findingCount: number;
+  flowCount: number;
+  mdPath: string;
+  jsonPath: string;
+  annotationPath: string;
+  screenshotPath: string;
+  stableUrl: string;
+  stableAnnotationUrl: string;
+  stableScreenshotUrl: string;
+}
+
+interface LayoutProps {
+  title: string;
+  body: string;
+  baseUrl: string;
+  heading: string;
+  subheading: string;
+}
+
+function usage(): never {
   console.log(`render-qa-pages
 
 Usage:
@@ -14,8 +78,8 @@ Usage:
   process.exit(0);
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): ParsedArgs {
+  const out: ParsedArgs = {
     source: path.resolve(process.cwd(), "docs", "qa"),
     out: path.resolve(process.cwd(), ".site"),
     baseUrl: "",
@@ -42,17 +106,17 @@ function parseArgs(argv) {
   return out;
 }
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function cleanSubject(text) {
+function cleanSubject(text: unknown): string {
   return String(text || "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function run(cmd, options = {}) {
+function run(cmd: string, options: RunOptions = {}): string {
   try {
     const output = execSync(cmd, {
       encoding: "utf8",
@@ -65,14 +129,14 @@ function run(cmd, options = {}) {
   }
 }
 
-function inferRepo() {
+function inferRepo(): string {
   if (process.env.GITHUB_REPOSITORY) return cleanSubject(process.env.GITHUB_REPOSITORY);
   const remote = run("git remote get-url origin");
   const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
   return match ? match[1] : "";
 }
 
-function defaultBaseUrl(repo) {
+function defaultBaseUrl(repo: string): string {
   const [owner, name] = String(repo || "").split("/");
   if (!owner || !name) return "";
   if (name.toLowerCase() === `${owner.toLowerCase()}.github.io`) {
@@ -81,11 +145,11 @@ function defaultBaseUrl(repo) {
   return `https://${owner}.github.io/${name}/`;
 }
 
-function ensureTrailingSlash(url) {
+function ensureTrailingSlash(url: string): string {
   return url.endsWith("/") ? url : `${url}/`;
 }
 
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -94,11 +158,11 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function relativeFile(targetPath) {
+function relativeFile(targetPath: string): string {
   return path.relative(process.cwd(), targetPath).replace(/\\/g, "/");
 }
 
-function copyTree(sourceDir, targetDir) {
+function copyTree(sourceDir: string, targetDir: string): void {
   ensureDir(targetDir);
   for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
     const sourcePath = path.join(sourceDir, entry.name);
@@ -108,62 +172,62 @@ function copyTree(sourceDir, targetDir) {
   }
 }
 
-function readJson(filePath, fallback = null) {
+function readJson<T>(filePath: string, fallback: T): T {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
   } catch {
     return fallback;
   }
 }
 
-function absoluteUrl(baseUrl, sitePath) {
+function absoluteUrl(baseUrl: string, sitePath: string): string {
   if (!baseUrl || !sitePath) return "";
   return new URL(sitePath.replace(/^\/+/, ""), ensureTrailingSlash(baseUrl)).toString();
 }
 
-function formatDate(value) {
+function formatDate(value: unknown): string {
   if (!value) return "n/a";
   try {
-    return new Date(value).toLocaleString("en-US", {
+    return new Date(String(value)).toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
       timeZone: "UTC",
     }) + " UTC";
   } catch {
-    return value;
+    return String(value);
   }
 }
 
-function severityClass(status) {
+function severityClass(status: unknown): string {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "critical") return "critical";
   if (normalized === "warning") return "warning";
   return "pass";
 }
 
-function shellClass(status) {
+function shellClass(status: unknown): string {
   return `status ${severityClass(status)}`;
 }
 
-function reportLink(baseUrl, report) {
+function reportLink(baseUrl: string, report: Pick<CollectedReport, "slug">): string {
   return absoluteUrl(baseUrl, `qa/${report.slug}/`);
 }
 
-function assetLink(baseUrl, report, assetName) {
+function assetLink(baseUrl: string, report: Pick<CollectedReport, "slug">, assetName: string): string {
   return absoluteUrl(baseUrl, `qa/${report.slug}/${assetName}`);
 }
 
-function reportRows(report) {
+function reportRows(report: CollectedReport): string {
   const findings = Array.isArray(report.data?.findings) ? report.data.findings : [];
   if (!findings.length) {
     return '<li class="empty">No findings.</li>';
   }
   return findings.map((item) => {
     const evidence = Object.entries(item.evidence || {})
-      .map(([key, value]) => `<span><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</span>`)
+      .map(([key, value]) => `<span><strong>${escapeHtml(key)}:</strong> ${escapeHtml(String(value ?? ""))}</span>`)
       .join("");
     return `<li class="finding ${severityClass(item.severity)}">
-      <div class="finding-head">
+        <div class="finding-head">
         <span class="pill ${severityClass(item.severity)}">${escapeHtml(String(item.severity || "info").toUpperCase())}</span>
         <strong>${escapeHtml(item.title)}</strong>
       </div>
@@ -173,13 +237,13 @@ function reportRows(report) {
   }).join("\n");
 }
 
-function flowRows(report) {
+function flowRows(report: CollectedReport): string {
   const flows = Array.isArray(report.data?.flowResults) ? report.data.flowResults : [];
   if (!flows.length) return '<li class="empty">No flows recorded.</li>';
   return flows.map((item) => `<li><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.status)}${item.steps ? ` • ${item.steps} steps` : ""}</span></li>`).join("\n");
 }
 
-function layout({ title, body, baseUrl, heading, subheading }) {
+function layout({ title, body, baseUrl, heading, subheading }: LayoutProps): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -369,7 +433,7 @@ function layout({ title, body, baseUrl, heading, subheading }) {
 </html>`;
 }
 
-function renderIndex({ reports, baseUrl }) {
+function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl: string }): string {
   const content = reports.length
     ? reports.map((report) => `<article class="card report-card">
         <div class="${shellClass(report.data.status)}">${escapeHtml(report.data.status || "pass")}</div>
@@ -403,9 +467,9 @@ function renderIndex({ reports, baseUrl }) {
   });
 }
 
-function renderReport(report, baseUrl) {
+function renderReport(report: CollectedReport, baseUrl: string): string {
   const snapshot = report.data.snapshotResult || {};
-  const detailLinks = [];
+  const detailLinks: string[] = [];
   if (report.mdPath) detailLinks.push(`<a href="report.md">Markdown</a>`);
   if (report.jsonPath) detailLinks.push(`<a href="report.json">JSON</a>`);
   if (report.annotationPath) detailLinks.push(`<a href="annotation.svg">Annotation</a>`);
@@ -464,16 +528,16 @@ function renderReport(report, baseUrl) {
   });
 }
 
-function collectReports(sourceDir, baseUrl) {
+function collectReports(sourceDir: string, baseUrl: string): CollectedReport[] {
   if (!fs.existsSync(sourceDir)) return [];
   return fs.readdirSync(sourceDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => {
       const reportDir = path.join(sourceDir, entry.name);
       const reportJson = path.join(reportDir, "report.json");
-      const data = readJson(reportJson, null);
+      const data = readJson<QaReportData | null>(reportJson, null);
       if (!data) return null;
-      const report = {
+      const report: CollectedReport = {
         slug: entry.name,
         data,
         sourceDir: reportDir,
@@ -483,21 +547,24 @@ function collectReports(sourceDir, baseUrl) {
         jsonPath: fs.existsSync(reportJson) ? `qa/${entry.name}/report.json` : "",
         annotationPath: fs.existsSync(path.join(reportDir, "annotation.svg")) ? `qa/${entry.name}/annotation.svg` : "",
         screenshotPath: fs.existsSync(path.join(reportDir, "screenshot.png")) ? `qa/${entry.name}/screenshot.png` : "",
+        stableUrl: "",
+        stableAnnotationUrl: "",
+        stableScreenshotUrl: "",
       };
       report.stableUrl = reportLink(baseUrl, report);
       report.stableAnnotationUrl = report.annotationPath ? assetLink(baseUrl, report, "annotation.svg") : "";
       report.stableScreenshotUrl = report.screenshotPath ? assetLink(baseUrl, report, "screenshot.png") : "";
       return report;
     })
-    .filter(Boolean)
+    .filter((report): report is CollectedReport => Boolean(report))
     .sort((left, right) => {
-      const leftTime = Date.parse(left.data.generatedAt || 0) || 0;
-      const rightTime = Date.parse(right.data.generatedAt || 0) || 0;
+      const leftTime = Date.parse(left.data.generatedAt || "0") || 0;
+      const rightTime = Date.parse(right.data.generatedAt || "0") || 0;
       return rightTime - leftTime;
     });
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const repo = inferRepo();
   const baseUrl = cleanSubject(args.baseUrl || process.env.CODEX_STACK_PAGES_BASE_URL || defaultBaseUrl(repo));
