@@ -5,6 +5,7 @@ interface DemoSession {
 }
 
 const SESSION_KEY = "codexStackDemoSession";
+const PAGE_SEGMENTS = new Set(["login", "dashboard", "index.html", "login.html", "dashboard.html"]);
 
 function getSession(): DemoSession | null {
   try {
@@ -35,12 +36,44 @@ function formatDate(): string {
   }).format(new Date());
 }
 
+function appBasePath(pathname = window.location.pathname): string {
+  const segments = pathname
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const last = segments[segments.length - 1]?.toLowerCase() || "";
+  if (PAGE_SEGMENTS.has(last)) {
+    segments.pop();
+  }
+  if (!segments.length) return "/";
+  return `/${segments.join("/")}/`;
+}
+
+function appPath(route: string): string {
+  const base = appBasePath();
+  const cleanRoute = String(route || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  return cleanRoute ? `${base}${cleanRoute}` : base;
+}
+
+function loginPath(next?: string): string {
+  const target = new URL(appPath("login"), window.location.origin);
+  if (next) target.searchParams.set("next", next);
+  return target.toString();
+}
+
+function dashboardPath(): string {
+  return new URL(appPath("dashboard"), window.location.origin).toString();
+}
+
 if (document.body.dataset.page === "login") {
   const form = document.querySelector<HTMLFormElement>("form[data-login-form]");
   const emailField = document.querySelector<HTMLInputElement>("input[name=email]");
   const passwordField = document.querySelector<HTMLInputElement>("input[name=password]");
   const notice = document.querySelector<HTMLElement>("[data-login-notice]");
-  const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+  const next = new URLSearchParams(window.location.search).get("next") || dashboardPath();
 
   if (getSession()) {
     window.location.href = next;
@@ -70,7 +103,7 @@ if (document.body.dataset.page === "login") {
 if (document.body.dataset.page === "dashboard") {
   const session = getSession();
   if (!session) {
-    window.location.href = "/login?next=/dashboard";
+    window.location.href = loginPath(dashboardPath());
   } else {
     document.querySelector<HTMLElement>("[data-user-email]")?.replaceChildren(document.createTextNode(session.email));
     document.querySelector<HTMLElement>("[data-user-role]")?.replaceChildren(document.createTextNode(session.role));
@@ -79,6 +112,6 @@ if (document.body.dataset.page === "dashboard") {
 
   document.querySelector<HTMLElement>("[data-signout]")?.addEventListener("click", () => {
     clearSession();
-    window.location.href = "/login";
+    window.location.href = loginPath();
   });
 }

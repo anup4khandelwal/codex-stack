@@ -14,7 +14,9 @@ const HOST = process.env.HOST || "127.0.0.1";
 const ROUTES: Record<string, string> = {
   "/": "index.html",
   "/login": "login.html",
+  "/login/": "login.html",
   "/dashboard": "dashboard.html",
+  "/dashboard/": "dashboard.html",
 };
 
 const REQUIRED_FILES = [...Object.values(ROUTES), "app.css", "app.js"];

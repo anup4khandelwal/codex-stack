@@ -1,9 +1,6 @@
 name: preview-verify
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: ["main"]
   workflow_dispatch:
     inputs:
       pr:
@@ -20,16 +17,17 @@ on:
         required: false
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
   preview:
-    if: github.event_name == 'workflow_dispatch' || vars.CODEX_STACK_PREVIEW_URL_TEMPLATE != '' || github.event.inputs.preview_url != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -39,17 +37,37 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build preview site
+        run: |
+          bun run build
+          bun scripts/build-preview-site.ts --out .preview-site
+
+      - name: Publish PR preview
+        if: github.event.inputs.preview_url == '' && github.event.inputs.pr != ''
+        uses: JamesIves/github-pages-deploy-action@v4.8.0
+        with:
+          branch: gh-pages
+          folder: .preview-site
+          target-folder: pr-preview/pr-${{ github.event.inputs.pr }}
+          clean: true
+          force: false
+          single-commit: true
+          attempt-limit: 3
+
       - name: Run preview verification
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_HEAD_REF: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.event.inputs.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          GITHUB_HEAD_REF: ${{ github.event.inputs.branch || github.ref_name }}
+          GITHUB_SHA: ${{ github.event.inputs.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.inputs.pr }}
           CODEX_STACK_PREVIEW_URL_TEMPLATE: ${{ vars.CODEX_STACK_PREVIEW_URL_TEMPLATE }}
+          CODEX_STACK_PREVIEW_PATHS: ${{ vars.CODEX_STACK_PREVIEW_PATHS }}
+          CODEX_STACK_PREVIEW_DEVICES: ${{ vars.CODEX_STACK_PREVIEW_DEVICES }}
           CODEX_STACK_PREVIEW_FLOW: ${{ vars.CODEX_STACK_PREVIEW_FLOW }}
           CODEX_STACK_PREVIEW_SNAPSHOT: ${{ vars.CODEX_STACK_PREVIEW_SNAPSHOT }}
+          CODEX_STACK_PREVIEW_WAIT_TIMEOUT: ${{ vars.CODEX_STACK_PREVIEW_WAIT_TIMEOUT }}
           PREVIEW_URL_OVERRIDE: ${{ github.event.inputs.preview_url }}
         run: |
           set -euo pipefail
@@ -66,15 +84,40 @@ jobs:
 
           if [ -n "${PREVIEW_URL_OVERRIDE}" ]; then
             args+=("--url" "${PREVIEW_URL_OVERRIDE}")
+          elif [ -n "${PR_NUMBER}" ]; then
+            owner="${GITHUB_REPOSITORY%/*}"
+            repo="${GITHUB_REPOSITORY#*/}"
+            args+=("--url" "https://${owner}.github.io/${repo}/pr-preview/pr-${PR_NUMBER}/")
           else
             args+=("--url-template" "${CODEX_STACK_PREVIEW_URL_TEMPLATE}")
           fi
 
+          if [ -n "${CODEX_STACK_PREVIEW_PATHS}" ]; then
+            IFS=',' read -r -a preview_paths <<< "${CODEX_STACK_PREVIEW_PATHS}"
+            for preview_path in "${preview_paths[@]}"; do
+              preview_path="$(printf '%s' "${preview_path}" | xargs)"
+              if [ -n "${preview_path}" ]; then
+                args+=("--path" "${preview_path}")
+              fi
+            done
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_DEVICES}" ]; then
+            IFS=',' read -r -a preview_devices <<< "${CODEX_STACK_PREVIEW_DEVICES}"
+            for preview_device in "${preview_devices[@]}"; do
+              preview_device="$(printf '%s' "${preview_device}" | xargs)"
+              if [ -n "${preview_device}" ]; then
+                args+=("--device" "${preview_device}")
+              fi
+            done
+          fi
           if [ -n "${CODEX_STACK_PREVIEW_FLOW}" ]; then
             args+=("--flow" "${CODEX_STACK_PREVIEW_FLOW}")
           fi
           if [ -n "${CODEX_STACK_PREVIEW_SNAPSHOT}" ]; then
             args+=("--snapshot" "${CODEX_STACK_PREVIEW_SNAPSHOT}")
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}" ]; then
+            args+=("--wait-timeout" "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}")
           fi
 
           bun scripts/preview-verify.ts "${args[@]}"
@@ -85,7 +128,7 @@ jobs:
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:
-          name: preview-verify-${{ github.event.pull_request.number || github.run_id }}
+          name: preview-verify-${{ github.event.inputs.pr || github.run_id }}
           path: |
             preview.md
             preview.json
@@ -93,14 +136,16 @@ jobs:
             preview-artifacts
 
       - name: Sync preview PR comment
-        if: github.event_name == 'pull_request'
+        if: github.event.inputs.pr != ''
+        env:
+          PR_NUMBER: ${{ github.event.inputs.pr }}
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require("fs");
             const body = fs.readFileSync("preview-comment.md", "utf8");
             const marker = "<!-- codex-stack:preview-verify -->";
-            const issue_number = context.payload.pull_request.number;
+            const issue_number = Number(process.env.PR_NUMBER || 0);
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
