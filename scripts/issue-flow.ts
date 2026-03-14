@@ -1,10 +1,58 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import process from "node:process";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
-function usage() {
+interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
+  allowFailure?: boolean;
+}
+
+interface ParsedArgs {
+  command: string;
+  issueNumber: number;
+  title: string;
+  body: string;
+  bodyFile: string;
+  labels: string[];
+  assignees: string[];
+  milestone: string;
+  repo: string;
+  prefix: string;
+  base: string;
+  json: boolean;
+  noFetch: boolean;
+  noCheckout: boolean;
+}
+
+interface IssueRecord {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+}
+
+interface BranchRecord {
+  branch: string;
+  baseRef: string;
+  checkedOut: boolean;
+}
+
+interface BranchInput {
+  issueNumber: number;
+  title: string;
+  prefix: string;
+  base: string;
+  noFetch: boolean;
+  noCheckout: boolean;
+}
+
+interface IssueFlowResult {
+  command: string;
+  issue: IssueRecord | null;
+  branch: BranchRecord | null;
+}
+
+function usage(): never {
   console.log(`issue-flow
 
 Usage:
@@ -15,33 +63,34 @@ Usage:
   process.exit(0);
 }
 
-function quote(value) {
+function quote(value: unknown): string {
   return JSON.stringify(String(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function run(cmd, options = {}) {
+function run(cmd: string, options: RunOptions = {}): string {
   try {
     return execSync(cmd, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       ...options,
     }).trim();
-  } catch (error) {
+  } catch (error: unknown) {
     if (options.allowFailure) return "";
-    const stderr = error.stderr ? String(error.stderr) : "";
-    throw new Error(clean(stderr || error.message));
+    const stderr = typeof error === "object" && error && "stderr" in error ? String((error as { stderr?: unknown }).stderr || "") : "";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(clean(stderr || message));
   }
 }
 
-function uniq(items) {
+function uniq(items: string[]): string[] {
   return [...new Set(items.map((item) => clean(item)).filter(Boolean))];
 }
 
-function slugify(value) {
+function slugify(value: string): string {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -49,14 +98,14 @@ function slugify(value) {
     .slice(0, 48) || "work-item";
 }
 
-function inferRepo() {
+function inferRepo(): string {
   if (process.env.GITHUB_REPOSITORY) return clean(process.env.GITHUB_REPOSITORY);
   const remote = run("git remote get-url origin", { allowFailure: true });
   const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
   return match ? match[1] : "";
 }
 
-function resolveBaseRef(base) {
+function resolveBaseRef(base: string): string {
   const candidates = [clean(base), "origin/main", "main", "origin/master", "master"].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = run(`git rev-parse --verify ${quote(candidate)}`, { allowFailure: true });
@@ -65,22 +114,23 @@ function resolveBaseRef(base) {
   throw new Error("Unable to resolve a base ref. Pass --base explicitly.");
 }
 
-function maybeFetch(baseRef, noFetch) {
+function maybeFetch(baseRef: string, noFetch: boolean): void {
   if (noFetch) return;
   const remoteMatch = String(baseRef || "").match(/^([^/]+)\/(.+)$/);
   if (!remoteMatch) return;
   run(`git fetch ${quote(remoteMatch[1])} ${quote(remoteMatch[2])}`, { allowFailure: true });
 }
 
-function parseUrlIssue(url) {
+function parseUrlIssue(url: string): number {
   const match = String(url || "").match(/\/issues\/(\d+)(?:$|[?#])/);
   return match ? Number.parseInt(match[1], 10) : 0;
 }
 
-function parseArgs(argv) {
+function parseArgs(argv: string[]): ParsedArgs {
   const command = clean(argv[0]);
   if (!command || command === "--help" || command === "-h") usage();
-  const out = {
+
+  const out: ParsedArgs = {
     command,
     issueNumber: 0,
     title: "",
@@ -155,14 +205,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function loadBody(args) {
+function loadBody(args: ParsedArgs): string {
   if (args.bodyFile) {
     return run(`cat ${quote(path.resolve(process.cwd(), args.bodyFile))}`);
   }
   return args.body;
 }
 
-function createIssue(args) {
+function createIssue(args: ParsedArgs): IssueRecord {
   if (!args.repo) {
     throw new Error("Unable to infer GitHub repo. Pass --repo <owner/name>.");
   }
@@ -191,7 +241,7 @@ function createIssue(args) {
   };
 }
 
-function issueTitle(repo, issueNumber, fallbackTitle) {
+function issueTitle(repo: string, issueNumber: number, fallbackTitle: string): string {
   if (fallbackTitle) return fallbackTitle;
   if (!repo || !issueNumber) {
     throw new Error("Issue title is required when repo lookup is unavailable.");
@@ -203,7 +253,7 @@ function issueTitle(repo, issueNumber, fallbackTitle) {
   return title;
 }
 
-function createBranch({ issueNumber, title, prefix, base, noFetch, noCheckout }) {
+function createBranch({ issueNumber, title, prefix, base, noFetch, noCheckout }: BranchInput): BranchRecord {
   const baseRef = resolveBaseRef(base);
   maybeFetch(baseRef, noFetch);
   const branchName = `${prefix}/${issueNumber}-${slugify(title)}`;
@@ -217,7 +267,7 @@ function createBranch({ issueNumber, title, prefix, base, noFetch, noCheckout })
   };
 }
 
-function printText(result) {
+function printText(result: IssueFlowResult): void {
   console.log("# Issue Flow");
   console.log();
   if (result.issue?.number) console.log(`- Issue: #${result.issue.number}`);
@@ -229,7 +279,7 @@ function printText(result) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const result = {
+const result: IssueFlowResult = {
   command: args.command,
   issue: null,
   branch: null,
