@@ -41,6 +41,7 @@ bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --se
 bun src/cli.ts browse sessions
 bun src/cli.ts browse clear-session staging
 bun src/cli.ts browse screenshot https://example.com /tmp/example.png
+bun run typecheck
 ```
 
 ## Review workflow

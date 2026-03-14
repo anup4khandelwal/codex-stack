@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -10,11 +9,11 @@ const DEMO_DIR = path.join(ROOT, "examples", "customer-portal-demo");
 const PUBLIC_DIR = path.join(DEMO_DIR, "public");
 const BUN = process.execPath || "bun";
 
-function read(relativePath) {
+function read(relativePath: string): string {
   return fs.readFileSync(path.join(PUBLIC_DIR, relativePath), "utf8");
 }
 
-function buildDemoApp() {
+function buildDemoApp(): void {
   execFileSync(
     BUN,
     [
@@ -34,7 +33,7 @@ function buildDemoApp() {
   );
 }
 
-async function main() {
+function main(): void {
   buildDemoApp();
 
   execFileSync(BUN, ["examples/customer-portal-demo/server.ts", "--check"], {
@@ -67,7 +66,10 @@ async function main() {
   console.log("demo sample app is healthy");
 }
 
-main().catch((error) => {
-  console.error(error.message || String(error));
+try {
+  main();
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
   process.exit(1);
-});
+}

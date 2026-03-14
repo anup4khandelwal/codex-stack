@@ -1,10 +1,43 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-function usage() {
+interface ReviewFinding {
+  severity?: string;
+  title: string;
+  detail: string;
+  files?: string[];
+}
+
+interface ReviewReport {
+  status?: string;
+  branch?: string;
+  baseRef?: string;
+  fileNames?: string[];
+  findings?: ReviewFinding[];
+}
+
+interface ReviewSummary {
+  status: string;
+  branch: string;
+  baseRef: string;
+  filesChanged: number;
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  blocking?: boolean;
+}
+
+interface ParsedArgs {
+  input: string;
+  markdownOut: string;
+  summaryOut: string;
+  failOnCritical: boolean;
+  json: boolean;
+}
+
+function usage(): never {
   console.log(`render-pr-review
 
 Usage:
@@ -13,8 +46,8 @@ Usage:
   process.exit(0);
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): ParsedArgs {
+  const out: ParsedArgs = {
     input: "",
     markdownOut: "",
     summaryOut: "",
@@ -46,19 +79,19 @@ function parseArgs(argv) {
   return out;
 }
 
-function ensureDir(filePath) {
+function ensureDir(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8"));
+function readJson(filePath: string): ReviewReport {
+  return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8")) as ReviewReport;
 }
 
-function countBySeverity(findings, severity) {
+function countBySeverity(findings: ReviewFinding[], severity: string): number {
   return findings.filter((item) => item.severity === severity).length;
 }
 
-function findingLines(findings) {
+function findingLines(findings: ReviewFinding[]): string[] {
   if (!findings.length) return ["- No findings."];
   return findings.map((item) => {
     const files = Array.isArray(item.files) && item.files.length ? ` Files: ${item.files.join(", ")}.` : "";
@@ -66,13 +99,13 @@ function findingLines(findings) {
   });
 }
 
-function renderMarkdown(review, summary) {
+function renderMarkdown(review: ReviewReport, summary: ReviewSummary): string {
   return `<!-- codex-stack:pr-review -->
 # codex-stack PR review
 
 - Branch: ${review.branch}
 - Base: ${review.baseRef}
-- Files changed: ${review.fileNames.length}
+- Files changed: ${review.fileNames?.length ?? 0}
 - Critical findings: ${summary.criticalCount}
 - Warnings: ${summary.warningCount}
 - Info: ${summary.infoCount}
@@ -80,14 +113,14 @@ function renderMarkdown(review, summary) {
 
 ## Findings
 
-${findingLines(review.findings).join("\n")}
+${findingLines(review.findings ?? []).join("\n")}
 `;
 }
 
 const args = parseArgs(process.argv.slice(2));
 const review = readJson(args.input);
-const findings = Array.isArray(review.findings) ? review.findings : [];
-const summary = {
+const findings: ReviewFinding[] = Array.isArray(review.findings) ? review.findings : [];
+const summary: ReviewSummary = {
   status: review.status || "ok",
   branch: review.branch || "",
   baseRef: review.baseRef || "",

@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,7 +11,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
 
-const ROUTES = {
+const ROUTES: Record<string, string> = {
   "/": "index.html",
   "/login": "login.html",
   "/dashboard": "dashboard.html",
@@ -19,7 +19,7 @@ const ROUTES = {
 
 const REQUIRED_FILES = [...Object.values(ROUTES), "app.css", "app.js"];
 
-const CONTENT_TYPES = {
+const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -27,7 +27,7 @@ const CONTENT_TYPES = {
   ".svg": "image/svg+xml",
 };
 
-function checkRoutes() {
+function checkRoutes(): void {
   const missing = REQUIRED_FILES
     .map((file) => path.join(PUBLIC_DIR, file))
     .filter((filePath) => !fs.existsSync(filePath));
@@ -38,7 +38,12 @@ function checkRoutes() {
   console.log("[customer-portal-demo] route map ok");
 }
 
-function send(res, status, body, contentType = "text/plain; charset=utf-8") {
+function send(
+  res: ServerResponse<IncomingMessage>,
+  status: number,
+  body: string | Buffer,
+  contentType = "text/plain; charset=utf-8",
+): void {
   res.writeHead(status, {
     "content-type": contentType,
     "cache-control": "no-store",
@@ -46,7 +51,7 @@ function send(res, status, body, contentType = "text/plain; charset=utf-8") {
   res.end(body);
 }
 
-function serveFile(res, filePath) {
+function serveFile(res: ServerResponse<IncomingMessage>, filePath: string): void {
   if (!filePath.startsWith(PUBLIC_DIR)) {
     send(res, 403, "Forbidden");
     return;
@@ -59,7 +64,7 @@ function serveFile(res, filePath) {
   send(res, 200, fs.readFileSync(filePath), CONTENT_TYPES[ext] || "application/octet-stream");
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer((req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
   if (url.pathname === "/api/health") {

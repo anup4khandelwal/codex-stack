@@ -58,6 +58,7 @@ Use the repo in this order:
 ```bash
 bun --version
 ./setup
+bun run typecheck
 bunx playwright install chromium
 bash scripts/install-skills.sh user
 bun src/cli.ts list
@@ -162,6 +163,7 @@ Useful Bun scripts:
 
 ```bash
 bun run doctor
+bun run typecheck
 bun run smoke
 bun run demo:start
 bun run demo:smoke

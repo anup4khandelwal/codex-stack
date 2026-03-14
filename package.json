@@ -12,6 +12,7 @@
   },
   "scripts": {
     "doctor": "bash scripts/doctor.sh",
+    "typecheck": "bunx tsc --noEmit",
     "smoke": "bash scripts/ci-check.sh",
     "build": "bun build ./examples/customer-portal-demo/src/app.ts --target browser --format iife --outfile ./examples/customer-portal-demo/public/app.js",
     "demo:start": "bun run build && bun examples/customer-portal-demo/server.ts",
@@ -29,6 +30,10 @@
   },
   "dependencies": {
     "playwright": "^1.53.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "bun": ">=1.2.0"

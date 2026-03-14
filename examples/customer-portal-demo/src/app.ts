@@ -1,22 +1,32 @@
+interface DemoSession {
+  email: string;
+  role: string;
+  signedInAt: string;
+}
+
 const SESSION_KEY = "codexStackDemoSession";
 
-function getSession() {
+function getSession(): DemoSession | null {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    const value = JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as DemoSession | null;
+    if (!value || typeof value.email !== "string" || typeof value.role !== "string" || typeof value.signedInAt !== "string") {
+      return null;
+    }
+    return value;
   } catch {
     return null;
   }
 }
 
-function setSession(payload) {
+function setSession(payload: DemoSession): void {
   localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
 }
 
-function clearSession() {
+function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
-function formatDate() {
+function formatDate(): string {
   return new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
@@ -26,10 +36,10 @@ function formatDate() {
 }
 
 if (document.body.dataset.page === "login") {
-  const form = document.querySelector("form[data-login-form]");
-  const emailField = document.querySelector("input[name=email]");
-  const passwordField = document.querySelector("input[name=password]");
-  const notice = document.querySelector("[data-login-notice]");
+  const form = document.querySelector<HTMLFormElement>("form[data-login-form]");
+  const emailField = document.querySelector<HTMLInputElement>("input[name=email]");
+  const passwordField = document.querySelector<HTMLInputElement>("input[name=password]");
+  const notice = document.querySelector<HTMLElement>("[data-login-notice]");
   const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
 
   if (getSession()) {
@@ -38,11 +48,13 @@ if (document.body.dataset.page === "login") {
 
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const email = emailField?.value.trim();
+    const email = emailField?.value.trim() ?? "";
     const password = passwordField?.value || "";
 
     if (!email || !password) {
-      notice.textContent = "Use any email and password to continue the demo.";
+      if (notice) {
+        notice.textContent = "Use any email and password to continue the demo.";
+      }
       return;
     }
 
@@ -60,12 +72,12 @@ if (document.body.dataset.page === "dashboard") {
   if (!session) {
     window.location.href = "/login?next=/dashboard";
   } else {
-    document.querySelector("[data-user-email]")?.replaceChildren(document.createTextNode(session.email));
-    document.querySelector("[data-user-role]")?.replaceChildren(document.createTextNode(session.role));
-    document.querySelector("[data-signed-in-at]")?.replaceChildren(document.createTextNode(session.signedInAt));
+    document.querySelector<HTMLElement>("[data-user-email]")?.replaceChildren(document.createTextNode(session.email));
+    document.querySelector<HTMLElement>("[data-user-role]")?.replaceChildren(document.createTextNode(session.role));
+    document.querySelector<HTMLElement>("[data-signed-in-at]")?.replaceChildren(document.createTextNode(session.signedInAt));
   }
 
-  document.querySelector("[data-signout]")?.addEventListener("click", () => {
+  document.querySelector<HTMLElement>("[data-signout]")?.addEventListener("click", () => {
     clearSession();
     window.location.href = "/login";
   });
