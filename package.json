@@ -24,6 +24,7 @@
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",
     "upgrade": "bun scripts/upgrade-check.ts",
     "upgrade:offline": "bun scripts/upgrade-check.ts --offline",
+    "upgrade:apply": "bun scripts/upgrade-check.ts --offline --apply",
     "weekly": "bun scripts/weekly-digest.ts --since '7 days ago' --no-github",
     "qa:site": "bun scripts/render-qa-pages.ts --out .site",
     "browse:doctor": "bun browse/src/cli.ts doctor",

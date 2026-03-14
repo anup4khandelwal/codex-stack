@@ -91,5 +91,6 @@ CLI:
 ```bash
 bun src/cli.ts upgrade --offline
 bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```

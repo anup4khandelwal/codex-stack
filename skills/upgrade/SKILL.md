@@ -21,7 +21,7 @@ Turn upgrade work into a repeatable audit instead of an ad hoc sweep through pac
 3. Check dependency drift when network access is available.
 4. Check GitHub Actions `uses:` refs for stale majors or exact tags.
 5. Verify local wrapper and installed skill link health.
-6. Report the recommended follow-up commands instead of mutating the repo unless the operator explicitly asks for changes.
+6. If the operator explicitly asks for changes, use `--apply` to run the safe local refresh path.
 7. When operating in CI, publish the markdown report into the step summary or a stable issue.
 
 ## CLI
@@ -29,6 +29,7 @@ Turn upgrade work into a repeatable audit instead of an ad hoc sweep through pac
 ```bash
 bun src/cli.ts upgrade --offline
 bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```
 
@@ -39,10 +40,12 @@ bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs
 - Dependency drift
 - Workflow action drift
 - Install health
+- Apply results
 - Recommended actions
 
 ## Guardrails
 
 - Do not claim a dependency or workflow update exists without current evidence.
 - Treat offline runs as partial audits and mark skipped checks clearly.
-- Do not auto-edit dependency versions or workflow refs unless the user explicitly asks for the upgrade to be applied.
+- `--apply` is limited to safe local refreshes: regenerating `.codex-stack/bin` wrappers and refreshing project skill links under `.codex/skills`.
+- Do not auto-edit dependency versions or workflow refs unless the user explicitly asks for those upgrades and you have current evidence for them.
