@@ -5,5 +5,6 @@ browse/node_modules/
 browse/dist/.cache/
 .codex/
 .codex-stack/
+.site/
 coverage/
 *.log

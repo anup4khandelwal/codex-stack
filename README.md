@@ -39,6 +39,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - PR comments with QA verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
+- GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
 
 ## Quick start
@@ -100,6 +101,7 @@ node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --sn
 node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 node dist/cli.js retro --since "30 days ago" --no-github
 npm run weekly
+npm run qa:site
 ```
 
 The checked-in `portal-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
@@ -172,6 +174,21 @@ node dist/cli.js ship \
 
 This keeps QA in the shipping path instead of as a manual follow-up.
 When verification runs during `ship`, the QA report and evidence are published into `docs/qa/<branch>/` before the branch is pushed, so the PR comment can point at tracked files on GitHub.
+After merge, the `qa-pages` workflow renders those tracked artifacts into a GitHub Pages site so the report, annotation, and screenshot links remain stable even after the feature branch is deleted.
+
+## QA Pages
+
+Build the static QA site locally:
+
+```bash
+npm run qa:site
+open .site/index.html
+```
+
+On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` reports to Pages. `ship --pr` now emits two classes of QA links:
+
+- branch artifact links that work immediately on the PR branch
+- stable Pages links that activate after the branch is merged to `main`
 
 ## Install skills for Codex
 

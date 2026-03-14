@@ -5,21 +5,21 @@ ROOT_DIR="$(pwd)"
 TMP_REPO="$(mktemp -d)"
 trap 'rm -rf "$TMP_REPO"' EXIT
 
-echo "[1/7] root CLI list"
+echo "[1/8] root CLI list"
 node dist/cli.js list >/tmp/codex-stack-list.log
 grep -q '^qa' /tmp/codex-stack-list.log
 
-echo "[2/7] root CLI show/path"
+echo "[2/8] root CLI show/path"
 node dist/cli.js show review >/tmp/codex-stack-show.log
 node dist/cli.js path review >/tmp/codex-stack-path.log
 node dist/cli.js show qa >/tmp/codex-stack-show-qa.log
 
-echo "[3/7] doctor checks"
+echo "[3/8] doctor checks"
 node dist/cli.js doctor >/tmp/codex-stack-doctor.log
 node browse/dist/cli.js doctor >/tmp/codex-stack-browse-doctor.log
 grep -q 'snapshot' /tmp/codex-stack-browse-doctor.log
 
-echo "[4/7] browse flow registry"
+echo "[4/8] browse flow registry"
 node browse/dist/cli.js save-flow smoke '[{"action":"wait","ms":1},{"action":"assert-url","value":"example.com"}]' >/tmp/codex-stack-flow-save.log
 node browse/dist/cli.js show-flow smoke >/tmp/codex-stack-flow-show.log
 node browse/dist/cli.js flows >/tmp/codex-stack-flow-list.log
@@ -43,7 +43,7 @@ test -x .codex-stack/bin/qa
 test -x .codex-stack/bin/ship
 test -x .codex-stack/bin/browse
 
-echo "[5/7] review, ship, retro, and demo interfaces"
+echo "[5/8] review, ship, retro, and demo interfaces"
 node scripts/review-diff.mjs --help >/tmp/codex-stack-review-help.log
 node scripts/qa-run.mjs --help >/tmp/codex-stack-qa-help.log
 node scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
@@ -109,7 +109,16 @@ test -f docs/qa/smoke-fixture/report.md
 test -f docs/qa/smoke-fixture/report.json
 test -f docs/qa/smoke-fixture/annotation.svg
 test -f docs/qa/smoke-fixture/screenshot.png
+node scripts/render-qa-pages.mjs --out .site >/tmp/codex-stack-qa-pages.log
+test -f .site/index.html
+test -f .site/qa/index.html
+test -f .site/qa/smoke-fixture/index.html
+test -f .site/manifest.json
+grep -q 'codex-stack QA Reports' .site/index.html
+grep -q 'smoke-fixture' .site/manifest.json
+grep -q 'github.io' .site/manifest.json
 rm -rf docs/qa/smoke-fixture
+rm -rf .site
 node scripts/demo-smoke.mjs >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
@@ -127,6 +136,7 @@ test -n "$(find .codex-stack/qa/annotations -name '*.svg' -print -quit)"
 git -C "$TMP_REPO" init -b main >/tmp/codex-stack-temp-git-init.log
 git -C "$TMP_REPO" config user.email "smoke@example.com"
 git -C "$TMP_REPO" config user.name "Smoke Test"
+git -C "$TMP_REPO" remote add origin https://github.com/anup4khandelwal/codex-stack.git
 cat > "$TMP_REPO/package.json" <<'JSON'
 {
   "name": "ship-smoke",
@@ -159,19 +169,25 @@ grep -q '"landing-smoke"' /tmp/codex-stack-ship.json
 grep -q '"landing-home"' /tmp/codex-stack-ship.json
 grep -q 'plan qa verification comment' /tmp/codex-stack-ship.json
 grep -q 'docs/qa/feat-generated-pr' /tmp/codex-stack-ship.json
+grep -q 'github.io/codex-stack/qa/feat-generated-pr/' /tmp/codex-stack-ship.json
 
-echo "[6/7] demo files present"
+echo "[6/8] demo files present"
 test -f examples/customer-portal-demo/README.md
 test -f examples/customer-portal-demo/server.mjs
 test -f browse/flows/portal-login.json
 test -f browse/flows/portal-dashboard.json
 test -f browse/flows/portal-full-demo.json
 
-echo "[7/7] docs present"
+echo "[7/8] docs present"
 test -f README.md
 test -f docs/install.md
 test -f docs/commands.md
 test -f docs/examples.md
 test -f skills/review/checklist.md
+test -f .github/workflows/qa-pages.yml
+test -f scripts/render-qa-pages.mjs
+
+echo "[8/8] cleanup"
+rm -rf .site
 
 echo "CI checks passed."

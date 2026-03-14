@@ -71,6 +71,7 @@ Notes:
 - `ship` can call the QA workflow before push/PR creation with `--verify-url`, `--verify-flow`, and `--verify-snapshot`.
 - When `ship --pr` runs with QA verification, it also posts a PR comment with the QA summary and any available artifact references.
 - During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/` before push/PR creation.
+- `ship --pr` includes both immediate branch artifact links and post-merge GitHub Pages links for QA evidence when tracked artifacts exist.
 
 ## QA workflow
 
@@ -86,6 +87,7 @@ Notes:
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
+- Run `node scripts/render-qa-pages.mjs --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.
 
 ## Retro workflow
 

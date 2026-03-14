@@ -22,6 +22,7 @@ Run repeatable browser verification, collect evidence, and turn it into a ship/n
 4. Score the result with findings, severity, evidence, and a recommendation.
 5. Save the QA report under `.codex-stack/qa/`, including annotated screenshot evidence when snapshot failures occur.
 6. Publish tracked copies into `docs/qa/` when the shipping workflow needs GitHub-linkable evidence.
+7. Render `docs/qa/` through `scripts/render-qa-pages.mjs` when the operator needs a static review site.
 
 ## CLI
 

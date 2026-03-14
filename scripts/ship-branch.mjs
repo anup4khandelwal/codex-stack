@@ -519,6 +519,9 @@ function getCurrentGitHubLogin() {
 }
 
 function inferGithubRepo() {
+  if (process.env.GITHUB_REPOSITORY) {
+    return cleanSubject(process.env.GITHUB_REPOSITORY);
+  }
   const remote = run("git remote get-url origin", { allowFailure: true });
   const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
   return match ? match[1] : "";
@@ -694,6 +697,39 @@ function repoBlobUrl(repo, branch, relativePath) {
   return `https://github.com/${repo}/blob/${encodeURIComponent(branch)}/${encoded}`;
 }
 
+function defaultPagesBaseUrl(repo) {
+  const [owner, name] = String(repo || "").split("/");
+  if (!owner || !name) return "";
+  if (name.toLowerCase() === `${owner.toLowerCase()}.github.io`) {
+    return `https://${owner}.github.io/`;
+  }
+  return `https://${owner}.github.io/${name}/`;
+}
+
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+function pagesBaseUrl(repo) {
+  return cleanSubject(process.env.CODEX_STACK_PAGES_BASE_URL || defaultPagesBaseUrl(repo));
+}
+
+function pagesSitePath(targetPath) {
+  const relative = trackedRepoPath(targetPath);
+  if (!relative || !relative.startsWith("docs/qa/")) return "";
+  const sitePath = relative.slice("docs/".length);
+  return sitePath.endsWith("/report.md") || sitePath.endsWith("/report.json")
+    ? `${sitePath.replace(/\/report\.(md|json)$/i, "/")}`
+    : sitePath;
+}
+
+function pagesUrl(repo, targetPath) {
+  const baseUrl = pagesBaseUrl(repo);
+  const sitePath = pagesSitePath(targetPath);
+  if (!baseUrl || !sitePath) return "";
+  return new URL(sitePath.replace(/^\/+/, ""), ensureTrailingSlash(baseUrl)).toString();
+}
+
 function isTrackedPath(relativePath) {
   if (!relativePath) return false;
   return Boolean(run(`git ls-files --error-unmatch -- ${quote(relativePath)}`, { allowFailure: true }));
@@ -708,6 +744,13 @@ function markdownReference(repo, branch, targetPath) {
   return `\`${relative}\` (local only)`;
 }
 
+function pagesReference(repo, targetPath, label = "") {
+  const stableUrl = pagesUrl(repo, targetPath);
+  const sitePath = pagesSitePath(targetPath);
+  if (!stableUrl || !sitePath) return "";
+  return `[${label || sitePath}](${stableUrl})`;
+}
+
 function qaFindingSummary(findings, limit = 5) {
   if (!Array.isArray(findings) || !findings.length) return ["- No findings."];
   const lines = findings.slice(0, limit).map((item) => `- ${String(item.severity || "info").toUpperCase()}: ${item.title}`);
@@ -720,9 +763,12 @@ function qaFindingSummary(findings, limit = 5) {
 function buildQaPrComment({ report, repo, branch }) {
   if (!report) return "";
   const published = report.artifacts?.published || {};
-  const reportRef = markdownReference(repo, branch, published.markdown || published.json || report.artifacts?.markdown || report.artifacts?.json || "");
-  const annotationRef = markdownReference(repo, branch, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "");
-  const screenshotRef = markdownReference(repo, branch, published.screenshot || report.snapshotResult?.screenshot || "");
+  const trackedReportRef = markdownReference(repo, branch, published.markdown || published.json || report.artifacts?.markdown || report.artifacts?.json || "");
+  const trackedAnnotationRef = markdownReference(repo, branch, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "");
+  const trackedScreenshotRef = markdownReference(repo, branch, published.screenshot || report.snapshotResult?.screenshot || "");
+  const stableReportRef = pagesReference(repo, published.markdown || published.json || "", "qa report");
+  const stableAnnotationRef = pagesReference(repo, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "", "annotation");
+  const stableScreenshotRef = pagesReference(repo, published.screenshot || report.snapshotResult?.screenshot || "", "screenshot");
   const flowLines = Array.isArray(report.flowResults) && report.flowResults.length
     ? report.flowResults.map((item) => `- ${item.name}: ${item.status}${item.steps ? ` (${item.steps} steps)` : ""}`)
     : ["- No flows configured."];
@@ -750,11 +796,16 @@ function buildQaPrComment({ report, repo, branch }) {
       "",
       `- Snapshot: ${report.snapshotResult.name || "n/a"} (${report.snapshotResult.status || "unknown"})`
     );
-    if (reportRef) sections.push(`- QA report: ${reportRef}`);
-    if (annotationRef) sections.push(`- Annotation: ${annotationRef}`);
-    if (screenshotRef) sections.push(`- Screenshot: ${screenshotRef}`);
-  } else if (reportRef) {
-    sections.push("", `QA report: ${reportRef}`);
+    if (trackedReportRef) sections.push(`- Branch artifact: ${trackedReportRef}`);
+    if (stableReportRef) sections.push(`- Stable Pages URL after merge: ${stableReportRef}`);
+    if (trackedAnnotationRef) sections.push(`- Branch annotation: ${trackedAnnotationRef}`);
+    if (stableAnnotationRef) sections.push(`- Stable annotation URL after merge: ${stableAnnotationRef}`);
+    if (trackedScreenshotRef) sections.push(`- Branch screenshot: ${trackedScreenshotRef}`);
+    if (stableScreenshotRef) sections.push(`- Stable screenshot URL after merge: ${stableScreenshotRef}`);
+  } else if (trackedReportRef || stableReportRef) {
+    sections.push("");
+    if (trackedReportRef) sections.push(`QA branch artifact: ${trackedReportRef}`);
+    if (stableReportRef) sections.push(`Stable Pages URL after merge: ${stableReportRef}`);
   }
 
   return `${sections.join("\n").trim()}\n`;
@@ -819,6 +870,9 @@ function printText(result) {
   if (result.verification.reportPath) {
     console.log(`- Verification report: ${result.verification.reportPath}`);
   }
+  if (result.verification.stableReportUrl) {
+    console.log(`- Verification Pages URL: ${result.verification.stableReportUrl}`);
+  }
   if (result.verification.commentPosted) {
     console.log("- Verification comment: posted");
   }
@@ -862,6 +916,7 @@ const result = {
     status: "",
     healthScore: null,
     reportPath: "",
+    stableReportUrl: "",
     publishDir: "",
     commentPreview: "",
     commentPosted: false,
@@ -948,6 +1003,10 @@ if (shouldRunVerification(args)) {
   if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
   result.verification.session = result.verification.session || defaultVerifySession(result.branch);
   result.verification.publishDir = defaultVerifyPublishDir(result.branch);
+  result.verification.stableReportUrl = pagesUrl(
+    result.automation.repo,
+    path.join(result.verification.publishDir, "report.md")
+  );
   result.steps.push(`verify via qa on ${args.verifyUrl}${verificationParts.length ? ` (${verificationParts.join("; ")})` : ""}`);
   result.steps.push(`publish qa artifacts to ${result.verification.publishDir}`);
   if (!args.dryRun) {
@@ -961,6 +1020,10 @@ if (shouldRunVerification(args)) {
     result.verification.status = verification.report.status;
     result.verification.healthScore = verification.report.healthScore;
     result.verification.reportPath = verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
+    result.verification.stableReportUrl = pagesUrl(
+      result.automation.repo,
+      verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || ""
+    );
     verificationCommentBody = buildQaPrComment({
       report: verification.report,
       repo: result.automation.repo,
