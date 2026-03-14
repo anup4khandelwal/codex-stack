@@ -22,6 +22,7 @@
     "qa": "bun scripts/qa-run.ts",
     "qa:trends": "bun scripts/qa-trends.ts",
     "preview": "bun scripts/preview-verify.ts",
+    "deploy": "bun scripts/deploy-verify.ts",
     "ship:dry": "bun scripts/ship-branch.ts --dry-run",
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",
     "upgrade": "bun scripts/upgrade-check.ts",

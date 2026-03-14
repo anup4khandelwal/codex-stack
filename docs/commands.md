@@ -12,11 +12,12 @@ bun src/cli.ts review
 bun src/cli.ts review --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
-bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
 bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago"
 bun src/cli.ts retro --since "7 days ago" --artifact-dir .codex-stack/retros
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -86,8 +87,8 @@ bun scripts/render-pr-review.ts --input review.json --preview-input preview.json
 Notes:
 
 - `pr-review.yml` uses `review-diff.ts` plus `render-pr-review.ts` to comment on every PR.
-- When `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, `pr-review.yml` also runs `preview-verify.ts` and merges the preview QA evidence into the review comment.
-- The review workflow fails when critical findings are present in either structural review or preview QA.
+- When `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, `pr-review.yml` also runs `preview-verify.ts` and merges the preview deploy evidence into the review comment.
+- The review workflow fails when critical findings are present in either structural review or preview verification.
 
 ## Issue workflow
 
@@ -105,7 +106,7 @@ bun scripts/ship-branch.ts --message "feat: ready for review" --push
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --draft
 ```
 
@@ -117,10 +118,11 @@ Notes:
 - `ship` infers labels from branch and changed files, and infers reviewers from `CODEOWNERS` unless you disable that behavior.
 - When GitHub access is available, `ship` creates missing labels before attaching them to the PR.
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
-- `ship` can call the QA workflow before push/PR creation with `--verify-url`, `--verify-flow`, and `--verify-snapshot`.
-- When `ship --pr` runs with QA verification, it also posts a PR comment with the QA summary and any available artifact references.
-- During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/` before push/PR creation.
-- `ship --pr` includes both immediate branch artifact links and post-merge GitHub Pages links for QA evidence when tracked artifacts exist.
+- `ship` can call the deploy verification workflow before push/PR creation with `--verify-url`, `--verify-path`, `--verify-device`, `--verify-flow`, and `--verify-snapshot`.
+- `--verify-console-errors` upgrades captured console errors from warnings to merge-blocking failures.
+- When `ship --pr` runs with deploy verification, it also posts a PR comment with the deploy summary and any available artifact references.
+- During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/deploy/` before push/PR creation.
+- `ship --pr` includes both immediate branch artifact links and post-merge GitHub Pages links for deploy evidence when tracked artifacts exist.
 - Add the `automerge` label to a PR if you want `pr-automerge.yml` to enable GitHub auto-merge after checks pass.
 
 ## QA workflow
@@ -146,17 +148,31 @@ Notes:
 ## Preview workflow
 
 ```bash
-bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
-bun scripts/preview-verify.ts --url https://preview.example.com --flow landing-smoke --snapshot landing-home --json
+bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url https://preview.example.com --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --json
 ```
 
 Notes:
 
 - `preview-verify.ts` resolves the preview URL from either `--url` or `--url-template`.
 - Template placeholders support `{repo}`, `{owner}`, `{repo_name}`, `{pr}`, `{branch}`, `{branch_slug}`, `{sha}`, and `{short_sha}`.
-- The script polls preview readiness before it calls `qa-run.ts`.
+- The script polls preview readiness before it delegates to `deploy-verify.ts`.
 - `preview-verify.yml` runs this flow on pull requests when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured as a repo variable.
-- The workflow uploads `preview.md`, `preview.json`, `preview-comment.md`, and the published QA artifacts as a workflow artifact, then updates a stable PR comment.
+- The workflow uploads `preview.md`, `preview.json`, `preview-comment.md`, and the published deploy artifacts as a workflow artifact, then updates a stable PR comment.
+
+## Deploy workflow
+
+```bash
+bun scripts/deploy-verify.ts --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
+bun scripts/deploy-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device mobile --strict-console --strict-http --json
+```
+
+Notes:
+
+- `deploy-verify.ts` resolves the live deploy URL from either `--url` or `--url-template`.
+- It waits for readiness, verifies every requested `path x device` combination, and captures screenshots plus console evidence.
+- Flow and snapshot checks are delegated to the existing QA runtime so the deploy report reuses the same finding model and artifacts.
+- The script writes `report.md`, `report.json`, `comment.md`, and `screenshots.json` under the publish directory even when you do not pass explicit output paths.
 
 ## Retro workflow
 

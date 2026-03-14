@@ -57,6 +57,31 @@ interface PreviewReport {
     httpStatus?: number | null;
   };
   qa?: PreviewQaReport;
+  deploy?: {
+    screenshotManifest?: string;
+    pathResults?: Array<{
+      path?: string;
+      device?: string;
+      status?: string;
+      httpStatus?: number | null;
+      screenshot?: string;
+      console?: {
+        errors?: string[];
+        warnings?: string[];
+      };
+    }>;
+    qa?: {
+      snapshotResults?: Array<{
+        name?: string;
+        targetPath?: string;
+        device?: string;
+        status?: string;
+        report?: string;
+        annotation?: string;
+        screenshot?: string;
+      }>;
+    };
+  };
 }
 
 interface ReviewSummary {
@@ -160,6 +185,37 @@ function previewFindingLines(findings: PreviewFinding[]): string[] {
   });
 }
 
+function deployCheckLines(preview: PreviewReport | null): string[] {
+  const pathResults = Array.isArray(preview?.deploy?.pathResults) ? preview?.deploy?.pathResults : [];
+  if (!pathResults.length) return ["- No deploy checks recorded."];
+  return pathResults.slice(0, 8).map((item) => {
+    const bits = [
+      `${item.path || "/"} @ ${item.device || "desktop"}`,
+      `status=${item.status || "unknown"}`,
+      item.httpStatus !== null && item.httpStatus !== undefined ? `http=${item.httpStatus}` : "http=n/a",
+      item.console?.errors?.length ? `consoleErrors=${item.console.errors.length}` : "",
+      item.console?.warnings?.length ? `consoleWarnings=${item.console.warnings.length}` : "",
+      item.screenshot ? `screenshot=${item.screenshot}` : "",
+    ].filter(Boolean);
+    return `- ${bits.join(", ")}`;
+  });
+}
+
+function deploySnapshotLines(preview: PreviewReport | null): string[] {
+  const snapshotResults = Array.isArray(preview?.deploy?.qa?.snapshotResults) ? preview?.deploy?.qa?.snapshotResults : [];
+  if (!snapshotResults.length) return ["- No deploy snapshot evidence."];
+  return snapshotResults.slice(0, 6).map((item) => {
+    const bits = [
+      `${item.name || "snapshot"} @ ${item.targetPath || "/"} (${item.device || "desktop"})`,
+      `status=${item.status || "unknown"}`,
+      item.annotation ? `annotation=${item.annotation}` : "",
+      item.screenshot ? `screenshot=${item.screenshot}` : "",
+      item.report ? `report=${item.report}` : "",
+    ].filter(Boolean);
+    return `- ${bits.join(", ")}`;
+  });
+}
+
 function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary): string {
   if (!preview) return "";
   const findings = Array.isArray(preview.qa?.findings) ? preview.qa?.findings : [];
@@ -179,11 +235,20 @@ ${preview.runUrl ? `- Workflow run: ${preview.runUrl}` : ""}
 ${published.markdown ? `- QA report: \`${published.markdown}\`` : ""}
 ${published.annotation ? `- Annotation: \`${published.annotation}\`` : ""}
 ${published.screenshot ? `- Screenshot: \`${published.screenshot}\`` : ""}
+${preview.deploy?.screenshotManifest ? `- Screenshot manifest: \`${preview.deploy.screenshotManifest}\`` : ""}
 ${snapshot?.status ? `- Snapshot: ${snapshot.status}${snapshot.name ? ` (${snapshot.name})` : ""}` : ""}
 
 ### Preview findings
 
 ${previewFindingLines(findings).join("\n")}
+
+### Deploy checks
+
+${deployCheckLines(preview).join("\n")}
+
+### Deploy snapshots
+
+${deploySnapshotLines(preview).join("\n")}
 `;
 }
 
