@@ -7,25 +7,25 @@
   "type": "module",
   "packageManager": "bun@1.2.5",
   "bin": {
-    "codex-stack": "./dist/cli.js",
-    "codex-stack-browse": "./browse/dist/cli.js"
+    "codex-stack": "./src/cli.ts",
+    "codex-stack-browse": "./browse/src/cli.ts"
   },
   "scripts": {
     "doctor": "bash scripts/doctor.sh",
     "smoke": "bash scripts/ci-check.sh",
-    "demo:start": "bun examples/customer-portal-demo/server.mjs",
-    "demo:smoke": "bun scripts/demo-smoke.mjs",
-    "review": "bun scripts/review-diff.mjs",
-    "issue": "bun scripts/issue-flow.mjs",
-    "qa": "bun scripts/qa-run.mjs",
-    "ship:dry": "bun scripts/ship-branch.mjs --dry-run",
-    "retro": "bun scripts/retro-report.mjs --since '7 days ago'",
-    "weekly": "bun scripts/weekly-digest.mjs --since '7 days ago' --no-github",
-    "qa:site": "bun scripts/render-qa-pages.mjs --out .site",
-    "browse:doctor": "bun browse/dist/cli.js doctor",
-    "browse:text": "bun browse/dist/cli.js text",
-    "browse:screenshot": "bun browse/dist/cli.js screenshot",
-    "build": "bun -e \"console.log('Checked-in dist/ is ready. Install TypeScript before enabling a transpile build.')\""
+    "build": "bun build ./examples/customer-portal-demo/src/app.ts --target browser --format iife --outfile ./examples/customer-portal-demo/public/app.js",
+    "demo:start": "bun run build && bun examples/customer-portal-demo/server.ts",
+    "demo:smoke": "bun run build && bun scripts/demo-smoke.ts",
+    "review": "bun scripts/review-diff.ts",
+    "issue": "bun scripts/issue-flow.ts",
+    "qa": "bun scripts/qa-run.ts",
+    "ship:dry": "bun scripts/ship-branch.ts --dry-run",
+    "retro": "bun scripts/retro-report.ts --since '7 days ago'",
+    "weekly": "bun scripts/weekly-digest.ts --since '7 days ago' --no-github",
+    "qa:site": "bun scripts/render-qa-pages.ts --out .site",
+    "browse:doctor": "bun browse/src/cli.ts doctor",
+    "browse:text": "bun browse/src/cli.ts text",
+    "browse:screenshot": "bun browse/src/cli.ts screenshot"
   },
   "dependencies": {
     "playwright": "^1.53.2"

@@ -27,7 +27,7 @@ jobs:
           bun-version: "1.2.5"
 
       - name: Render QA Pages
-        run: bun scripts/render-qa-pages.mjs --out .site
+        run: bun scripts/render-qa-pages.ts --out .site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

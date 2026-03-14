@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -8,7 +9,7 @@ function usage() {
   console.log(`weekly-digest
 
 Usage:
-  bun scripts/weekly-digest.mjs [--since <range>] [--repo <owner/name>] [--out <path>] [--json-out <path>] [--publish-dir <path>] [--summary-out <path>] [--slack-out <path>] [--slack-json-out <path>] [--email-out <path>] [--manifest-out <path>] [--no-publish] [--no-github]
+  bun scripts/weekly-digest.ts [--since <range>] [--repo <owner/name>] [--out <path>] [--json-out <path>] [--publish-dir <path>] [--summary-out <path>] [--slack-out <path>] [--slack-json-out <path>] [--email-out <path>] [--manifest-out <path>] [--no-publish] [--no-github]
 `);
   process.exit(0);
 }
@@ -78,16 +79,6 @@ function ensureDir(dirPath) {
 function writeFile(filePath, content) {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, content);
-}
-
-function resolveJsRuntime() {
-  if (process.versions?.bun) return process.execPath || "bun";
-  try {
-    execFileSync("bun", ["--version"], { stdio: "pipe" });
-    return "bun";
-  } catch {
-    return process.execPath || "node";
-  }
 }
 
 function relative(targetPath) {
@@ -302,7 +293,7 @@ function resolvePublishTargets(args) {
 
 const args = parseArgs(process.argv.slice(2));
 const retroArgs = [
-  "scripts/retro-report.mjs",
+  "scripts/retro-report.ts",
   "--since",
   args.since,
   "--json",
@@ -315,7 +306,7 @@ if (args.noGithub) {
   retroArgs.push("--no-github");
 }
 
-const retro = JSON.parse(execFileSync(resolveJsRuntime(), retroArgs, {
+const retro = JSON.parse(execFileSync(process.execPath || "bun", retroArgs, {
   cwd: process.cwd(),
   encoding: "utf8",
 }));

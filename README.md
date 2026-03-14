@@ -40,8 +40,8 @@ Use the repo in this order:
 ## What ships today
 
 - Installable Codex skills under `skills/`
-- Checked-in root CLI under `dist/cli.js`
-- Playwright-backed browser runtime under `browse/dist/cli.js`
+- Checked-in root CLI under `src/cli.ts`
+- Playwright-backed browser runtime under `browse/src/cli.ts`
 - Persistent named browser sessions
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts
@@ -60,7 +60,7 @@ bun --version
 ./setup
 bunx playwright install chromium
 bash scripts/install-skills.sh user
-bun dist/cli.js list
+bun src/cli.ts list
 ```
 
 `./setup` runs environment checks, installs Bun dependencies when needed, and creates local wrappers under `.codex-stack/bin/` for:
@@ -106,11 +106,11 @@ bun run demo:start
 Then run a realistic sequence:
 
 ```bash
-bun dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
-bun dist/cli.js browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
-bun dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun dist/cli.js retro --since "30 days ago" --no-github
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts retro --since "30 days ago" --no-github
 bun run weekly
 bun run qa:site
 ```
@@ -122,7 +122,7 @@ The checked-in `portal-login` flow clears the demo app's stored login state befo
 Create the work item and branch:
 
 ```bash
-bun dist/cli.js issue start --title "Add issue-first PR workflow" --label automation --prefix feat
+bun src/cli.ts issue start --title "Add issue-first PR workflow" --label automation --prefix feat
 ```
 
 This creates a GitHub issue and a local branch like `feat/123-add-issue-first-pr-workflow`.
@@ -130,7 +130,7 @@ This creates a GitHub issue and a local branch like `feat/123-add-issue-first-pr
 Ship the branch as a PR:
 
 ```bash
-bun dist/cli.js ship --message "feat: add issue-first workflow" --push --pr
+bun src/cli.ts ship --message "feat: add issue-first workflow" --push --pr
 ```
 
 What happens next:
@@ -145,17 +145,17 @@ Branch naming matters: when the branch follows `<prefix>/<issue-number>-slug`, `
 ## Root CLI
 
 ```bash
-bun dist/cli.js list
-bun dist/cli.js show qa
-bun dist/cli.js review --json --base origin/main
-bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-bun dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
-bun dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
-bun dist/cli.js browse doctor
-bun dist/cli.js browse flows
-bun dist/cli.js browse snapshot https://example.com marketing-home --session staging
-bun dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
+bun src/cli.ts list
+bun src/cli.ts show qa
+bun src/cli.ts review --json --base origin/main
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
+bun src/cli.ts browse doctor
+bun src/cli.ts browse flows
+bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
+bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 ```
 
 Useful Bun scripts:
@@ -199,7 +199,7 @@ Use `qa` when you want a decision-ready report:
 Example:
 
 ```bash
-bun dist/cli.js ship \
+bun src/cli.ts ship \
   --message "feat: ready for review" \
   --push \
   --pr \
@@ -261,7 +261,6 @@ Use codex-stack-browse to capture a baseline snapshot for the new onboarding pag
 ```text
 codex-stack/
   browse/              Browser runtime, flows, and artifacts helpers
-  dist/                Checked-in root CLI output
   docs/                Install, command, and example docs
   examples/            Sample apps for demos
   scripts/             Setup, review, qa, ship, retro, and digest helpers

@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -12,8 +13,8 @@ function usage() {
   console.log(`qa-run
 
 Usage:
-  bun scripts/qa-run.mjs <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
-  bun scripts/qa-run.mjs --fixture <path> [--publish-dir <path>] [--json]
+  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
+  bun scripts/qa-run.ts --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
 }
@@ -89,10 +90,7 @@ function timestampSlug() {
 }
 
 function runBrowse(args) {
-  const runtime = process.versions?.bun
-    ? (process.execPath || "bun")
-    : (((spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" }).status ?? 1) === 0) ? "bun" : (process.execPath || "node"));
-  const result = spawnSync(runtime, [BROWSE_CLI, ...args], {
+  const result = spawnSync(process.execPath || "bun", [BROWSE_CLI, ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
   });

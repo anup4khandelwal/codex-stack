@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -8,7 +9,7 @@ function usage() {
   console.log(`retro-report
 
 Usage:
-  bun scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github] [--github-limit <n>]
+  bun scripts/retro-report.ts [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github] [--github-limit <n>]
 `);
   process.exit(0);
 }

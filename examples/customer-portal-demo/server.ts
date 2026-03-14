@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +17,8 @@ const ROUTES = {
   "/dashboard": "dashboard.html",
 };
 
+const REQUIRED_FILES = [...Object.values(ROUTES), "app.css", "app.js"];
+
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -25,7 +28,7 @@ const CONTENT_TYPES = {
 };
 
 function checkRoutes() {
-  const missing = Object.values(ROUTES)
+  const missing = REQUIRED_FILES
     .map((file) => path.join(PUBLIC_DIR, file))
     .filter((filePath) => !fs.existsSync(filePath));
   if (missing.length) {
@@ -82,6 +85,8 @@ if (process.argv.includes("--check")) {
   checkRoutes();
   process.exit(0);
 }
+
+checkRoutes();
 
 server.listen(PORT, HOST, () => {
   console.log(`[customer-portal-demo] http://${HOST}:${PORT}`);

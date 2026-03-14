@@ -51,17 +51,17 @@ Give the agent eyes for QA and deployment checks.
 ## Example
 
 ```bash
-bun dist/cli.js browse text https://example.com --session staging
-bun dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
-bun dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
-bun dist/cli.js browse import-flow login-local ./docs/login-flow.md
-bun dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
-bun dist/cli.js browse snapshot https://example.com marketing-home --session staging
-bun dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
-bun dist/cli.js browse login https://example.com/login login-local --session staging
-bun dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
-bun dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
-bun dist/cli.js browse sessions
+bun src/cli.ts browse text https://example.com --session staging
+bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
+bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
+bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
+bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
+bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
+bun src/cli.ts browse login https://example.com/login login-local --session staging
+bun src/cli.ts browse assert-text https://example.com "h1" "Example Domain" --session staging
+bun src/cli.ts browse screenshot https://example.com /tmp/example.png --session staging
+bun src/cli.ts browse sessions
 ```
 
 ## Guardrails

@@ -31,10 +31,10 @@ jobs:
         run: git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
 
       - name: Run codex-stack review
-        run: bun scripts/review-diff.mjs --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
+        run: bun scripts/review-diff.ts --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
 
       - name: Render review outputs
-        run: bun scripts/render-pr-review.mjs --input review.json --markdown-out review.md --summary-out review-summary.json
+        run: bun scripts/render-pr-review.ts --input review.json --markdown-out review.md --summary-out review-summary.json
 
       - name: Add step summary
         run: cat review.md >> "$GITHUB_STEP_SUMMARY"
@@ -73,4 +73,4 @@ jobs:
             }
 
       - name: Fail on critical findings
-        run: bun scripts/render-pr-review.mjs --input review.json --fail-on-critical >/tmp/codex-stack-pr-review.md
+        run: bun scripts/render-pr-review.ts --input review.json --fail-on-critical >/tmp/codex-stack-pr-review.md

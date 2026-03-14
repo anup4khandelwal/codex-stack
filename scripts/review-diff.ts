@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -22,7 +23,7 @@ function usage() {
   console.log(`review-diff
 
 Usage:
-  bun scripts/review-diff.mjs [--json] [--base <ref>]
+  bun scripts/review-diff.ts [--json] [--base <ref>]
 `);
   process.exit(0);
 }

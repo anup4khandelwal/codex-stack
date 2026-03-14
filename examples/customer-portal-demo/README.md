@@ -5,7 +5,7 @@ This sample app exists to demo `codex-stack` to another engineer without needing
 ## Start the app
 
 ```bash
-bun examples/customer-portal-demo/server.mjs
+bun run demo:start
 ```
 
 Default URL:
@@ -25,10 +25,10 @@ http://127.0.0.1:4173
 ## Browser demo commands
 
 ```bash
-bun dist/cli.js browse flows
-bun dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
-bun dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+bun src/cli.ts browse flows
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 ```
 
 ## Recommended login

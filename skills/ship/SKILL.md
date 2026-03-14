@@ -33,12 +33,12 @@ Run the shipping checklist with minimal back-and-forth.
 ## CLI
 
 ```bash
-bun dist/cli.js ship --dry-run
-bun dist/cli.js ship --message "feat: ready for review" --push
-bun dist/cli.js ship --message "feat: ready for review" --push --pr
-bun dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
-bun dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun dist/cli.js ship --dry-run --pr --verify-url https://staging.example.com/dashboard --verify-flow landing-smoke --verify-snapshot landing-home
+bun src/cli.ts ship --dry-run
+bun src/cli.ts ship --message "feat: ready for review" --push
+bun src/cli.ts ship --message "feat: ready for review" --push --pr
+bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
+bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
+bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com/dashboard --verify-flow landing-smoke --verify-snapshot landing-home
 ```
 
 ## Output format

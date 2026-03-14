@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -7,23 +8,36 @@ import { execFileSync } from "node:child_process";
 const ROOT = process.cwd();
 const DEMO_DIR = path.join(ROOT, "examples", "customer-portal-demo");
 const PUBLIC_DIR = path.join(DEMO_DIR, "public");
+const BUN = process.execPath || "bun";
 
 function read(relativePath) {
   return fs.readFileSync(path.join(PUBLIC_DIR, relativePath), "utf8");
 }
 
-function resolveJsRuntime() {
-  if (process.versions?.bun) return process.execPath || "bun";
-  try {
-    execFileSync("bun", ["--version"], { stdio: "pipe" });
-    return "bun";
-  } catch {
-    return process.execPath || "node";
-  }
+function buildDemoApp() {
+  execFileSync(
+    BUN,
+    [
+      "build",
+      "examples/customer-portal-demo/src/app.ts",
+      "--target",
+      "browser",
+      "--format",
+      "iife",
+      "--outfile",
+      "examples/customer-portal-demo/public/app.js",
+    ],
+    {
+      cwd: ROOT,
+      stdio: "pipe",
+    },
+  );
 }
 
 async function main() {
-  execFileSync(resolveJsRuntime(), ["examples/customer-portal-demo/server.mjs", "--check"], {
+  buildDemoApp();
+
+  execFileSync(BUN, ["examples/customer-portal-demo/server.ts", "--check"], {
     cwd: ROOT,
     stdio: "pipe",
   });

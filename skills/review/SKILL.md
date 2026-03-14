@@ -30,9 +30,9 @@ Find the problems that pass CI but still create outages, regressions, or broken 
 ## CLI
 
 ```bash
-bun dist/cli.js review
-bun dist/cli.js review --json
-bun dist/cli.js review --base origin/main
+bun src/cli.ts review
+bun src/cli.ts review --json
+bun src/cli.ts review --base origin/main
 ```
 
 ## Output format

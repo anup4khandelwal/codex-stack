@@ -8,3 +8,4 @@ browse/dist/.cache/
 .site/
 coverage/
 *.log
+examples/customer-portal-demo/public/app.js

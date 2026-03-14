@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -8,7 +9,7 @@ function usage() {
   console.log(`render-qa-pages
 
 Usage:
-  bun scripts/render-qa-pages.mjs [--source <dir>] [--out <dir>] [--base-url <url>] [--json]
+  bun scripts/render-qa-pages.ts [--source <dir>] [--out <dir>] [--base-url <url>] [--json]
 `);
   process.exit(0);
 }

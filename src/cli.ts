@@ -1,8 +1,15 @@
+#!/usr/bin/env bun
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
-import { allModes, findMode } from "./registry.js";
+import { fileURLToPath } from "node:url";
+import { allModes, findMode } from "./registry.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, "..");
+const BUN = process.execPath || "bun";
 
 function usage(): never {
   console.log(`codex-stack
@@ -22,61 +29,18 @@ Usage:
   process.exit(1);
 }
 
-function runDoctor(): void {
+function runDoctor(): never {
   const scriptPath = path.resolve(process.cwd(), "scripts", "doctor.sh");
-  const fallback = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "doctor.sh");
+  const fallback = path.resolve(ROOT_DIR, "scripts", "doctor.sh");
   const resolved = fs.existsSync(scriptPath) ? scriptPath : fallback;
   const result = spawnSync("bash", [resolved], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
+  process.exit(result.status ?? 1);
 }
 
-function resolveJsRuntime(): string {
-  if ((process.versions as Record<string, string | undefined>).bun) {
-    return process.execPath || "bun";
-  }
-  const bunCheck = spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" });
-  if ((bunCheck.status ?? 1) === 0) {
-    return "bun";
-  }
-  return process.execPath || "node";
-}
-
-const JS_RUNTIME = resolveJsRuntime();
-
-function runBrowse(args: string[]): void {
-  const browsePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "browse", "dist", "cli.js");
-  const result = spawnSync(JS_RUNTIME, [browsePath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
-}
-
-function runReview(args: string[]): void {
-  const reviewPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "review-diff.mjs");
-  const result = spawnSync(JS_RUNTIME, [reviewPath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
-}
-
-function runIssue(args: string[]): void {
-  const issuePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "issue-flow.mjs");
-  const result = spawnSync(JS_RUNTIME, [issuePath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
-}
-
-function runShip(args: string[]): void {
-  const shipPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "ship-branch.mjs");
-  const result = spawnSync(JS_RUNTIME, [shipPath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
-}
-
-function runQa(args: string[]): void {
-  const qaPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "qa-run.mjs");
-  const result = spawnSync(JS_RUNTIME, [qaPath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
-}
-
-function runRetro(args: string[]): void {
-  const retroPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "retro-report.mjs");
-  const result = spawnSync(JS_RUNTIME, [retroPath, ...args], { stdio: "inherit" });
-  process.exit(result.status ?? 0);
+function runScript(relativePath: string, args: string[]): never {
+  const scriptPath = path.resolve(ROOT_DIR, relativePath);
+  const result = spawnSync(BUN, [scriptPath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 1);
 }
 
 const [, , command, ...rest] = process.argv;
@@ -119,27 +83,27 @@ if (command === "doctor") {
 }
 
 if (command === "browse") {
-  runBrowse(rest);
+  runScript(path.join("browse", "src", "cli.ts"), rest);
 }
 
 if (command === "review") {
-  runReview(rest);
+  runScript(path.join("scripts", "review-diff.ts"), rest);
 }
 
 if (command === "issue") {
-  runIssue(rest);
+  runScript(path.join("scripts", "issue-flow.ts"), rest);
 }
 
 if (command === "qa") {
-  runQa(rest);
+  runScript(path.join("scripts", "qa-run.ts"), rest);
 }
 
 if (command === "ship") {
-  runShip(rest);
+  runScript(path.join("scripts", "ship-branch.ts"), rest);
 }
 
 if (command === "retro") {
-  runRetro(rest);
+  runScript(path.join("scripts", "retro-report.ts"), rest);
 }
 
 usage();

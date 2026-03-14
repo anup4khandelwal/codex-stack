@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -22,7 +23,7 @@ function usage() {
   console.log(`ship-branch
 
 Usage:
-  bun scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -52,14 +53,7 @@ function run(cmd, options = {}) {
   }
 }
 
-function resolveJsRuntime() {
-  if (process.versions?.bun) return process.execPath || "bun";
-  const bunCheck = spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" });
-  if ((bunCheck.status ?? 1) === 0) return "bun";
-  return process.execPath || "node";
-}
-
-const JS_RUNTIME = resolveJsRuntime();
+const BUN_RUNTIME = process.execPath || "bun";
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -185,8 +179,8 @@ function parseArgs(argv) {
 
 function detectValidationCommand() {
   const scripts = readPackageScripts();
-  if (scripts.smoke) return JS_RUNTIME.includes("bun") || JS_RUNTIME === "bun" ? "bun run smoke" : "npm run smoke";
-  if (scripts.test) return JS_RUNTIME.includes("bun") || JS_RUNTIME === "bun" ? "bun test" : "npm test";
+  if (scripts.smoke) return "bun run smoke";
+  if (scripts.test) return "bun test";
   return "";
 }
 
@@ -651,7 +645,7 @@ function runQaVerification(args, branch) {
     throw new Error("Verification requires --verify-url.");
   }
 
-  const qaPath = path.resolve(process.cwd(), "scripts", "qa-run.mjs");
+  const qaPath = path.resolve(process.cwd(), "scripts", "qa-run.ts");
   const sessionName = cleanSubject(args.verifySession) || defaultVerifySession(branch);
   const publishDir = defaultVerifyPublishDir(branch);
   const qaArgs = [
@@ -673,7 +667,7 @@ function runQaVerification(args, branch) {
     qaArgs.push("--update-snapshot");
   }
 
-  const child = spawnSync(JS_RUNTIME, qaArgs, {
+  const child = spawnSync(BUN_RUNTIME, qaArgs, {
     cwd: process.cwd(),
     encoding: "utf8",
   });

@@ -15,12 +15,6 @@ else
   echo "[doctor] bun: missing"
 fi
 
-if command -v node >/dev/null 2>&1; then
-  echo "[doctor] node fallback: $(node -v)"
-else
-  echo "[doctor] node fallback: missing"
-fi
-
 if command -v git >/dev/null 2>&1; then
   echo "[doctor] git: $(git --version)"
 else
@@ -36,7 +30,7 @@ fi
 if command -v tsc >/dev/null 2>&1; then
   echo "[doctor] tsc: $(tsc -v)"
 else
-  echo "[doctor] tsc: missing (checked-in dist is still usable)"
+  echo "[doctor] tsc: missing (optional, Bun runs the TypeScript sources directly)"
 fi
 
 if [ -d "node_modules/playwright" ] || [ -d "$(cd "$(dirname "$0")/.." && pwd)/node_modules/playwright" ]; then

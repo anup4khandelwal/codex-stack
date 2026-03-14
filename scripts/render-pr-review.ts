@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -7,7 +8,7 @@ function usage() {
   console.log(`render-pr-review
 
 Usage:
-  bun scripts/render-pr-review.mjs --input <review.json> [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
+  bun scripts/render-pr-review.ts --input <review.json> [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
 `);
   process.exit(0);
 }

@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @ts-nocheck
 import process from "node:process";
 import path from "node:path";
 import { execSync } from "node:child_process";
@@ -7,9 +8,9 @@ function usage() {
   console.log(`issue-flow
 
 Usage:
-  bun scripts/issue-flow.mjs create --title <title> [--body <text>] [--body-file <path>] [--label <name>] [--assignee <user>] [--milestone <title>] [--repo <owner/name>] [--json]
-  bun scripts/issue-flow.mjs branch <number> [--title <title>] [--prefix <name>] [--base <ref>] [--no-fetch] [--no-checkout] [--json]
-  bun scripts/issue-flow.mjs start --title <title> [--body <text>] [--body-file <path>] [--label <name>] [--assignee <user>] [--milestone <title>] [--repo <owner/name>] [--prefix <name>] [--base <ref>] [--no-fetch] [--json]
+  bun scripts/issue-flow.ts create --title <title> [--body <text>] [--body-file <path>] [--label <name>] [--assignee <user>] [--milestone <title>] [--repo <owner/name>] [--json]
+  bun scripts/issue-flow.ts branch <number> [--title <title>] [--prefix <name>] [--base <ref>] [--no-fetch] [--no-checkout] [--json]
+  bun scripts/issue-flow.ts start --title <title> [--body <text>] [--body-file <path>] [--label <name>] [--assignee <user>] [--milestone <title>] [--repo <owner/name>] [--prefix <name>] [--base <ref>] [--no-fetch] [--json]
 `);
   process.exit(0);
 }

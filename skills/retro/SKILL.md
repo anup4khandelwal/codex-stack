@@ -26,12 +26,12 @@ Summarize throughput, hotspots, review bottlenecks, and recurring failure patter
 ## CLI
 
 ```bash
-bun dist/cli.js retro --since "7 days ago"
-bun dist/cli.js retro --since "30 days ago" --json
-bun dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
-bun dist/cli.js retro --since "14 days ago" --no-artifacts
-bun dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
-bun scripts/weekly-digest.mjs --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
+bun src/cli.ts retro --since "7 days ago"
+bun src/cli.ts retro --since "30 days ago" --json
+bun src/cli.ts retro --since "14 days ago" --artifact-dir .codex-stack/retros
+bun src/cli.ts retro --since "14 days ago" --no-artifacts
+bun src/cli.ts retro --since "14 days ago" --repo anup4khandelwal/codex-stack
+bun scripts/weekly-digest.ts --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
 ```
 
 ## Output format
@@ -42,7 +42,7 @@ bun scripts/weekly-digest.mjs --since "7 days ago" --publish-dir docs/weekly-dig
 - Rework or churn signals
 - Review latency and reviewer load when GitHub data is available
 - Actions for next week
-- Publish-ready weekly summary outputs for Slack, email, and status posts when `weekly-digest.mjs` is used
+- Publish-ready weekly summary outputs for Slack, email, and status posts when `weekly-digest.ts` is used
 
 ## Guardrails
 
