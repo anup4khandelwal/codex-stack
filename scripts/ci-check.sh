@@ -22,6 +22,7 @@ echo "[1/8] root CLI list"
 run_ts src/cli.ts list >/tmp/codex-stack-list.log
 grep -q '^qa' /tmp/codex-stack-list.log
 grep -q '^preview' /tmp/codex-stack-list.log
+grep -q '^deploy' /tmp/codex-stack-list.log
 grep -q '^upgrade' /tmp/codex-stack-list.log
 
 echo "[2/8] root CLI show/path"
@@ -29,6 +30,7 @@ run_ts src/cli.ts show review >/tmp/codex-stack-show.log
 run_ts src/cli.ts path review >/tmp/codex-stack-path.log
 run_ts src/cli.ts show qa >/tmp/codex-stack-show-qa.log
 run_ts src/cli.ts show preview >/tmp/codex-stack-show-preview.log
+run_ts src/cli.ts show deploy >/tmp/codex-stack-show-deploy.log
 run_ts src/cli.ts show upgrade >/tmp/codex-stack-show-upgrade.log
 run_ts src/cli.ts issue --help >/tmp/codex-stack-issue-help.log
 
@@ -63,6 +65,7 @@ bash ./setup >/tmp/codex-stack-setup.log
 test -x .codex-stack/bin/review
 test -x .codex-stack/bin/qa
 test -x .codex-stack/bin/preview
+test -x .codex-stack/bin/deploy
 test -x .codex-stack/bin/ship
 test -x .codex-stack/bin/browse
 test -x .codex-stack/bin/upgrade
@@ -84,6 +87,8 @@ run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
+run_ts scripts/deploy-verify.ts --help >/tmp/codex-stack-deploy-help.log
+run_ts scripts/deploy-verify.spec.ts >/tmp/codex-stack-deploy-spec.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
@@ -208,7 +213,7 @@ grep -q '"baseRef": "main"' /tmp/codex-stack-issue.json
 git -C "$TMP_REPO" switch main >/tmp/codex-stack-temp-git-back-main.log
 git -C "$TMP_REPO" checkout -b feat/generated-pr >/tmp/codex-stack-temp-git-branch.log
 echo "feature" >> "$TMP_REPO/README.md"
-(cd "$TMP_REPO" && bun "$ROOT_DIR/scripts/ship-branch.ts" --dry-run --base main --pr --assign-self --assignee release-bot --project "Engineering Roadmap" --verify-url https://example.com --verify-flow landing-smoke --verify-snapshot landing-home --json >/tmp/codex-stack-ship.json)
+(cd "$TMP_REPO" && bun "$ROOT_DIR/scripts/ship-branch.ts" --dry-run --base main --pr --assign-self --assignee release-bot --project "Engineering Roadmap" --verify-url https://example.com --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow landing-smoke --verify-snapshot landing-home --json >/tmp/codex-stack-ship.json)
 grep -q '"title"' /tmp/codex-stack-ship.json
 grep -q '"bodySource"' /tmp/codex-stack-ship.json
 grep -q '"autoReviewerSource": ".github/CODEOWNERS"' /tmp/codex-stack-ship.json
@@ -218,11 +223,15 @@ grep -q '"assignees"' /tmp/codex-stack-ship.json
 grep -q '"release-bot"' /tmp/codex-stack-ship.json
 grep -q '"Engineering Roadmap"' /tmp/codex-stack-ship.json
 grep -q '"verifyUrl": "https://example.com"' /tmp/codex-stack-ship.json || grep -q '"url": "https://example.com"' /tmp/codex-stack-ship.json
+grep -Fq '"paths": [' /tmp/codex-stack-ship.json
+grep -q '"/dashboard"' /tmp/codex-stack-ship.json
+grep -Fq '"devices": [' /tmp/codex-stack-ship.json
+grep -q '"mobile"' /tmp/codex-stack-ship.json
 grep -q '"landing-smoke"' /tmp/codex-stack-ship.json
 grep -q '"landing-home"' /tmp/codex-stack-ship.json
-grep -q 'plan qa verification comment' /tmp/codex-stack-ship.json
-grep -q 'docs/qa/feat-generated-pr' /tmp/codex-stack-ship.json
-grep -q 'github.io/codex-stack/qa/feat-generated-pr/' /tmp/codex-stack-ship.json
+grep -q 'plan deploy verification comment' /tmp/codex-stack-ship.json
+grep -q 'docs/qa/feat-generated-pr/deploy' /tmp/codex-stack-ship.json
+grep -q 'github.io/codex-stack/qa/feat-generated-pr/deploy/' /tmp/codex-stack-ship.json
 grep -q 'Closes #42' /tmp/codex-stack-ship.json || true
 
 cat > /tmp/codex-stack-review-fixture.json <<'JSON'

@@ -65,6 +65,35 @@ async function main(): Promise<void> {
         screenshot: "preview-artifacts/screenshot.png",
       },
     },
+    deploy: {
+      screenshotManifest: "preview-artifacts/screenshots.json",
+      pathResults: [
+        {
+          path: "/",
+          device: "desktop",
+          status: "warning",
+          httpStatus: 200,
+          screenshot: "preview-artifacts/screenshots/root-desktop.png",
+          console: {
+            warnings: ["Deprecated API"],
+            errors: [],
+          },
+        },
+      ],
+      qa: {
+        snapshotResults: [
+          {
+            name: "dashboard",
+            targetPath: "/",
+            device: "desktop",
+            status: "changed",
+            report: "preview-artifacts/qa/report.md",
+            annotation: "preview-artifacts/annotation.svg",
+            screenshot: "preview-artifacts/screenshot.png",
+          },
+        ],
+      },
+    },
   }, null, 2));
 
   const stdout = execFileSync(
@@ -92,6 +121,9 @@ async function main(): Promise<void> {
   assert.match(stdout, /Workflow run: https:\/\/github\.com\/anup4khandelwal\/codex-stack\/actions\/runs\/123456/);
   assert.match(stdout, /CRITICAL\/VISUAL/);
   assert.match(stdout, /annotation\.svg/);
+  assert.match(stdout, /### Deploy checks/);
+  assert.match(stdout, /consoleWarnings=1/);
+  assert.match(stdout, /screenshots\.json/);
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(summaryOut));
 

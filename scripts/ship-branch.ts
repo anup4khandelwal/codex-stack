@@ -31,9 +31,12 @@ interface ShipArgs {
   labels: string[];
   assignSelf: boolean;
   verifyUrl: string;
+  verifyPaths: string[];
+  verifyDevices: string[];
   verifyFlows: string[];
   verifySnapshot: string;
   verifySession: string;
+  verifyConsoleErrors: boolean;
   updateVerifySnapshot: boolean;
 }
 
@@ -148,13 +151,67 @@ interface QaReportSummary {
   artifacts?: QaArtifacts;
 }
 
-interface QaVerificationRun {
+interface DeployVerificationRun {
   session: string;
   publishDir: string;
   ok: boolean;
   stdout: string;
   stderr: string;
-  report: QaReportSummary | null;
+  report: DeployReportSummary | null;
+}
+
+interface DeployPathResult {
+  path?: string;
+  device?: string;
+  status?: string;
+  httpStatus?: number | null;
+  screenshot?: string;
+  console?: {
+    errors?: string[];
+    warnings?: string[];
+  };
+}
+
+interface DeploySnapshotResult {
+  name?: string;
+  targetPath?: string;
+  device?: string;
+  status?: string;
+  report?: string;
+  annotation?: string;
+  screenshot?: string;
+}
+
+interface DeployArtifacts {
+  markdown?: string;
+  json?: string;
+  annotation?: string;
+  screenshot?: string;
+  published?: {
+    markdown?: string;
+    json?: string;
+    annotation?: string;
+    screenshot?: string;
+  };
+}
+
+interface DeployQaReport {
+  status?: string;
+  healthScore?: number;
+  recommendation?: string;
+  findings?: QaFinding[];
+  flowResults?: QaFlowResult[];
+  snapshotResults?: DeploySnapshotResult[];
+  artifacts?: DeployArtifacts;
+}
+
+interface DeployReportSummary {
+  status?: string;
+  recommendation?: string;
+  artifactRoot?: string;
+  screenshotManifest?: string;
+  pathResults?: DeployPathResult[];
+  qa?: DeployQaReport;
 }
 
 interface ValidationSummary {
@@ -171,11 +228,14 @@ interface PrSummary {
 
 interface VerificationSummary {
   url: string;
+  paths: string[];
+  devices: string[];
   flows: string[];
   snapshot: string;
   session: string;
   status: string;
   healthScore: number | null;
+  consoleErrors: number;
   reportPath: string;
   stableReportUrl: string;
   publishDir: string;
@@ -216,7 +276,7 @@ function usage(): never {
   console.log(`ship-branch
 
 Usage:
-  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -293,9 +353,12 @@ function parseArgs(argv: string[]): ShipArgs {
     labels: [],
     assignSelf: false,
     verifyUrl: "",
+    verifyPaths: [],
+    verifyDevices: [],
     verifyFlows: [],
     verifySnapshot: "",
     verifySession: "",
+    verifyConsoleErrors: false,
     updateVerifySnapshot: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -341,6 +404,12 @@ function parseArgs(argv: string[]): ShipArgs {
     } else if (arg === "--verify-url") {
       out.verifyUrl = argv[i + 1] || "";
       i += 1;
+    } else if (arg === "--verify-path") {
+      out.verifyPaths.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--verify-device") {
+      out.verifyDevices.push(argv[i + 1] || "");
+      i += 1;
     } else if (arg === "--verify-flow") {
       out.verifyFlows.push(argv[i + 1] || "");
       i += 1;
@@ -350,6 +419,8 @@ function parseArgs(argv: string[]): ShipArgs {
     } else if (arg === "--verify-session") {
       out.verifySession = argv[i + 1] || "";
       i += 1;
+    } else if (arg === "--verify-console-errors") {
+      out.verifyConsoleErrors = true;
     } else if (arg === "--update-verify-snapshot") {
       out.updateVerifySnapshot = true;
     } else if (arg === "--label") {
@@ -368,6 +439,8 @@ function parseArgs(argv: string[]): ShipArgs {
   out.teamReviewers = uniq(out.teamReviewers);
   out.assignees = uniq(out.assignees);
   out.projects = uniq(out.projects);
+  out.verifyPaths = uniq(out.verifyPaths);
+  out.verifyDevices = uniq(out.verifyDevices);
   out.verifyFlows = uniq(out.verifyFlows);
   out.labels = uniq(out.labels);
   return out;
@@ -851,41 +924,54 @@ function slugify(value: string): string {
 }
 
 function defaultVerifyPublishDir(branch: string): string {
-  return path.join("docs", "qa", slugify(branch));
+  return path.join("docs", "qa", slugify(branch), "deploy");
 }
 
 function shouldRunVerification(args: ShipArgs): boolean {
-  return Boolean(args.verifyUrl || args.verifyFlows.length || args.verifySnapshot);
+  return Boolean(
+    args.verifyUrl
+    || args.verifyPaths.length
+    || args.verifyDevices.length
+    || args.verifyFlows.length
+    || args.verifySnapshot
+    || args.verifyConsoleErrors
+  );
 }
 
-function runQaVerification(args: ShipArgs, branch: string): QaVerificationRun {
+function runDeployVerification(args: ShipArgs, branch: string): DeployVerificationRun {
   if (!args.verifyUrl) {
     throw new Error("Verification requires --verify-url.");
   }
 
-  const qaPath = path.resolve(process.cwd(), "scripts", "qa-run.ts");
+  const deployPath = path.resolve(process.cwd(), "scripts", "deploy-verify.ts");
   const sessionName = cleanSubject(args.verifySession) || defaultVerifySession(branch);
   const publishDir = defaultVerifyPublishDir(branch);
-  const qaArgs = [
-    qaPath,
+  const deployArgs = [
+    deployPath,
+    "--url",
     args.verifyUrl,
-    "--session",
-    sessionName,
-    "--publish-dir",
-    publishDir,
-    "--json",
   ];
+  for (const verifyPath of args.verifyPaths.length ? args.verifyPaths : ["/"]) {
+    deployArgs.push("--path", verifyPath);
+  }
+  for (const device of args.verifyDevices.length ? args.verifyDevices : ["desktop"]) {
+    deployArgs.push("--device", device);
+  }
+  deployArgs.push("--session", sessionName, "--publish-dir", publishDir, "--json");
   for (const flow of args.verifyFlows) {
-    qaArgs.push("--flow", flow);
+    deployArgs.push("--flow", flow);
   }
   if (args.verifySnapshot) {
-    qaArgs.push("--snapshot", args.verifySnapshot);
+    deployArgs.push("--snapshot", args.verifySnapshot);
   }
   if (args.updateVerifySnapshot) {
-    qaArgs.push("--update-snapshot");
+    deployArgs.push("--update-snapshot");
+  }
+  if (args.verifyConsoleErrors) {
+    deployArgs.push("--strict-console");
   }
 
-  const child = spawnSync(BUN_RUNTIME, qaArgs, {
+  const child = spawnSync(BUN_RUNTIME, deployArgs, {
     cwd: process.cwd(),
     encoding: "utf8",
   });
@@ -990,60 +1076,107 @@ function qaFindingSummary(findings: QaFinding[] | undefined, limit = 5): string[
   return lines;
 }
 
-function buildQaPrComment({
+function deployCheckSummary(entries: DeployPathResult[] | undefined, limit = 6): string[] {
+  if (!Array.isArray(entries) || !entries.length) return ["- No deploy checks recorded."];
+  const lines = entries.slice(0, limit).map((entry) => {
+    const parts = [
+      `${entry.path || "/"} @ ${entry.device || "desktop"}`,
+      `status=${entry.status || "unknown"}`,
+      entry.httpStatus !== null && entry.httpStatus !== undefined ? `http=${entry.httpStatus}` : "http=n/a",
+      entry.console?.errors?.length ? `consoleErrors=${entry.console.errors.length}` : "",
+      entry.console?.warnings?.length ? `consoleWarnings=${entry.console.warnings.length}` : "",
+      entry.screenshot ? `screenshot=${entry.screenshot}` : "",
+    ].filter(Boolean);
+    return `- ${parts.join(", ")}`;
+  });
+  if (entries.length > limit) {
+    lines.push(`- ...and ${entries.length - limit} more`);
+  }
+  return lines;
+}
+
+function deploySnapshotSummary(entries: DeploySnapshotResult[] | undefined, limit = 6): string[] {
+  if (!Array.isArray(entries) || !entries.length) return ["- No snapshot checks configured."];
+  const lines = entries.slice(0, limit).map((entry) => {
+    const parts = [
+      `${entry.name || "snapshot"} @ ${entry.targetPath || "/"} (${entry.device || "desktop"})`,
+      `status=${entry.status || "unknown"}`,
+      entry.annotation ? `annotation=${entry.annotation}` : "",
+      entry.screenshot ? `screenshot=${entry.screenshot}` : "",
+      entry.report ? `report=${entry.report}` : "",
+    ].filter(Boolean);
+    return `- ${parts.join(", ")}`;
+  });
+  if (entries.length > limit) {
+    lines.push(`- ...and ${entries.length - limit} more`);
+  }
+  return lines;
+}
+
+function buildDeployPrComment({
   report,
   repo,
   branch,
 }: {
-  report: QaReportSummary | null;
+  report: DeployReportSummary | null;
   repo: string;
   branch: string;
 }): string {
   if (!report) return "";
-  const published = report.artifacts?.published || {};
-  const trackedReportRef = markdownReference(repo, branch, published.markdown || published.json || report.artifacts?.markdown || report.artifacts?.json || "");
-  const trackedAnnotationRef = markdownReference(repo, branch, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "");
-  const trackedScreenshotRef = markdownReference(repo, branch, published.screenshot || report.snapshotResult?.screenshot || "");
-  const stableReportRef = pagesReference(repo, published.markdown || published.json || "", "qa report");
-  const stableAnnotationRef = pagesReference(repo, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "", "annotation");
-  const stableScreenshotRef = pagesReference(repo, published.screenshot || report.snapshotResult?.screenshot || "", "screenshot");
-  const flowLines = Array.isArray(report.flowResults) && report.flowResults.length
-    ? report.flowResults.map((item) => `- ${item.name}: ${item.status}${item.steps ? ` (${item.steps} steps)` : ""}`)
+  const deployReportPath = report.artifactRoot ? path.join(report.artifactRoot, "report.md") : "";
+  const qaArtifacts = report.qa?.artifacts?.published || report.qa?.artifacts || {};
+  const primarySnapshot = report.qa?.snapshotResults?.[0];
+  const trackedReportRef = markdownReference(repo, branch, deployReportPath || qaArtifacts.markdown || qaArtifacts.json || "");
+  const trackedAnnotationRef = markdownReference(repo, branch, primarySnapshot?.annotation || qaArtifacts.annotation || "");
+  const trackedScreenshotRef = markdownReference(repo, branch, primarySnapshot?.screenshot || qaArtifacts.screenshot || "");
+  const stableReportRef = pagesReference(repo, deployReportPath || qaArtifacts.markdown || qaArtifacts.json || "", "deploy report");
+  const stableAnnotationRef = pagesReference(repo, primarySnapshot?.annotation || qaArtifacts.annotation || "", "annotation");
+  const stableScreenshotRef = pagesReference(repo, primarySnapshot?.screenshot || qaArtifacts.screenshot || "", "screenshot");
+  const screenshotManifestRef = markdownReference(repo, branch, report.screenshotManifest || "");
+  const stableScreenshotManifestRef = pagesReference(repo, report.screenshotManifest || "", "screenshot manifest");
+  const flowLines = Array.isArray(report.qa?.flowResults) && report.qa?.flowResults.length
+    ? report.qa?.flowResults.map((item) => `- ${item.name}: ${item.status}${item.steps ? ` (${item.steps} steps)` : ""}`) || []
     : ["- No flows configured."];
 
   const sections = [
-    "## QA Verification",
+    "## Deploy Verification",
     "",
     `- Status: ${report.status}`,
-    `- Health score: ${report.healthScore}`,
-    `- Recommendation: ${report.recommendation}`,
+    `- Health score: ${report.qa?.healthScore ?? "n/a"}`,
+    `- Recommendation: ${report.recommendation || report.qa?.recommendation || "n/a"}`,
     "",
     "### Findings",
     "",
-    ...qaFindingSummary(report.findings),
+    ...qaFindingSummary(report.qa?.findings),
+    "",
+    "### Deploy checks",
+    "",
+    ...deployCheckSummary(report.pathResults),
     "",
     "### Flow results",
     "",
     ...flowLines,
   ];
 
-  if (report.snapshotResult) {
+  if (report.qa?.snapshotResults?.length) {
     sections.push(
       "",
-      "### Snapshot evidence",
+      "### Snapshot results",
       "",
-      `- Snapshot: ${report.snapshotResult.name || "n/a"} (${report.snapshotResult.status || "unknown"})`
+      ...deploySnapshotSummary(report.qa.snapshotResults)
     );
-    if (trackedReportRef) sections.push(`- Branch artifact: ${trackedReportRef}`);
-    if (stableReportRef) sections.push(`- Stable Pages URL after merge: ${stableReportRef}`);
-    if (trackedAnnotationRef) sections.push(`- Branch annotation: ${trackedAnnotationRef}`);
-    if (stableAnnotationRef) sections.push(`- Stable annotation URL after merge: ${stableAnnotationRef}`);
-    if (trackedScreenshotRef) sections.push(`- Branch screenshot: ${trackedScreenshotRef}`);
-    if (stableScreenshotRef) sections.push(`- Stable screenshot URL after merge: ${stableScreenshotRef}`);
-  } else if (trackedReportRef || stableReportRef) {
+  }
+
+  if (trackedReportRef || stableReportRef || trackedAnnotationRef || trackedScreenshotRef || screenshotManifestRef) {
     sections.push("");
-    if (trackedReportRef) sections.push(`QA branch artifact: ${trackedReportRef}`);
+    if (trackedReportRef) sections.push(`Deploy branch artifact: ${trackedReportRef}`);
     if (stableReportRef) sections.push(`Stable Pages URL after merge: ${stableReportRef}`);
+    if (trackedAnnotationRef) sections.push(`Branch annotation: ${trackedAnnotationRef}`);
+    if (stableAnnotationRef) sections.push(`Stable annotation URL after merge: ${stableAnnotationRef}`);
+    if (trackedScreenshotRef) sections.push(`Branch screenshot: ${trackedScreenshotRef}`);
+    if (stableScreenshotRef) sections.push(`Stable screenshot URL after merge: ${stableScreenshotRef}`);
+    if (screenshotManifestRef) sections.push(`Screenshot manifest: ${screenshotManifestRef}`);
+    if (stableScreenshotManifestRef) sections.push(`Stable screenshot manifest URL after merge: ${stableScreenshotManifestRef}`);
   }
 
   return `${sections.join("\n").trim()}\n`;
@@ -1060,7 +1193,7 @@ function safeGhComment(result: ShipResult, prUrl: string, body: string): void {
     result.verification.commentPosted = true;
   } catch (error: unknown) {
     result.status = result.status === "ok" ? "warning" : result.status;
-    result.warnings.push(`post qa comment: ${cleanSubject(error instanceof Error ? error.message : String(error))}`);
+    result.warnings.push(`post verification comment: ${cleanSubject(error instanceof Error ? error.message : String(error))}`);
   } finally {
     fs.rmSync(tempPath, { force: true });
   }
@@ -1093,6 +1226,12 @@ function printText(result: ShipResult): void {
   if (result.verification.url) {
     console.log(`- Verification URL: ${result.verification.url}`);
   }
+  if (result.verification.paths.length) {
+    console.log(`- Verification paths: ${result.verification.paths.join(", ")}`);
+  }
+  if (result.verification.devices.length) {
+    console.log(`- Verification devices: ${result.verification.devices.join(", ")}`);
+  }
   if (result.verification.flows.length || result.verification.snapshot) {
     const checks = [];
     if (result.verification.flows.length) checks.push(`flows=${result.verification.flows.join(",")}`);
@@ -1104,6 +1243,9 @@ function printText(result: ShipResult): void {
   }
   if (result.verification.healthScore !== null) {
     console.log(`- Verification health score: ${result.verification.healthScore}`);
+  }
+  if (result.verification.consoleErrors) {
+    console.log(`- Verification console errors: ${result.verification.consoleErrors}`);
   }
   if (result.verification.reportPath) {
     console.log(`- Verification report: ${result.verification.reportPath}`);
@@ -1148,11 +1290,14 @@ const result: ShipResult = {
   prUrl: "",
   verification: {
     url: cleanSubject(args.verifyUrl),
+    paths: [...args.verifyPaths],
+    devices: [...args.verifyDevices],
     flows: [...args.verifyFlows],
     snapshot: cleanSubject(args.verifySnapshot),
     session: cleanSubject(args.verifySession),
     status: "",
     healthScore: null,
+    consoleErrors: 0,
     reportPath: "",
     stableReportUrl: "",
     publishDir: "",
@@ -1237,44 +1382,56 @@ if (shouldRunVerification(args)) {
     process.exit(1);
   }
   const verificationParts: string[] = [];
+  const effectivePaths = args.verifyPaths.length ? args.verifyPaths : ["/"];
+  const effectiveDevices = args.verifyDevices.length ? args.verifyDevices : ["desktop"];
+  if (effectivePaths.length) verificationParts.push(`paths ${effectivePaths.join(", ")}`);
+  if (effectiveDevices.length) verificationParts.push(`devices ${effectiveDevices.join(", ")}`);
   if (args.verifyFlows.length) verificationParts.push(`flows ${args.verifyFlows.join(", ")}`);
   if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
+  if (args.verifyConsoleErrors) verificationParts.push("strict console errors");
   result.verification.session = result.verification.session || defaultVerifySession(result.branch);
   result.verification.publishDir = defaultVerifyPublishDir(result.branch);
+  result.verification.paths = effectivePaths;
+  result.verification.devices = effectiveDevices;
   result.verification.stableReportUrl = pagesUrl(
     result.automation.repo,
     path.join(result.verification.publishDir, "report.md")
   );
-  result.steps.push(`verify via qa on ${args.verifyUrl}${verificationParts.length ? ` (${verificationParts.join("; ")})` : ""}`);
-  result.steps.push(`publish qa artifacts to ${result.verification.publishDir}`);
+  result.steps.push(`verify deploy on ${args.verifyUrl}${verificationParts.length ? ` (${verificationParts.join("; ")})` : ""}`);
+  result.steps.push(`publish deploy artifacts to ${result.verification.publishDir}`);
   if (!args.dryRun) {
-    const verification = runQaVerification(args, result.branch);
+    const verification = runDeployVerification(args, result.branch);
     result.verification.session = verification.session;
     result.verification.publishDir = verification.publishDir;
     if (!verification.ok || !verification.report) {
-      console.error(verification.stderr || verification.stdout || "QA verification failed.");
+      console.error(verification.stderr || verification.stdout || "Deploy verification failed.");
       process.exit(1);
     }
     result.verification.status = verification.report.status || "";
-    result.verification.healthScore = verification.report.healthScore ?? null;
-    result.verification.reportPath = verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
+    result.verification.healthScore = verification.report.qa?.healthScore ?? null;
+    result.verification.consoleErrors = (verification.report.pathResults || []).reduce((count: number, entry: DeployPathResult) => (
+      count + (Array.isArray(entry.console?.errors) ? entry.console?.errors.length : 0)
+    ), 0);
+    result.verification.reportPath = verification.report.artifactRoot
+      ? path.join(verification.report.artifactRoot, "report.md")
+      : "";
     result.verification.stableReportUrl = pagesUrl(
       result.automation.repo,
-      verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || ""
+      result.verification.reportPath
     );
-    verificationCommentBody = buildQaPrComment({
+    verificationCommentBody = buildDeployPrComment({
       report: verification.report,
       repo: result.automation.repo,
       branch: result.branch,
     });
     result.verification.commentPreview = verificationCommentBody.split(/\r?\n/).slice(0, 20).join("\n");
     if (verification.report.status === "critical") {
-      console.error(`QA verification failed: ${verification.report.recommendation}`);
+      console.error(`Deploy verification failed: ${verification.report.recommendation}`);
       process.exit(1);
     }
     if (verification.report.status === "warning") {
       result.status = result.status === "ok" ? "warning" : result.status;
-      result.warnings.push(`qa verification: ${verification.report.recommendation}`);
+      result.warnings.push(`deploy verification: ${verification.report.recommendation}`);
     }
   }
 }
@@ -1285,7 +1442,7 @@ if (dirtyAfterVerification) {
   if (args.message) {
     commitMessage = args.message;
   } else if (!result.dirtyBefore && shouldRunVerification(args) && !args.dryRun && (args.push || args.pr)) {
-    commitMessage = `chore: publish QA artifacts for ${result.branch}`;
+    commitMessage = `chore: publish deploy artifacts for ${result.branch}`;
   }
 
   if (commitMessage) {
@@ -1339,7 +1496,7 @@ if (args.pr) {
     result.steps.push(`plan milestone ${result.automation.milestone}`);
   }
   if (shouldRunVerification(args)) {
-    result.steps.push("plan qa verification comment");
+    result.steps.push("plan deploy verification comment");
   }
   result.steps.push("open pull request");
 

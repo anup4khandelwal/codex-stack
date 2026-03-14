@@ -1,0 +1,199 @@
+#!/usr/bin/env bun
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { execFileSync } from "node:child_process";
+
+const rootDir = process.cwd();
+const bun = process.execPath || "bun";
+const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-deploy-"));
+
+const deployFixturePath = path.join(fixtureRoot, "deploy-fixture.json");
+const qaFixturePath = path.join(fixtureRoot, "qa-fixture.json");
+const readinessFixturePath = path.join(fixtureRoot, "readiness-fixture.json");
+const baselinePath = path.join(fixtureRoot, "baseline.json");
+const currentPath = path.join(fixtureRoot, "current.json");
+const screenshotPath = path.join(fixtureRoot, "snapshot-screenshot.png");
+const pageScreenshotA = path.join(fixtureRoot, "page-a.png");
+const pageScreenshotB = path.join(fixtureRoot, "page-b.png");
+const markdownOut = path.join(fixtureRoot, "deploy.md");
+const jsonOut = path.join(fixtureRoot, "deploy.json");
+const commentOut = path.join(fixtureRoot, "deploy-comment.md");
+const publishDir = path.join(fixtureRoot, "published");
+
+async function main(): Promise<void> {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=", "base64");
+  fs.writeFileSync(screenshotPath, png);
+  fs.writeFileSync(pageScreenshotA, png);
+  fs.writeFileSync(pageScreenshotB, png);
+  fs.writeFileSync(baselinePath, JSON.stringify({
+    name: "portal-dashboard",
+    elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
+  }, null, 2));
+  fs.writeFileSync(currentPath, JSON.stringify({
+    name: "portal-dashboard",
+    elements: [],
+  }, null, 2));
+
+  fs.writeFileSync(deployFixturePath, JSON.stringify({
+    pages: [
+      {
+        path: "/",
+        device: "desktop",
+        finalUrl: "https://preview-77.example.com/",
+        title: "Marketing home",
+        httpStatus: 200,
+        consoleWarnings: ["A deprecated API is in use."],
+        screenshot: pageScreenshotA,
+      },
+      {
+        path: "/dashboard",
+        device: "mobile",
+        finalUrl: "https://preview-77.example.com/dashboard",
+        title: "Dashboard",
+        httpStatus: 503,
+        consoleErrors: ["Unhandled exception in dashboard bootstrap."],
+        screenshot: pageScreenshotB,
+      },
+    ],
+  }, null, 2));
+
+  fs.writeFileSync(qaFixturePath, JSON.stringify({
+    url: "https://preview-77.example.com/dashboard",
+    snapshot: {
+      name: "portal-dashboard",
+      result: {
+        status: "changed",
+        baseline: baselinePath,
+        current: currentPath,
+        screenshot: screenshotPath,
+        comparison: {
+          missingSelectors: ["h1"],
+          changedSelectors: [],
+          newSelectors: [],
+          bodyTextChanged: true,
+          titleChanged: false,
+          screenshotChanged: true,
+        },
+      },
+    },
+    flows: [
+      {
+        name: "portal-dashboard",
+        ok: true,
+        steps: 4,
+      },
+    ],
+  }, null, 2));
+
+  fs.writeFileSync(readinessFixturePath, JSON.stringify({ attempts: [503, 200] }, null, 2));
+
+  const rawJson = execFileSync(bun, [
+    "scripts/deploy-verify.ts",
+    "--url-template",
+    "https://preview-{pr}.example.com",
+    "--repo",
+    "anup4khandelwal/codex-stack",
+    "--pr",
+    "77",
+    "--branch",
+    "feat/77-visual-deploy-verification",
+    "--sha",
+    "abcdef1234567890",
+    "--path",
+    "/",
+    "--path",
+    "/dashboard",
+    "--device",
+    "desktop",
+    "--device",
+    "mobile",
+    "--flow",
+    "portal-dashboard",
+    "--snapshot",
+    "portal-dashboard",
+    "--strict-http",
+    "--publish-dir",
+    publishDir,
+    "--markdown-out",
+    markdownOut,
+    "--json-out",
+    jsonOut,
+    "--comment-out",
+    commentOut,
+    "--fixture",
+    deployFixturePath,
+    "--qa-fixture",
+    qaFixturePath,
+    "--readiness-fixture",
+    readinessFixturePath,
+    "--json",
+  ], {
+    cwd: rootDir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_SERVER_URL: "https://github.com",
+      GITHUB_RUN_ID: "123456",
+    },
+  });
+
+  const report = JSON.parse(rawJson) as {
+    status?: string;
+    url?: string;
+    urlSource?: string;
+    recommendation?: string;
+    readiness?: { status?: string; attempts?: number };
+    checks?: { paths?: string[]; devices?: string[]; strictHttp?: boolean };
+    pathResults?: Array<{ path?: string; device?: string; status?: string; httpStatus?: number | null; screenshot?: string; console?: { errors?: string[]; warnings?: string[] } }>;
+    qa?: { status?: string; flowResults?: Array<{ name?: string }>; snapshotResults?: Array<{ name?: string; status?: string; annotation?: string }>; findings?: Array<{ title?: string }> };
+    screenshotManifest?: string;
+  };
+
+  assert.equal(report.url, "https://preview-77.example.com");
+  assert.equal(report.urlSource, "template");
+  assert.equal(report.readiness?.status, "ready");
+  assert.equal(report.readiness?.attempts, 2);
+  assert.equal(report.checks?.strictHttp, true);
+  assert.deepEqual(report.checks?.paths, ["/", "/dashboard"]);
+  assert.deepEqual(report.checks?.devices, ["desktop", "mobile"]);
+  assert.equal(report.status, "critical");
+  assert.match(String(report.recommendation), /Do not ship|Do not merge/i);
+  assert.equal(report.pathResults?.length, 4);
+  assert.ok(report.pathResults?.some((entry) => entry.path === "/dashboard" && entry.device === "mobile" && entry.status === "critical"));
+  assert.ok(report.pathResults?.some((entry) => entry.path === "/" && entry.device === "desktop" && entry.status === "warning"));
+  assert.equal(report.qa?.status, "critical");
+  assert.ok(report.qa?.flowResults?.some((entry) => entry.name === "portal-dashboard"));
+  assert.ok(report.qa?.snapshotResults?.some((entry) => entry.name === "portal-dashboard" && entry.status === "changed"));
+  assert.ok(report.qa?.findings?.some((entry) => String(entry.title).includes("Expected UI selectors")));
+  assert.ok(report.screenshotManifest);
+
+  assert.ok(fs.existsSync(markdownOut));
+  assert.ok(fs.existsSync(jsonOut));
+  assert.ok(fs.existsSync(commentOut));
+  assert.ok(fs.existsSync(path.join(publishDir, "report.md")));
+  assert.ok(fs.existsSync(path.join(publishDir, "report.json")));
+  assert.ok(fs.existsSync(path.join(publishDir, "comment.md")));
+  assert.ok(fs.existsSync(path.join(publishDir, "screenshots.json")));
+  assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "root-desktop.png")));
+  assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "dashboard-mobile.png")));
+
+  const markdown = fs.readFileSync(markdownOut, "utf8");
+  const comment = fs.readFileSync(commentOut, "utf8");
+  assert.match(markdown, /codex-stack deploy verification/);
+  assert.match(markdown, /Page checks/);
+  assert.match(markdown, /root-desktop\.png/);
+  assert.match(markdown, /dashboard-mobile\.png/);
+  assert.match(markdown, /portal-dashboard/);
+  assert.match(comment, /Deploy URL: https:\/\/preview-77\.example\.com/);
+
+  console.log("deploy-verify spec passed");
+}
+
+try {
+  await main();
+} finally {
+  fs.rmSync(fixtureRoot, { recursive: true, force: true });
+}

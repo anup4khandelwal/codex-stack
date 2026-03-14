@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Nine opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, preview verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
+Ten opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -24,6 +24,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `review` | Paranoid staff engineer | Audits the diff for structural production risks instead of style noise. |
 | `qa` | QA lead | Runs browser flows, diff-aware route probes, and snapshot checks, then scores release readiness. |
 | `preview` | Preview verifier | Resolves a PR preview URL, waits for readiness, runs QA, and reports whether the preview is safe to merge. |
+| `deploy` | Deploy verifier | Verifies a preview or staging deploy across path and device checks, flows, snapshots, screenshots, and console evidence. |
 | `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
 | `browse` | QA engineer | Drives a real browser with persistent sessions, portable session bundles, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
@@ -50,9 +51,10 @@ Use the repo in this order:
 - Page snapshots and snapshot comparison artifacts
 - QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, and annotated screenshots for snapshot failures
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
-- Preview verification with URL template resolution, readiness polling, QA execution, and PR comment output for preview deployments
-- Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
-- PR comments with QA verification summaries and artifact references after `ship --pr`
+- Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
+- Deploy verification with page and device matrices, screenshot manifests, console capture, and tracked evidence
+- Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional deploy verification
+- PR comments with deploy verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
@@ -79,6 +81,7 @@ bun src/cli.ts list
 - `review`
 - `qa`
 - `preview`
+- `deploy`
 - `ship`
 - `browse`
 - `retro`
@@ -99,6 +102,7 @@ Typical split:
 - one agent in `review`
 - one agent in `qa`
 - one agent in `preview`
+- one agent in `deploy`
 - one agent in `ship`
 
 Because the command contracts are shared, those agents stay aligned on the same review, QA, and shipping workflow.
@@ -119,7 +123,8 @@ Then run a realistic sequence:
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --publish-dir docs/qa/demo/deploy
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device desktop --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "30 days ago" --no-github
 bun run weekly
 bun run qa:site
@@ -146,9 +151,9 @@ bun src/cli.ts ship --message "feat: add issue-first workflow" --push --pr
 What happens next:
 
 - `pr-review.yml` runs `codex-stack` review on the PR diff
-- when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, the same review workflow also runs preview QA and folds the visual evidence into the PR review comment
-- the workflow posts or updates a PR comment with structural findings plus any preview QA evidence
-- the job fails if critical findings are detected in either structural review or preview QA
+- when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, the same review workflow also runs preview deploy verification and folds the visual evidence into the PR review comment
+- the workflow posts or updates a PR comment with structural findings plus any preview deploy evidence
+- the job fails if critical findings are detected in either structural review or preview verification
 - if the PR has the `automerge` label, `pr-automerge.yml` enables GitHub auto-merge
 
 Branch naming matters: when the branch follows `<prefix>/<issue-number>-slug`, `ship` includes `Closes #<issue-number>` in the generated PR body so the issue closes on merge.
@@ -161,9 +166,10 @@ bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
-bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --flow landing-smoke --snapshot landing-home
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
@@ -195,7 +201,8 @@ bun run demo:start
 bun run demo:smoke
 bun run review
 bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
-bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --flow landing-smoke --snapshot landing-home
+bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --device desktop --flow landing-smoke --snapshot landing-home
+bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard
 bun run ship:dry
 bun run retro
 bun run upgrade

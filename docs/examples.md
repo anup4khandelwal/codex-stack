@@ -47,7 +47,19 @@ Use codex-stack-preview to verify the pull request preview deployment, wait for 
 CLI:
 
 ```bash
-bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
+```
+
+## Deploy mode
+
+```text
+Use codex-stack-deploy to verify the staging deploy across key pages and devices, capture screenshots, and tell me if it is safe to merge.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
 ```
 
 ## Ship mode
@@ -64,7 +76,7 @@ bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device desktop --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 ```
 
 ## Browse mode
