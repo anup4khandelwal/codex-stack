@@ -194,6 +194,8 @@ Usage:
   codex-stack browse html <url> [selector] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse links <url> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse screenshot <url> [path] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse mock <url> <pattern> <json-config> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse block <url> <pattern> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse eval <url> <expression> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse click <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse fill <url> <selector> <value> [--session <name>] [--device <desktop|tablet|mobile>]
@@ -705,7 +707,7 @@ function compareSnapshotData(
 
 function isPreNavigationStep(step: FlowStep): boolean {
   const action = String(step?.action || "");
-  return action === "clear-storage";
+  return action === "clear-storage" || action === "route" || action === "clear-routes";
 }
 
 function expandFlowSteps(steps: FlowStep[], stack: string[] = []): FlowStep[] {
@@ -1041,6 +1043,64 @@ async function applyDevicePreset(page: PlaywrightPage, preset: DevicePreset | nu
   }
 }
 
+function normalizeRouteHeaders(headers: unknown): Record<string, string> {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return {};
+  return Object.fromEntries(
+    Object.entries(headers as Record<string, unknown>).map(([key, value]) => [key, String(value)]),
+  );
+}
+
+async function clearRouteRules(page: PlaywrightPage): Promise<void> {
+  if (typeof page.unrouteAll === "function") {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+}
+
+async function installRouteRule(page: PlaywrightPage, step: FlowStep): Promise<StepResult> {
+  const pattern = String(step.pattern ?? step.match ?? step.url ?? "").trim();
+  assertCondition(pattern, "route steps require a pattern.");
+  const requestedMode = String(step.mode || "").trim().toLowerCase();
+  const mode = requestedMode || (step.abort ? "abort" : (step.json !== undefined || step.body !== undefined || step.status !== undefined || step.headers !== undefined ? "fulfill" : "continue"));
+  const errorCode = String(step.errorCode || "failed");
+  const headers = normalizeRouteHeaders(step.headers);
+  const status = Number(step.status ?? 200);
+  const jsonPayload = step.json;
+  const body = step.body === undefined ? "" : String(step.body);
+
+  await page.route(pattern, async (route: Record<string, unknown>) => {
+    if (mode === "abort") {
+      await (route.abort as (code?: string) => Promise<void>)(errorCode);
+      return;
+    }
+    if (mode === "fulfill") {
+      const fulfillHeaders = { ...headers };
+      let responseBody = body;
+      if (jsonPayload !== undefined) {
+        if (!fulfillHeaders["content-type"]) {
+          fulfillHeaders["content-type"] = "application/json";
+        }
+        responseBody = JSON.stringify(jsonPayload);
+      }
+      await (route.fulfill as (payload: Record<string, unknown>) => Promise<void>)({
+        status,
+        headers: fulfillHeaders,
+        body: responseBody,
+      });
+      return;
+    }
+    await (route.continue as () => Promise<void>)();
+  });
+
+  return {
+    action: "route",
+    pattern,
+    mode,
+    status: mode === "fulfill" ? status : undefined,
+    errorCode: mode === "abort" ? errorCode : undefined,
+    frame: undefined,
+  };
+}
+
 async function armDialog(
   page: PlaywrightPage,
   mode: string,
@@ -1217,6 +1277,14 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
     const target = String(step.path || path.join(os.tmpdir(), `codex-stack-flow-${sessionName}.png`));
     await page.screenshot({ path: target, fullPage: true });
     return { action, path: target, frame: frame || undefined, status: "ok" };
+  }
+  if (action === "route") {
+    const configured = await installRouteRule(page, step);
+    return { ...configured, status: "ok" };
+  }
+  if (action === "clear-routes") {
+    await clearRouteRules(page);
+    return { action, status: "ok" };
   }
   if (action === "text") {
     const text = await resolveLocator(scope, String(step.selector || "body")).innerText();
@@ -1675,6 +1743,54 @@ async function main(): Promise<void> {
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => page.screenshot({ path: outPath, fullPage: true }));
     recordSession(session, { lastCommand: "screenshot", lastUrl: url, output: outPath });
     console.log(outPath);
+    return;
+  }
+
+  if (command === "mock") {
+    const [url, pattern, configText] = rest;
+    if (!url || !pattern || !configText) usage();
+    let config: FlowStep;
+    try {
+      config = JSON.parse(configText) as FlowStep;
+    } catch {
+      throw new Error("mock requires a JSON config object.");
+    }
+    const result = await withPage(session, "", device, async ({ page }: { page: PlaywrightPage }) => {
+      const configured = await installRouteRule(page, { action: "route", pattern, ...config });
+      const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
+      return {
+        ...configured,
+        action: "mock",
+        url,
+        finalUrl: page.url(),
+        responseStatus: response ? response.status() : null,
+      };
+    });
+    recordSession(session, {
+      lastCommand: "mock",
+      lastUrl: url,
+      output: `${pattern}:${String((result as Record<string, unknown>).mode || "continue")}`,
+    });
+    printJson(result);
+    return;
+  }
+
+  if (command === "block") {
+    const [url, pattern] = rest;
+    if (!url || !pattern) usage();
+    const result = await withPage(session, "", device, async ({ page }: { page: PlaywrightPage }) => {
+      const configured = await installRouteRule(page, { action: "route", pattern, mode: "abort" });
+      const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
+      return {
+        ...configured,
+        action: "block",
+        url,
+        finalUrl: page.url(),
+        responseStatus: response ? response.status() : null,
+      };
+    });
+    recordSession(session, { lastCommand: "block", lastUrl: url, output: pattern });
+    printJson(result);
     return;
   }
 
