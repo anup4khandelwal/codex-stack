@@ -41,9 +41,17 @@ Give the agent eyes for QA and deployment checks.
 - `eval <url> <expression>`
 - `click <url> <selector>`
 - `fill <url> <selector> <value>`
-- `wait <url> [selector|ms:<n>|url:<target>]`
+- `upload <url> <selector> <path>`
+- `dialog <url> <accept|dismiss> [selector] [prompt]`
+- `wait <url> [selector|ms:<n>|url:<target>|load:<state>|state:<state>:<selector>]`
 - `press <url> <selector> <key>`
 - `assert-visible <url> <selector>`
+- `assert-hidden <url> <selector>`
+- `assert-enabled <url> <selector>`
+- `assert-disabled <url> <selector>`
+- `assert-checked <url> <selector>`
+- `assert-editable <url> <selector>`
+- `assert-focused <url> <selector>`
 - `assert-text <url> <selector> <expected>`
 - `assert-url <url> <expected>`
 - `assert-count <url> <selector> <expected-count>`
@@ -63,9 +71,14 @@ bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
 bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
 bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
 bun src/cli.ts browse probe https://example.com/settings --session staging
+bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
+bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
+bun src/cli.ts browse wait https://example.com/dashboard load:domcontentloaded --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse login https://example.com/login login-local --session staging
+bun src/cli.ts browse assert-focused https://example.com/login "input[name=email]" --session staging
+bun src/cli.ts browse assert-disabled https://example.com/settings "button[disabled]" --session staging
 bun src/cli.ts browse assert-text https://example.com "h1" "Example Domain" --session staging
 bun src/cli.ts browse screenshot https://example.com /tmp/example.png --session staging
 bun src/cli.ts browse sessions
@@ -77,6 +90,7 @@ bun src/cli.ts browse sessions
 - Prefer deterministic selectors and stable flows.
 - Reuse named sessions for authenticated flows so login state persists.
 - Export/import session bundles when authenticated QA needs to move between machines or named sessions.
+- Use `dialog` before the click that triggers a modal or confirm prompt so the handler is armed in time.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.
 - Prefer Markdown or YAML exports when flows need code review, because they diff more cleanly than inline JSON strings.

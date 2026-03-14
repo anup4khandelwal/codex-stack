@@ -134,6 +134,9 @@ interface ProbeResult {
   bodyLength: number;
 }
 
+type WaitState = "visible" | "hidden" | "attached" | "detached";
+type LoadState = "load" | "domcontentloaded" | "networkidle" | "commit";
+
 const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
 const STATE_DIR = path.join(ROOT_DIR, "browse");
 const STATE_PATH = path.join(STATE_DIR, "state.json");
@@ -172,9 +175,17 @@ Usage:
   codex-stack browse eval <url> <expression> [--session <name>]
   codex-stack browse click <url> <selector> [--session <name>]
   codex-stack browse fill <url> <selector> <value> [--session <name>]
-  codex-stack browse wait <url> [selector|ms:<n>|url:<target>] [--session <name>]
+  codex-stack browse upload <url> <selector> <path> [--session <name>]
+  codex-stack browse dialog <url> <accept|dismiss> [selector] [prompt] [--session <name>]
+  codex-stack browse wait <url> [selector|ms:<n>|url:<target>|load:<state>|state:<state>:<selector>] [--session <name>]
   codex-stack browse press <url> <selector> <key> [--session <name>]
   codex-stack browse assert-visible <url> <selector> [--session <name>]
+  codex-stack browse assert-hidden <url> <selector> [--session <name>]
+  codex-stack browse assert-enabled <url> <selector> [--session <name>]
+  codex-stack browse assert-disabled <url> <selector> [--session <name>]
+  codex-stack browse assert-checked <url> <selector> [--session <name>]
+  codex-stack browse assert-editable <url> <selector> [--session <name>]
+  codex-stack browse assert-focused <url> <selector> [--session <name>]
   codex-stack browse assert-text <url> <selector> <expected> [--session <name>]
   codex-stack browse assert-url <url> <expected> [--session <name>]
   codex-stack browse assert-count <url> <selector> <expected-count> [--session <name>]
@@ -904,9 +915,74 @@ function assertCondition(condition: unknown, message: string): asserts condition
   }
 }
 
+function parseWaitState(value: unknown, fallback: WaitState = "visible"): WaitState {
+  const normalized = String(value || fallback).toLowerCase();
+  if (normalized === "hidden" || normalized === "attached" || normalized === "detached") return normalized;
+  return "visible";
+}
+
+function parseLoadState(value: unknown, fallback: LoadState = "networkidle"): LoadState {
+  const normalized = String(value || fallback).toLowerCase();
+  if (normalized === "load" || normalized === "domcontentloaded" || normalized === "commit") return normalized;
+  return "networkidle";
+}
+
+async function armDialog(
+  page: PlaywrightPage,
+  mode: string,
+  promptText = "",
+): Promise<{ mode: "accept" | "dismiss"; promptText: string }> {
+  const normalizedMode: "accept" | "dismiss" = String(mode || "accept").toLowerCase() === "dismiss" ? "dismiss" : "accept";
+  page.once("dialog", async (dialog: Record<string, unknown>) => {
+    if (normalizedMode === "dismiss") {
+      await (dialog.dismiss as () => Promise<void>)();
+    } else {
+      await (dialog.accept as (value?: string) => Promise<void>)(promptText || undefined);
+    }
+  });
+  return {
+    mode: normalizedMode,
+    promptText,
+  };
+}
+
+async function assertLocatorState(page: PlaywrightPage, selector: string, state: string): Promise<void> {
+  const locator = page.locator(selector).first();
+  if (state === "visible") {
+    await locator.waitFor({ state: "visible" });
+    return;
+  }
+  if (state === "hidden") {
+    await locator.waitFor({ state: "hidden" });
+    return;
+  }
+  if (state === "enabled") {
+    assertCondition(await locator.isEnabled(), `Expected ${selector} to be enabled.`);
+    return;
+  }
+  if (state === "disabled") {
+    assertCondition(await locator.isDisabled(), `Expected ${selector} to be disabled.`);
+    return;
+  }
+  if (state === "checked") {
+    assertCondition(await locator.isChecked(), `Expected ${selector} to be checked.`);
+    return;
+  }
+  if (state === "editable") {
+    assertCondition(await locator.isEditable(), `Expected ${selector} to be editable.`);
+    return;
+  }
+  if (state === "focused") {
+    const isFocused = await locator.evaluate((element: Element) => element === document.activeElement);
+    assertCondition(isFocused, `Expected ${selector} to be focused.`);
+    return;
+  }
+  throw new Error(`Unsupported assertion state: ${state}`);
+}
+
 async function loadPlaywright(): Promise<PlaywrightModule | null> {
   try {
-    const mod = await import("playwright");
+    const mod = await import(process.env.CODEX_STACK_PLAYWRIGHT_MODULE || "playwright");
     return mod;
   } catch {
     return null;
@@ -975,14 +1051,33 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
     await page.locator(String(step.selector)).first().fill(String(step.value || ""));
     return { action, selector: step.selector, status: "ok" };
   }
+  if (action === "upload") {
+    const selector = String(step.selector || "");
+    const files = Array.isArray(step.files)
+      ? step.files.map((item) => String(item))
+      : [String(step.path ?? step.value ?? "")].filter(Boolean);
+    assertCondition(selector, "upload steps require a selector.");
+    assertCondition(files.length > 0, "upload steps require a file path.");
+    await page.locator(selector).first().setInputFiles(files.length === 1 ? files[0] : files);
+    return { action, selector, files, status: "ok" };
+  }
+  if (action === "dialog") {
+    const dialog = await armDialog(page, String(step.mode ?? step.value ?? "accept"), String(step.prompt ?? ""));
+    const selector = String(step.selector || "");
+    if (selector) {
+      await page.locator(selector).first().click();
+    }
+    return { action, selector, mode: dialog.mode, promptText: dialog.promptText, status: "ok" };
+  }
   if (action === "press") {
     await page.locator(String(step.selector)).first().press(String(step.key || "Enter"));
     return { action, selector: step.selector, key: step.key || "Enter", status: "ok" };
   }
   if (action === "wait") {
     if (step.selector) {
-      await page.locator(String(step.selector)).first().waitFor({ state: "visible" });
-      return { action, selector: step.selector, status: "ok" };
+      const state = parseWaitState(step.state);
+      await page.locator(String(step.selector)).first().waitFor({ state });
+      return { action, selector: step.selector, state, status: "ok" };
     }
     if (step.url) {
       await page.waitForURL(String(step.url));
@@ -992,8 +1087,8 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
       await page.waitForTimeout(step.ms);
       return { action, ms: step.ms, status: "ok" };
     }
-    await page.waitForLoadState("networkidle");
-    return { action, status: "ok" };
+    await page.waitForLoadState(parseLoadState(step.loadState));
+    return { action, loadState: parseLoadState(step.loadState), status: "ok" };
   }
   if (action === "screenshot") {
     const target = String(step.path || path.join(os.tmpdir(), `codex-stack-flow-${sessionName}.png`));
@@ -1012,7 +1107,37 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
   }
   if (action === "assert-visible") {
     const selector = String(step.selector || "");
-    await page.locator(selector).first().waitFor({ state: "visible" });
+    await assertLocatorState(page, selector, "visible");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-hidden") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "hidden");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-enabled") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "enabled");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-disabled") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "disabled");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-checked") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "checked");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-editable") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "editable");
+    return { action, selector, status: "ok" };
+  }
+  if (action === "assert-focused") {
+    const selector = String(step.selector || "");
+    await assertLocatorState(page, selector, "focused");
     return { action, selector, status: "ok" };
   }
   if (action === "assert-text") {
@@ -1123,7 +1248,7 @@ async function main(): Promise<void> {
     console.log(`- snapshot root: ${SNAPSHOT_DIR}`);
     console.log(`- artifact root: ${ARTIFACT_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, upload, dialog, wait, press, assert-visible, assert-hidden, assert-enabled, assert-disabled, assert-checked, assert-editable, assert-focused, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
@@ -1434,6 +1559,34 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "upload") {
+    const [url, selector, filePath] = rest;
+    if (!url || !selector || !filePath) usage();
+    const absolute = path.resolve(process.cwd(), filePath);
+    assertCondition(fs.existsSync(absolute), `Upload file not found: ${absolute}`);
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await page.locator(selector).first().setInputFiles(absolute);
+    });
+    recordSession(session, { lastCommand: "upload", lastUrl: url, output: `${selector}:${absolute}` });
+    console.log(`uploaded ${absolute} into ${selector}`);
+    return;
+  }
+
+  if (command === "dialog") {
+    const [url, modeRaw, selector, promptText] = rest;
+    if (!url || !modeRaw) usage();
+    const mode = String(modeRaw || "accept").toLowerCase() === "dismiss" ? "dismiss" : "accept";
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await armDialog(page, mode, promptText || "");
+      if (selector) {
+        await page.locator(selector).first().click();
+      }
+    });
+    recordSession(session, { lastCommand: "dialog", lastUrl: url, output: `${mode}${selector ? `:${selector}` : ""}` });
+    console.log(`${mode}ed dialog${selector ? ` via ${selector}` : ""}`);
+    return;
+  }
+
   if (command === "wait") {
     const [url, target] = rest;
     if (!url) usage();
@@ -1448,6 +1601,17 @@ async function main(): Promise<void> {
       }
       if (target.startsWith("url:")) {
         await page.waitForURL(target.slice(4));
+        return;
+      }
+      if (target.startsWith("load:")) {
+        await page.waitForLoadState(parseLoadState(target.slice(5)));
+        return;
+      }
+      if (target.startsWith("state:")) {
+        const [, stateRaw = "visible", ...selectorParts] = target.split(":");
+        const selector = selectorParts.join(":");
+        assertCondition(selector, "state waits require a selector. Use state:<state>:<selector>.");
+        await page.locator(selector).first().waitFor({ state: parseWaitState(stateRaw) });
         return;
       }
       await page.locator(target).first().waitFor({ state: "visible" });
@@ -1472,10 +1636,76 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      await page.locator(selector).first().waitFor({ state: "visible" });
+      await assertLocatorState(page, selector, "visible");
     });
     recordSession(session, { lastCommand: "assert-visible", lastUrl: url, output: selector });
     console.log(`asserted visible ${selector}`);
+    return;
+  }
+
+  if (command === "assert-hidden") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "hidden");
+    });
+    recordSession(session, { lastCommand: "assert-hidden", lastUrl: url, output: selector });
+    console.log(`asserted hidden ${selector}`);
+    return;
+  }
+
+  if (command === "assert-enabled") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "enabled");
+    });
+    recordSession(session, { lastCommand: "assert-enabled", lastUrl: url, output: selector });
+    console.log(`asserted enabled ${selector}`);
+    return;
+  }
+
+  if (command === "assert-disabled") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "disabled");
+    });
+    recordSession(session, { lastCommand: "assert-disabled", lastUrl: url, output: selector });
+    console.log(`asserted disabled ${selector}`);
+    return;
+  }
+
+  if (command === "assert-checked") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "checked");
+    });
+    recordSession(session, { lastCommand: "assert-checked", lastUrl: url, output: selector });
+    console.log(`asserted checked ${selector}`);
+    return;
+  }
+
+  if (command === "assert-editable") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "editable");
+    });
+    recordSession(session, { lastCommand: "assert-editable", lastUrl: url, output: selector });
+    console.log(`asserted editable ${selector}`);
+    return;
+  }
+
+  if (command === "assert-focused") {
+    const [url, selector] = rest;
+    if (!url || !selector) usage();
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+      await assertLocatorState(page, selector, "focused");
+    });
+    recordSession(session, { lastCommand: "assert-focused", lastUrl: url, output: selector });
+    console.log(`asserted focused ${selector}`);
     return;
   }
 

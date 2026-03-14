@@ -33,6 +33,8 @@ bun src/cli.ts browse import-session ./tmp/staging-session.json --session stagin
 bun src/cli.ts browse import-cookies ./tmp/cookies.json --session staging-copy
 bun src/cli.ts browse text https://example.com --session staging
 bun src/cli.ts browse probe https://example.com/settings --session staging
+bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
+bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
 bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"main"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
@@ -44,7 +46,15 @@ bun src/cli.ts browse login https://example.com/login login-local --session stag
 bun src/cli.ts browse click https://example.com "button[type=submit]" --session staging
 bun src/cli.ts browse fill https://example.com/login "input[name=email]" demo@example.com --session staging
 bun src/cli.ts browse wait https://example.com/dashboard "text=Dashboard" --session staging
+bun src/cli.ts browse wait https://example.com/dashboard load:domcontentloaded --session staging
+bun src/cli.ts browse wait https://example.com/dashboard state:hidden:#toast --session staging
 bun src/cli.ts browse assert-visible https://example.com "main" --session staging
+bun src/cli.ts browse assert-hidden https://example.com "#toast" --session staging
+bun src/cli.ts browse assert-enabled https://example.com "button[type=submit]" --session staging
+bun src/cli.ts browse assert-disabled https://example.com "button[disabled]" --session staging
+bun src/cli.ts browse assert-checked https://example.com "input[type=checkbox]" --session staging
+bun src/cli.ts browse assert-editable https://example.com "textarea" --session staging
+bun src/cli.ts browse assert-focused https://example.com "input[name=email]" --session staging
 bun src/cli.ts browse assert-text https://example.com "h1" "Example Domain" --session staging
 bun src/cli.ts browse assert-count https://example.com "a" 1 --session staging
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
@@ -201,6 +211,8 @@ Notes:
 - Checked-in flows live under `browse/flows/`.
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
 - Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
+- `upload`, `dialog`, and the expanded assertion set are available both as direct commands and as flow actions.
+- `wait` supports `load:<state>` plus `state:<visible|hidden|attached|detached>:<selector>` for richer synchronization.
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.
