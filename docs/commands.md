@@ -35,6 +35,10 @@ bun src/cli.ts browse text https://example.com --session staging
 bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
 bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
+bun src/cli.ts browse click https://example.com/login "role:button:Continue" --session staging --device mobile
+bun src/cli.ts browse fill https://example.com/login "label:Email" demo@example.com --session staging
+bun src/cli.ts browse html https://example.com/search "placeholder:Search" --session staging
+bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --session staging
 bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"main"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
@@ -213,6 +217,8 @@ Notes:
 - Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
 - `upload`, `dialog`, and the expanded assertion set are available both as direct commands and as flow actions.
 - `wait` supports `load:<state>` plus `state:<visible|hidden|attached|detached>:<selector>` for richer synchronization.
+- Selector arguments accept semantic prefixes as well as CSS: `role:<role>[:<name>]`, `label:<text>`, `placeholder:<text>`, `text:<text>`, and `testid:<value>`.
+- Add `--device mobile|tablet|desktop` to browser commands when you need a specific responsive viewport.
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.

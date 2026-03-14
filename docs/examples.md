@@ -80,6 +80,9 @@ bun src/cli.ts browse probe http://127.0.0.1:4173/dashboard --session friend-dem
 bun src/cli.ts browse upload http://127.0.0.1:4173/profile "input[type=file]" ./fixtures/avatar.png --session friend-demo
 bun src/cli.ts browse dialog http://127.0.0.1:4173/settings accept "#delete-confirm" --session friend-demo
 bun src/cli.ts browse wait http://127.0.0.1:4173/dashboard load:domcontentloaded --session friend-demo
+bun src/cli.ts browse click http://127.0.0.1:4173/login "role:button:Continue" --session friend-demo --device mobile
+bun src/cli.ts browse fill http://127.0.0.1:4173/login "label:Email" demo@example.com --session friend-demo
+bun src/cli.ts browse assert-visible http://127.0.0.1:4173/dashboard "testid:hero" --session friend-demo
 bun src/cli.ts browse assert-focused http://127.0.0.1:4173/login "input[name=email]" --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
