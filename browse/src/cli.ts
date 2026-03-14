@@ -16,6 +16,7 @@ import {
 type FlowFormat = "json" | "yaml" | "markdown";
 type FlowSource = "local" | "repo";
 type PlaywrightModule = any;
+type PlaywrightScope = Record<string, any>;
 type PlaywrightPage = {
   evaluate<TResult>(pageFunction: () => TResult): Promise<TResult>;
   evaluate<TArg, TResult>(pageFunction: (arg: TArg) => TResult, arg: TArg): Promise<TResult>;
@@ -41,6 +42,7 @@ interface BrowseState {
 interface ParsedGlobalArgs {
   session: string;
   device: string;
+  frame: string;
   command: string;
   rest: string[];
 }
@@ -212,6 +214,9 @@ Usage:
   codex-stack browse flow <url> <json-steps> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse run-flow <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse login <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
+
+Notes:
+  Browser actions/assertions also accept --frame <selector|name:<name>|url:<fragment>>.
 `);
   process.exit(1);
 }
@@ -319,7 +324,7 @@ function assertFlowName(name: string): void {
 }
 
 function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
-  const out: ParsedGlobalArgs = { session: "default", device: "", command: "", rest: [] };
+  const out: ParsedGlobalArgs = { session: "default", device: "", frame: "", command: "", rest: [] };
   const copy = [...argv];
   out.command = copy.shift() || "doctor";
 
@@ -331,6 +336,10 @@ function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
     }
     if (item === "--device") {
       out.device = copy.shift() || "";
+      continue;
+    }
+    if (item === "--frame") {
+      out.frame = copy.shift() || "";
       continue;
     }
     if (typeof item === "string") {
@@ -972,26 +981,57 @@ function parseLocatorDescriptor(selector: string): LocatorDescriptor {
   };
 }
 
-function resolveLocator(page: PlaywrightPage, selector: string): Record<string, any> {
+function resolveLocator(scope: PlaywrightScope, selector: string): Record<string, any> {
   const descriptor = parseLocatorDescriptor(selector);
   assertCondition(Boolean(descriptor.value), `Selector cannot be empty: ${JSON.stringify(selector)}.`);
   if (descriptor.mode === "role") {
     const options = descriptor.name ? { name: descriptor.name } : undefined;
-    return page.getByRole(descriptor.value, options).first();
+    return scope.getByRole(descriptor.value, options).first();
   }
   if (descriptor.mode === "label") {
-    return page.getByLabel(descriptor.value).first();
+    return scope.getByLabel(descriptor.value).first();
   }
   if (descriptor.mode === "placeholder") {
-    return page.getByPlaceholder(descriptor.value).first();
+    return scope.getByPlaceholder(descriptor.value).first();
   }
   if (descriptor.mode === "text") {
-    return page.getByText(descriptor.value).first();
+    return scope.getByText(descriptor.value).first();
   }
   if (descriptor.mode === "testid") {
-    return page.getByTestId(descriptor.value).first();
+    return scope.getByTestId(descriptor.value).first();
   }
-  return page.locator(descriptor.value).first();
+  return scope.locator(descriptor.value).first();
+}
+
+async function resolveScope(page: PlaywrightPage, frameSpec: string): Promise<PlaywrightScope> {
+  const value = String(frameSpec || "").trim();
+  if (!value) return page;
+
+  if (value.startsWith("name:")) {
+    const name = value.slice(5).trim();
+    assertCondition(name, "Frame targets with name: require a value.");
+    const frame = typeof page.frame === "function" ? page.frame({ name }) : null;
+    assertCondition(frame, `Unable to resolve frame by name: ${name}`);
+    return frame;
+  }
+
+  if (value.startsWith("url:")) {
+    const fragment = value.slice(4).trim();
+    assertCondition(fragment, "Frame targets with url: require a value.");
+    const frames = typeof page.frames === "function" ? page.frames() : [];
+    const frame = frames.find((candidate: Record<string, unknown>) => {
+      if (typeof candidate?.url !== "function") return false;
+      return String(candidate.url()).includes(fragment);
+    });
+    assertCondition(frame, `Unable to resolve frame by URL fragment: ${fragment}`);
+    return frame;
+  }
+
+  const locator = resolveLocator(page, value);
+  assertCondition(typeof locator.contentFrame === "function", `Frame selector must resolve to an iframe element: ${value}`);
+  const frame = await locator.contentFrame();
+  assertCondition(frame, `Unable to resolve frame from selector: ${value}`);
+  return frame;
 }
 
 async function applyDevicePreset(page: PlaywrightPage, preset: DevicePreset | null): Promise<void> {
@@ -1020,8 +1060,8 @@ async function armDialog(
   };
 }
 
-async function assertLocatorState(page: PlaywrightPage, selector: string, state: string): Promise<void> {
-  const locator = resolveLocator(page, selector);
+async function assertLocatorState(scope: PlaywrightScope, selector: string, state: string): Promise<void> {
+  const locator = resolveLocator(scope, selector);
   if (state === "visible") {
     await locator.waitFor({ state: "visible" });
     return;
@@ -1112,23 +1152,25 @@ async function withPage<T>(
   });
 }
 
-async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string): Promise<StepResult> {
+async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string, defaultFrame = ""): Promise<StepResult> {
   if (!step || typeof step !== "object") {
     return { action: "unknown", status: "skipped" };
   }
 
   const action = String(step.action || "");
+  const frame = String(step.frame || defaultFrame || "");
+  const scope = action === "goto" ? page : await resolveScope(page, frame);
   if (action === "goto") {
     await page.goto(String(step.url || ""), { waitUntil: "networkidle" });
     return { action, url: step.url, status: "ok" };
   }
   if (action === "click") {
-    await resolveLocator(page, String(step.selector)).click();
-    return { action, selector: step.selector, status: "ok" };
+    await resolveLocator(scope, String(step.selector)).click();
+    return { action, selector: step.selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "fill") {
-    await resolveLocator(page, String(step.selector)).fill(String(step.value || ""));
-    return { action, selector: step.selector, status: "ok" };
+    await resolveLocator(scope, String(step.selector)).fill(String(step.value || ""));
+    return { action, selector: step.selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "upload") {
     const selector = String(step.selector || "");
@@ -1137,120 +1179,123 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
       : [String(step.path ?? step.value ?? "")].filter(Boolean);
     assertCondition(selector, "upload steps require a selector.");
     assertCondition(files.length > 0, "upload steps require a file path.");
-    await resolveLocator(page, selector).setInputFiles(files.length === 1 ? files[0] : files);
-    return { action, selector, files, status: "ok" };
+    await resolveLocator(scope, selector).setInputFiles(files.length === 1 ? files[0] : files);
+    return { action, selector, files, frame: frame || undefined, status: "ok" };
   }
   if (action === "dialog") {
     const dialog = await armDialog(page, String(step.mode ?? step.value ?? "accept"), String(step.prompt ?? ""));
     const selector = String(step.selector || "");
     if (selector) {
-      await resolveLocator(page, selector).click();
+      await resolveLocator(scope, selector).click();
     }
-    return { action, selector, mode: dialog.mode, promptText: dialog.promptText, status: "ok" };
+    return { action, selector, mode: dialog.mode, promptText: dialog.promptText, frame: frame || undefined, status: "ok" };
   }
   if (action === "press") {
-    await resolveLocator(page, String(step.selector)).press(String(step.key || "Enter"));
-    return { action, selector: step.selector, key: step.key || "Enter", status: "ok" };
+    await resolveLocator(scope, String(step.selector)).press(String(step.key || "Enter"));
+    return { action, selector: step.selector, key: step.key || "Enter", frame: frame || undefined, status: "ok" };
   }
   if (action === "wait") {
     if (step.selector) {
       const state = parseWaitState(step.state);
-      await resolveLocator(page, String(step.selector)).waitFor({ state });
-      return { action, selector: step.selector, state, status: "ok" };
+      await resolveLocator(scope, String(step.selector)).waitFor({ state });
+      return { action, selector: step.selector, state, frame: frame || undefined, status: "ok" };
     }
     if (step.url) {
-      await page.waitForURL(String(step.url));
-      return { action, url: step.url, status: "ok" };
+      const targetScope = typeof scope.waitForURL === "function" ? scope : page;
+      await targetScope.waitForURL(String(step.url));
+      return { action, url: step.url, frame: frame || undefined, status: "ok" };
     }
     if (typeof step.ms === "number") {
       await page.waitForTimeout(step.ms);
       return { action, ms: step.ms, status: "ok" };
     }
-    await page.waitForLoadState(parseLoadState(step.loadState));
-    return { action, loadState: parseLoadState(step.loadState), status: "ok" };
+    const targetScope = typeof scope.waitForLoadState === "function" ? scope : page;
+    await targetScope.waitForLoadState(parseLoadState(step.loadState));
+    return { action, loadState: parseLoadState(step.loadState), frame: frame || undefined, status: "ok" };
   }
   if (action === "screenshot") {
     const target = String(step.path || path.join(os.tmpdir(), `codex-stack-flow-${sessionName}.png`));
     await page.screenshot({ path: target, fullPage: true });
-    return { action, path: target, status: "ok" };
+    return { action, path: target, frame: frame || undefined, status: "ok" };
   }
   if (action === "text") {
-    const text = await resolveLocator(page, String(step.selector || "body")).innerText();
-    return { action, selector: step.selector || "body", text, status: "ok" };
+    const text = await resolveLocator(scope, String(step.selector || "body")).innerText();
+    return { action, selector: step.selector || "body", text, frame: frame || undefined, status: "ok" };
   }
   if (action === "html") {
     const html = step.selector
-      ? await resolveLocator(page, String(step.selector)).innerHTML()
-      : await page.content();
-    return { action, selector: step.selector || "document", html, status: "ok" };
+      ? await resolveLocator(scope, String(step.selector)).innerHTML()
+      : await (typeof scope.content === "function" ? scope.content() : page.content());
+    return { action, selector: step.selector || "document", html, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-visible") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "visible");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "visible");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-hidden") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "hidden");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "hidden");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-enabled") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "enabled");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "enabled");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-disabled") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "disabled");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "disabled");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-checked") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "checked");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "checked");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-editable") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "editable");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "editable");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-focused") {
     const selector = String(step.selector || "");
-    await assertLocatorState(page, selector, "focused");
-    return { action, selector, status: "ok" };
+    await assertLocatorState(scope, selector, "focused");
+    return { action, selector, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-text") {
     const selector = String(step.selector || "body");
     const expected = String(step.value ?? step.text ?? "");
-    const text = await resolveLocator(page, selector).innerText();
+    const text = await resolveLocator(scope, selector).innerText();
     assertCondition(text.includes(expected), `Expected text ${JSON.stringify(expected)} in ${selector}.`);
-    return { action, selector, expected, status: "ok" };
+    return { action, selector, expected, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-url") {
     const expected = String(step.value ?? step.url ?? "");
-    const currentUrl = page.url();
+    const currentUrl = typeof scope.url === "function" ? scope.url() : page.url();
     assertCondition(currentUrl.includes(expected), `Expected URL to include ${JSON.stringify(expected)} but got ${JSON.stringify(currentUrl)}.`);
-    return { action, expected, currentUrl, status: "ok" };
+    return { action, expected, currentUrl, frame: frame || undefined, status: "ok" };
   }
   if (action === "assert-count") {
     const selector = String(step.selector || "");
     const expectedCount = Number(step.count ?? step.value ?? 0);
-    const count = await resolveLocator(page, selector).count();
+    const count = await resolveLocator(scope, selector).count();
     assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
-    return { action, selector, expectedCount, count, status: "ok" };
+    return { action, selector, expectedCount, count, frame: frame || undefined, status: "ok" };
   }
   if (action === "clear-storage") {
-    const scope = String(step.scope || "both");
+    const storageScope = String(step.scope || "both");
     const key = step.key === undefined || step.key === null ? "" : String(step.key);
-    await page.evaluate(({ scope, key }: { scope: string; key: string }) => {
+    const storageTarget = typeof (scope as PlaywrightScope).evaluate === "function" ? (scope as PlaywrightScope) : page;
+    await storageTarget.evaluate(({ scope, key }: { scope: string; key: string }) => {
       const clearBucket = (storage: Storage) => {
         if (key) storage.removeItem(key);
         else storage.clear();
       };
       if (scope === "local" || scope === "both") clearBucket(window.localStorage);
       if (scope === "session" || scope === "both") clearBucket(window.sessionStorage);
-    }, { scope, key });
-    return { action, scope, key: key || "*", status: "ok" };
+    }, { scope: storageScope, key });
+    return { action, scope: storageScope, key: key || "*", frame: frame || undefined, status: "ok" };
   }
   if (action === "use-flow") {
     return { action, name: step.name || step.flow, status: "expanded" };
@@ -1266,6 +1311,7 @@ async function executeFlow({
   recordName,
   authenticated = false,
   device = null,
+  frame = "",
 }: {
   sessionName: string;
   url: string;
@@ -1273,6 +1319,7 @@ async function executeFlow({
   recordName: string;
   authenticated?: boolean;
   device?: DevicePreset | null;
+  frame?: string;
 }): Promise<StepResult[]> {
   const expandedSteps = expandFlowSteps(steps);
   const preNavigationSteps: FlowStep[] = [];
@@ -1290,14 +1337,14 @@ async function executeFlow({
         await page.goto(origin, { waitUntil: "networkidle" });
       }
       for (const step of preNavigationSteps) {
-        entries.push(await runStep(page, step, sessionName));
+        entries.push(await runStep(page, step, sessionName, frame));
       }
     }
     if (url) {
-      entries.push(await runStep(page, { action: "goto", url }, sessionName));
+      entries.push(await runStep(page, { action: "goto", url }, sessionName, frame));
     }
     for (const step of postNavigationSteps) {
-      entries.push(await runStep(page, step, sessionName));
+      entries.push(await runStep(page, step, sessionName, frame));
     }
     return entries;
   });
@@ -1317,8 +1364,9 @@ function printJson(value: unknown): void {
 
 async function main(): Promise<void> {
   const parsed = parseGlobalArgs(process.argv.slice(2));
-  const { command, rest, session, device: deviceRaw } = parsed;
+  const { command, rest, session, device: deviceRaw, frame: frameRaw } = parsed;
   const device = parseDevicePreset(deviceRaw);
+  const frame = String(frameRaw || "").trim();
 
   if (command === "doctor") {
     const playwrightInstalled = fs.existsSync(path.resolve(process.cwd(), "node_modules", "playwright"));
@@ -1484,7 +1532,8 @@ async function main(): Promise<void> {
     const baselineJson = snapshotJsonPath(snapshotName);
     const baselineScreenshot = snapshotScreenshotPath(snapshotName);
     const payload = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      const snapshot = await captureSnapshotPayload(page);
+      const scope = await resolveScope(page, frame);
+      const snapshot = await captureSnapshotPayload(scope as PlaywrightPage);
       await page.screenshot({ path: baselineScreenshot, fullPage: true });
       return snapshot;
     });
@@ -1526,7 +1575,8 @@ async function main(): Promise<void> {
     assertCondition(Boolean(baseline), `Unable to read snapshot baseline: ${baselineJson}`);
     const baselineSnapshot = baseline as SnapshotPayload;
     const current = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      const payload = await captureSnapshotPayload(page);
+      const scope = await resolveScope(page, frame);
+      const payload = await captureSnapshotPayload(scope as PlaywrightPage);
       await page.screenshot({ path: artifactScreenshot, fullPage: true });
       return payload;
     });
@@ -1561,12 +1611,13 @@ async function main(): Promise<void> {
     const [url] = rest;
     if (!url) usage();
     const result = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
       const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
-      const bodyText = await resolveLocator(page, "body").innerText().catch(() => "");
+      const bodyText = await resolveLocator(scope, "body").innerText().catch(() => "");
       return {
         url,
-        finalUrl: page.url(),
-        title: await page.title().catch(() => ""),
+        finalUrl: typeof scope.url === "function" ? scope.url() : page.url(),
+        title: await (typeof scope.title === "function" ? scope.title() : page.title()).catch(() => ""),
         status: response ? response.status() : null,
         ok: response ? response.ok() : true,
         bodyLength: String(bodyText || "").trim().length,
@@ -1580,7 +1631,10 @@ async function main(): Promise<void> {
   if (command === "text") {
     const url = rest[0];
     if (!url) usage();
-    const text = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => resolveLocator(page, "body").innerText());
+    const text = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
+      return resolveLocator(scope, "body").innerText();
+    });
     recordSession(session, { lastCommand: "text", lastUrl: url, output: `${text.length} chars` });
     console.log(text);
     return;
@@ -1589,7 +1643,10 @@ async function main(): Promise<void> {
   if (command === "html") {
     const [url, selector] = rest;
     if (!url) usage();
-    const html = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => (selector ? resolveLocator(page, selector).innerHTML() : page.content()));
+    const html = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
+      return selector ? resolveLocator(scope, selector).innerHTML() : (typeof scope.content === "function" ? scope.content() : page.content());
+    });
     recordSession(session, { lastCommand: "html", lastUrl: url, output: `${html.length} chars` });
     console.log(html);
     return;
@@ -1634,7 +1691,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await resolveLocator(page, selector).click();
+      const scope = await resolveScope(page, frame);
+      await resolveLocator(scope, selector).click();
     });
     recordSession(session, { lastCommand: "click", lastUrl: url, output: selector });
     console.log(`clicked ${selector}`);
@@ -1645,7 +1703,8 @@ async function main(): Promise<void> {
     const [url, selector, value] = rest;
     if (!url || !selector || value === undefined) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await resolveLocator(page, selector).fill(value);
+      const scope = await resolveScope(page, frame);
+      await resolveLocator(scope, selector).fill(value);
     });
     recordSession(session, { lastCommand: "fill", lastUrl: url, output: selector });
     console.log(`filled ${selector}`);
@@ -1658,7 +1717,8 @@ async function main(): Promise<void> {
     const absolute = path.resolve(process.cwd(), filePath);
     assertCondition(fs.existsSync(absolute), `Upload file not found: ${absolute}`);
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await resolveLocator(page, selector).setInputFiles(absolute);
+      const scope = await resolveScope(page, frame);
+      await resolveLocator(scope, selector).setInputFiles(absolute);
     });
     recordSession(session, { lastCommand: "upload", lastUrl: url, output: `${selector}:${absolute}` });
     console.log(`uploaded ${absolute} into ${selector}`);
@@ -1670,9 +1730,10 @@ async function main(): Promise<void> {
     if (!url || !modeRaw) usage();
     const mode = String(modeRaw || "accept").toLowerCase() === "dismiss" ? "dismiss" : "accept";
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
       await armDialog(page, mode, promptText || "");
       if (selector) {
-        await resolveLocator(page, selector).click();
+        await resolveLocator(scope, selector).click();
       }
     });
     recordSession(session, { lastCommand: "dialog", lastUrl: url, output: `${mode}${selector ? `:${selector}` : ""}` });
@@ -1684,8 +1745,10 @@ async function main(): Promise<void> {
     const [url, target] = rest;
     if (!url) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
       if (!target) {
-        await page.waitForLoadState("networkidle");
+        const targetScope = typeof scope.waitForLoadState === "function" ? scope : page;
+        await targetScope.waitForLoadState("networkidle");
         return;
       }
       if (target.startsWith("ms:")) {
@@ -1693,21 +1756,23 @@ async function main(): Promise<void> {
         return;
       }
       if (target.startsWith("url:")) {
-        await page.waitForURL(target.slice(4));
+        const targetScope = typeof scope.waitForURL === "function" ? scope : page;
+        await targetScope.waitForURL(target.slice(4));
         return;
       }
       if (target.startsWith("load:")) {
-        await page.waitForLoadState(parseLoadState(target.slice(5)));
+        const targetScope = typeof scope.waitForLoadState === "function" ? scope : page;
+        await targetScope.waitForLoadState(parseLoadState(target.slice(5)));
         return;
       }
       if (target.startsWith("state:")) {
         const [, stateRaw = "visible", ...selectorParts] = target.split(":");
         const selector = selectorParts.join(":");
         assertCondition(selector, "state waits require a selector. Use state:<state>:<selector>.");
-        await resolveLocator(page, selector).waitFor({ state: parseWaitState(stateRaw) });
+        await resolveLocator(scope, selector).waitFor({ state: parseWaitState(stateRaw) });
         return;
       }
-      await resolveLocator(page, target).waitFor({ state: "visible" });
+      await resolveLocator(scope, target).waitFor({ state: "visible" });
     });
     recordSession(session, { lastCommand: "wait", lastUrl: url, output: target || "networkidle" });
     console.log(`waited for ${target || "networkidle"}`);
@@ -1718,7 +1783,8 @@ async function main(): Promise<void> {
     const [url, selector, key] = rest;
     if (!url || !selector || !key) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await resolveLocator(page, selector).press(key);
+      const scope = await resolveScope(page, frame);
+      await resolveLocator(scope, selector).press(key);
     });
     recordSession(session, { lastCommand: "press", lastUrl: url, output: `${selector}:${key}` });
     console.log(`pressed ${key} on ${selector}`);
@@ -1729,7 +1795,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "visible");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "visible");
     });
     recordSession(session, { lastCommand: "assert-visible", lastUrl: url, output: selector });
     console.log(`asserted visible ${selector}`);
@@ -1740,7 +1807,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "hidden");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "hidden");
     });
     recordSession(session, { lastCommand: "assert-hidden", lastUrl: url, output: selector });
     console.log(`asserted hidden ${selector}`);
@@ -1751,7 +1819,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "enabled");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "enabled");
     });
     recordSession(session, { lastCommand: "assert-enabled", lastUrl: url, output: selector });
     console.log(`asserted enabled ${selector}`);
@@ -1762,7 +1831,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "disabled");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "disabled");
     });
     recordSession(session, { lastCommand: "assert-disabled", lastUrl: url, output: selector });
     console.log(`asserted disabled ${selector}`);
@@ -1773,7 +1843,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "checked");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "checked");
     });
     recordSession(session, { lastCommand: "assert-checked", lastUrl: url, output: selector });
     console.log(`asserted checked ${selector}`);
@@ -1784,7 +1855,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "editable");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "editable");
     });
     recordSession(session, { lastCommand: "assert-editable", lastUrl: url, output: selector });
     console.log(`asserted editable ${selector}`);
@@ -1795,7 +1867,8 @@ async function main(): Promise<void> {
     const [url, selector] = rest;
     if (!url || !selector) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      await assertLocatorState(page, selector, "focused");
+      const scope = await resolveScope(page, frame);
+      await assertLocatorState(scope, selector, "focused");
     });
     recordSession(session, { lastCommand: "assert-focused", lastUrl: url, output: selector });
     console.log(`asserted focused ${selector}`);
@@ -1806,7 +1879,8 @@ async function main(): Promise<void> {
     const [url, selector, expected] = rest;
     if (!url || !selector || expected === undefined) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      const text = await resolveLocator(page, selector).innerText();
+      const scope = await resolveScope(page, frame);
+      const text = await resolveLocator(scope, selector).innerText();
       assertCondition(text.includes(expected), `Expected text ${JSON.stringify(expected)} in ${selector}.`);
     });
     recordSession(session, { lastCommand: "assert-text", lastUrl: url, output: `${selector}:${expected}` });
@@ -1818,7 +1892,8 @@ async function main(): Promise<void> {
     const [url, expected] = rest;
     if (!url || expected === undefined) usage();
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      const currentUrl = page.url();
+      const scope = await resolveScope(page, frame);
+      const currentUrl = typeof scope.url === "function" ? scope.url() : page.url();
       assertCondition(currentUrl.includes(expected), `Expected URL to include ${JSON.stringify(expected)} but got ${JSON.stringify(currentUrl)}.`);
     });
     recordSession(session, { lastCommand: "assert-url", lastUrl: url, output: expected });
@@ -1832,7 +1907,8 @@ async function main(): Promise<void> {
     const expectedCount = Number(expectedCountRaw);
     assertCondition(Number.isInteger(expectedCount), "Expected count must be an integer.");
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
-      const count = await resolveLocator(page, selector).count();
+      const scope = await resolveScope(page, frame);
+      const count = await resolveLocator(scope, selector).count();
       assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     });
     recordSession(session, { lastCommand: "assert-count", lastUrl: url, output: `${selector}:${expectedCount}` });
@@ -1852,6 +1928,7 @@ async function main(): Promise<void> {
       steps,
       recordName: "flow:inline",
       device,
+      frame,
     });
     printJson(out);
     return;
@@ -1868,6 +1945,7 @@ async function main(): Promise<void> {
       recordName: `${command}:${name}`,
       authenticated: command === "login",
       device,
+      frame,
     });
     printJson(out);
     return;

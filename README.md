@@ -43,7 +43,7 @@ Use the repo in this order:
 
 - Installable Codex skills under `skills/`
 - Checked-in root CLI under `src/cli.ts`
-- Playwright-backed browser runtime under `browse/src/cli.ts` with semantic selectors, device presets, upload, dialog, wait-state, and element-state assertions
+- Playwright-backed browser runtime under `browse/src/cli.ts` with semantic selectors, device presets, iframe targeting, upload, dialog, wait-state, and element-state assertions
 - Persistent named browser sessions
 - Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
@@ -176,6 +176,7 @@ bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confir
 bun src/cli.ts browse click https://example.com/login "role:button:Continue" --session staging --device mobile
 bun src/cli.ts browse fill https://example.com/login "label:Email" demo@example.com --session staging
 bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --session staging
+bun src/cli.ts browse click https://example.com/checkout "role:button:Pay now" --session staging --frame "name:payment"
 bun src/cli.ts browse assert-focused https://example.com/login "input[name=email]" --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
@@ -212,6 +213,7 @@ Use `browse` when you want raw control:
 - route probes
 - ad hoc assertions
 - semantic selectors and responsive viewport presets
+- iframe targeting by frame name, URL fragment, or iframe selector
 - screenshots and artifacts
 
 Use `qa` when you want a decision-ready report:
