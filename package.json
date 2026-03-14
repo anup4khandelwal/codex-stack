@@ -20,6 +20,7 @@
     "review": "bun scripts/review-diff.ts",
     "issue": "bun scripts/issue-flow.ts",
     "qa": "bun scripts/qa-run.ts",
+    "qa:trends": "bun scripts/qa-trends.ts",
     "preview": "bun scripts/preview-verify.ts",
     "ship:dry": "bun scripts/ship-branch.ts --dry-run",
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",

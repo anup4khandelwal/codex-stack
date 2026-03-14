@@ -80,6 +80,7 @@ run_ts scripts/browse-download.spec.ts >/tmp/codex-stack-browse-download-spec.lo
 run_ts scripts/qa-diff.spec.ts >/tmp/codex-stack-qa-diff-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
+run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
@@ -174,6 +175,8 @@ test -f /tmp/codex-stack-weekly-publish/email.md
 test -f /tmp/codex-stack-weekly-publish/manifest.json
 test -f .codex-stack/qa/latest.md
 test -f .codex-stack/qa/latest.json
+test -f .codex-stack/qa/trends.md
+test -f .codex-stack/qa/trends.json
 test -n "$(find .codex-stack/qa/annotations -name '*.svg' -print -quit)"
 
 git -C "$TMP_REPO" init -b main >/tmp/codex-stack-temp-git-init.log
