@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Eight opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, release shipping, browser automation, engineering retrospectives, and upgrade audits.
+Nine opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, preview verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -23,6 +23,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `tech` | Tech lead | Locks architecture, trust boundaries, rollout risks, and the test plan. |
 | `review` | Paranoid staff engineer | Audits the diff for structural production risks instead of style noise. |
 | `qa` | QA lead | Runs browser flows and snapshot checks, then scores release readiness. |
+| `preview` | Preview verifier | Resolves a PR preview URL, waits for readiness, runs QA, and reports whether the preview is safe to merge. |
 | `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
 | `browse` | QA engineer | Drives a real browser with persistent sessions, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
@@ -47,6 +48,7 @@ Use the repo in this order:
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts
 - QA reports with findings, severity, health score, saved evidence, and annotated screenshots for snapshot failures
+- Preview verification with URL template resolution, readiness polling, QA execution, and PR comment output for preview deployments
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - PR comments with QA verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
@@ -74,6 +76,7 @@ bun src/cli.ts list
 - `tech`
 - `review`
 - `qa`
+- `preview`
 - `ship`
 - `browse`
 - `retro`
@@ -93,6 +96,7 @@ Typical split:
 
 - one agent in `review`
 - one agent in `qa`
+- one agent in `preview`
 - one agent in `ship`
 
 Because the command contracts are shared, those agents stay aligned on the same review, QA, and shipping workflow.
@@ -153,6 +157,7 @@ bun src/cli.ts list
 bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --flow landing-smoke --snapshot landing-home
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -174,6 +179,7 @@ bun run demo:start
 bun run demo:smoke
 bun run review
 bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
+bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --flow landing-smoke --snapshot landing-home
 bun run ship:dry
 bun run retro
 bun run upgrade
@@ -200,6 +206,24 @@ Use `qa` when you want a decision-ready report:
 - findings with evidence
 - annotated SVG evidence for snapshot-based failures
 - saved markdown/json report under `.codex-stack/qa/`
+
+## Preview verification
+
+Use `preview` when the branch already has a preview deployment and you want merge readiness against the live preview, not only against the code diff.
+
+Example:
+
+```bash
+bun src/cli.ts preview \
+  --url-template "https://preview-{pr}.example.com" \
+  --pr 42 \
+  --branch feat/42-preview \
+  --sha abcdef1234567890 \
+  --flow landing-smoke \
+  --snapshot landing-home
+```
+
+The preview workflow resolves the preview URL from the PR context, waits for the deployment to respond, runs `qa`, publishes artifacts, and generates a PR-comment-ready markdown summary.
 
 ## Ship verification
 
