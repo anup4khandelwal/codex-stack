@@ -107,6 +107,7 @@ interface AutomationPlan {
 
 interface QaFinding {
   severity?: string;
+  category?: string;
   title?: string;
 }
 
@@ -980,7 +981,9 @@ function pagesReference(repo: string, targetPath: string, label = ""): string {
 
 function qaFindingSummary(findings: QaFinding[] | undefined, limit = 5): string[] {
   if (!Array.isArray(findings) || !findings.length) return ["- No findings."];
-  const lines = findings.slice(0, limit).map((item) => `- ${String(item.severity || "info").toUpperCase()}: ${item.title}`);
+  const lines = findings
+    .slice(0, limit)
+    .map((item) => `- ${String(item.severity || "info").toUpperCase()}${item.category ? `/${String(item.category).toUpperCase()}` : ""}: ${item.title}`);
   if (findings.length > limit) {
     lines.push(`- ...and ${findings.length - limit} more`);
   }

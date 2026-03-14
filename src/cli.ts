@@ -21,7 +21,7 @@ Usage:
   codex-stack doctor
   codex-stack issue <create|branch|start> <args...>
   codex-stack review [--json] [--base <ref>]
-  codex-stack qa <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--json]
+  codex-stack qa <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--json]
   codex-stack preview [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--flow <name>] [--snapshot <name>] [--session <name>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--qa-fixture <path>] [--json]
   codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]

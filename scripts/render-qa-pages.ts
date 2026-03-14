@@ -15,6 +15,7 @@ interface ParsedArgs {
 
 interface QaFinding {
   severity?: string;
+  category?: string;
   title?: string;
   detail?: string;
   evidence?: Record<string, unknown>;
@@ -201,7 +202,7 @@ function formatDate(value: unknown): string {
 function severityClass(status: unknown): string {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "critical") return "critical";
-  if (normalized === "warning") return "warning";
+  if (normalized === "warning" || normalized === "high" || normalized === "medium") return "warning";
   return "pass";
 }
 
@@ -230,6 +231,7 @@ function reportRows(report: CollectedReport): string {
         <div class="finding-head">
         <span class="pill ${severityClass(item.severity)}">${escapeHtml(String(item.severity || "info").toUpperCase())}</span>
         <strong>${escapeHtml(item.title)}</strong>
+        ${item.category ? `<span class="pill">${escapeHtml(String(item.category))}</span>` : ""}
       </div>
       <p>${escapeHtml(item.detail)}</p>
       ${evidence ? `<div class="evidence">${evidence}</div>` : ""}

@@ -22,10 +22,10 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `product` | Product thinker | Reframes a request into user outcomes, scope, and acceptance criteria. |
 | `tech` | Tech lead | Locks architecture, trust boundaries, rollout risks, and the test plan. |
 | `review` | Paranoid staff engineer | Audits the diff for structural production risks instead of style noise. |
-| `qa` | QA lead | Runs browser flows and snapshot checks, then scores release readiness. |
+| `qa` | QA lead | Runs browser flows, diff-aware route probes, and snapshot checks, then scores release readiness. |
 | `preview` | Preview verifier | Resolves a PR preview URL, waits for readiness, runs QA, and reports whether the preview is safe to merge. |
 | `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
-| `browse` | QA engineer | Drives a real browser with persistent sessions, named flows, snapshots, and artifacts. |
+| `browse` | QA engineer | Drives a real browser with persistent sessions, portable session bundles, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 | `upgrade` | Repo maintainer | Audits Bun, dependency drift, workflow action drift, and install health for codex-stack itself. |
 
@@ -45,9 +45,10 @@ Use the repo in this order:
 - Checked-in root CLI under `src/cli.ts`
 - Playwright-backed browser runtime under `browse/src/cli.ts`
 - Persistent named browser sessions
+- Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts
-- QA reports with findings, severity, health score, saved evidence, and annotated screenshots for snapshot failures
+- QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, and annotated screenshots for snapshot failures
 - Preview verification with URL template resolution, readiness polling, QA execution, and PR comment output for preview deployments
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - PR comments with QA verification summaries and artifact references after `ship --pr`
@@ -157,6 +158,7 @@ bun src/cli.ts list
 bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --flow landing-smoke --snapshot landing-home
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
@@ -165,6 +167,9 @@ bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
+bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
+bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
+bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 ```
@@ -194,8 +199,10 @@ bun run weekly
 Use `browse` when you want raw control:
 
 - sessions
+- portable session bundles
 - named flows
 - snapshots
+- route probes
 - ad hoc assertions
 - screenshots and artifacts
 
@@ -203,7 +210,8 @@ Use `qa` when you want a decision-ready report:
 
 - pass / warning / critical status
 - health score
-- findings with evidence
+- findings with category + evidence
+- diff-aware route inference from changed files
 - annotated SVG evidence for snapshot-based failures
 - saved markdown/json report under `.codex-stack/qa/`
 

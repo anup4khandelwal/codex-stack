@@ -11,6 +11,7 @@ bun src/cli.ts issue branch 42 --title "Add PR workflow" --prefix feat
 bun src/cli.ts review
 bun src/cli.ts review --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home
 bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
@@ -27,7 +28,11 @@ bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs
 bun src/cli.ts doctor
 bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
+bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
+bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
+bun src/cli.ts browse import-cookies ./tmp/cookies.json --session staging-copy
 bun src/cli.ts browse text https://example.com --session staging
+bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"main"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
@@ -102,12 +107,14 @@ Notes:
 ```bash
 bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
+bun scripts/qa-run.ts https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 ```
 
 Notes:
 
 - `qa` writes markdown/json artifacts under `.codex-stack/qa/`.
-- It upgrades raw browser evidence into findings, severity, health score, and recommendation.
+- It upgrades raw browser evidence into categorized findings, severity, health score, and recommendation.
+- `--mode diff-aware` inspects the git diff, infers changed routes for common app/page layouts, and probes those URLs from the supplied base URL.
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
@@ -176,6 +183,9 @@ bun browse/src/cli.ts save-flow smoke-login '[{"action":"fill","selector":"input
 bun browse/src/cli.ts save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 bun browse/src/cli.ts import-flow smoke-login ./docs/smoke-login.yaml
 bun browse/src/cli.ts export-flow portal-full-demo ./docs/portal-full-demo.md
+bun browse/src/cli.ts export-session ./tmp/staging-session.json --session staging
+bun browse/src/cli.ts import-session ./tmp/staging-session.json --session staging-copy
+bun browse/src/cli.ts probe https://example.com/settings --session staging
 bun browse/src/cli.ts snapshot https://example.com marketing-home --session staging
 bun browse/src/cli.ts compare-snapshot https://example.com marketing-home --session staging
 bun browse/src/cli.ts run-flow https://example.com/login smoke-login --session staging
@@ -188,6 +198,7 @@ Notes:
 
 - Checked-in flows live under `browse/flows/`.
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
+- Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.

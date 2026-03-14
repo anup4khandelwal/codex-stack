@@ -3,9 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { inferChangedRoutes, type RouteCandidate } from "./qa-diff.ts";
 
 type QaMode = "quick" | "full" | "regression" | string;
-type FindingSeverity = "critical" | "warning" | "info";
+type FindingSeverity = "critical" | "high" | "medium" | "low";
+type FindingCategory = "functional" | "visual" | "ux" | "content" | "console" | "performance" | "accessibility" | "qa-system";
 type ReportStatus = "critical" | "warning" | "pass";
 type SnapshotCommand = "snapshot" | "compare-snapshot";
 
@@ -16,6 +18,7 @@ interface QaArgs {
   updateSnapshot: boolean;
   session: string;
   mode: QaMode;
+  baseRef: string;
   json: boolean;
   fixture: string;
   publishDir: string;
@@ -78,8 +81,22 @@ interface FlowEvidence {
   raw?: unknown;
 }
 
+interface RouteProbeEvidence {
+  route: string;
+  url: string;
+  ok: boolean;
+  status: "pass" | "failed" | "skipped";
+  httpStatus: number | null;
+  title: string;
+  bodyLength: number;
+  files: string[];
+  dynamic: boolean;
+  reason: string;
+}
+
 interface QaFinding {
   severity: FindingSeverity;
+  category: FindingCategory;
   title: string;
   detail: string;
   evidence: Record<string, string>;
@@ -119,6 +136,31 @@ interface QaArtifacts {
   published?: PublishedArtifacts;
 }
 
+interface QaRouteResult {
+  route: string;
+  url: string;
+  status: "pass" | "failed" | "skipped";
+  httpStatus: number | null;
+  title: string;
+  bodyLength: number;
+  files: string[];
+  dynamic: boolean;
+  reason: string;
+}
+
+interface QaDiffSummary {
+  baseRef: string;
+  changedFiles: string[];
+  candidateRoutes: Array<{
+    route: string;
+    url: string;
+    files: string[];
+    framework: string;
+    dynamic: boolean;
+    unresolvedReason: string;
+  }>;
+}
+
 interface QaReport {
   generatedAt: string;
   url: string;
@@ -129,6 +171,8 @@ interface QaReport {
   recommendation: string;
   findings: QaFinding[];
   flowResults: QaFlowResult[];
+  routeResults: QaRouteResult[];
+  diffSummary: QaDiffSummary | null;
   snapshotResult: QaSnapshotSummary | null;
   artifacts: QaArtifacts;
 }
@@ -153,6 +197,15 @@ interface BrowseResult {
   stdout: string;
   stderr: string;
   parsed: unknown;
+}
+
+interface ProbeCommandResult {
+  url?: string;
+  finalUrl?: string;
+  title?: string;
+  status?: number | null;
+  ok?: boolean;
+  bodyLength?: number;
 }
 
 interface QaFixtureSnapshot extends SnapshotCommandResult {
@@ -185,7 +238,7 @@ function usage(): never {
   console.log(`qa-run
 
 Usage:
-  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
+  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--publish-dir <path>] [--json]
   bun scripts/qa-run.ts --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
@@ -199,6 +252,7 @@ function parseArgs(argv: string[]): QaArgs {
     updateSnapshot: false,
     session: "qa",
     mode: "full",
+    baseRef: process.env.CODEX_STACK_QA_BASE_REF || "origin/main",
     json: false,
     fixture: "",
     publishDir: "",
@@ -221,6 +275,8 @@ function parseArgs(argv: string[]): QaArgs {
       out.session = copy.shift() || out.session;
     } else if (arg === "--mode") {
       out.mode = copy.shift() || out.mode;
+    } else if (arg === "--base-ref") {
+      out.baseRef = copy.shift() || out.baseRef;
     } else if (arg === "--json") {
       out.json = true;
     } else if (arg === "--fixture") {
@@ -310,6 +366,18 @@ function asSnapshotCommandResult(value: unknown): SnapshotCommandResult {
   };
 }
 
+function asProbeCommandResult(value: unknown): ProbeCommandResult {
+  const obj = asObject(value);
+  return {
+    url: asString(obj?.url),
+    finalUrl: asString(obj?.finalUrl),
+    title: asString(obj?.title),
+    status: typeof obj?.status === "number" ? obj.status : null,
+    ok: obj?.ok === undefined ? true : Boolean(obj?.ok),
+    bodyLength: typeof obj?.bodyLength === "number" ? obj.bodyLength : 0,
+  };
+}
+
 function asFlowStepCount(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
 }
@@ -340,25 +408,28 @@ function runBrowse(args: string[]): BrowseResult {
 
 function finding(
   severity: FindingSeverity,
+  category: FindingCategory,
   title: string,
   detail: string,
   evidence: Record<string, string> = {},
 ): QaFinding {
-  return { severity, title, detail, evidence };
+  return { severity, category, title, detail, evidence };
 }
 
 function scoreFindings(findings: QaFinding[]): number {
   let score = 100;
   for (const item of findings) {
     if (item.severity === "critical") score -= 40;
-    else if (item.severity === "warning") score -= 15;
+    else if (item.severity === "high") score -= 25;
+    else if (item.severity === "medium") score -= 12;
+    else if (item.severity === "low") score -= 5;
   }
   return Math.max(0, score);
 }
 
 function statusFromFindings(findings: QaFinding[]): ReportStatus {
   if (findings.some((item) => item.severity === "critical")) return "critical";
-  if (findings.some((item) => item.severity === "warning")) return "warning";
+  if (findings.some((item) => item.severity === "high" || item.severity === "medium")) return "warning";
   return "pass";
 }
 
@@ -368,8 +439,8 @@ function recommendation(status: ReportStatus, healthScore: number): string {
   }
   if (status === "warning") {
     return healthScore >= 80
-      ? "Manual QA review required. The flow mostly works, but visible UI drift was detected."
-      : "Hold the release until the snapshot drift is explained or the baseline is refreshed intentionally.";
+      ? "Manual QA review required. The core checks passed, but there is non-blocking regression evidence to review."
+      : "Hold the release until the regression evidence is explained or the baseline is refreshed intentionally.";
   }
   return "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.";
 }
@@ -381,13 +452,37 @@ function buildMarkdown(report: QaReport): string {
           const evidence = Object.entries(item.evidence)
             .map(([key, value]) => `${key}=${value}`)
             .join(", ") || "none";
-          return `### ${item.severity.toUpperCase()}: ${item.title}\n\n${item.detail}\n\nEvidence: ${evidence}`;
+          return `### ${item.severity.toUpperCase()} • ${item.category}: ${item.title}\n\n${item.detail}\n\nEvidence: ${evidence}`;
         })
         .join("\n\n")
     : "No findings.";
   const flowLines = report.flowResults.length
     ? report.flowResults.map((item) => `- ${item.name}: ${item.status}`).join("\n")
     : "- none";
+  const routeLines = report.routeResults.length
+    ? report.routeResults
+        .map((item) => {
+          const statusBits = [
+            item.status,
+            item.httpStatus !== null ? `http=${item.httpStatus}` : "",
+            item.title ? `title=${item.title}` : "",
+            item.reason ? `reason=${item.reason}` : "",
+          ]
+            .filter(Boolean)
+            .join(", ");
+          return `- ${item.route || item.url || "route"}: ${statusBits}`;
+        })
+        .join("\n")
+    : "- none";
+  const diffLines = report.diffSummary
+    ? [
+        `- Base ref: ${report.diffSummary.baseRef}`,
+        report.diffSummary.changedFiles.length ? `- Changed files: ${report.diffSummary.changedFiles.join(", ")}` : "- Changed files: none",
+        report.diffSummary.candidateRoutes.length
+          ? `- Candidate routes: ${report.diffSummary.candidateRoutes.map((item) => `${item.route}${item.dynamic ? " (dynamic)" : ""}`).join(", ")}`
+          : "- Candidate routes: none",
+      ].join("\n")
+    : "- Diff-aware inference: not used";
   const snapshotLine = report.snapshotResult
     ? [
         `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
@@ -415,6 +510,14 @@ ${findingLines}
 ## Flow results
 
 ${flowLines}
+
+## Route results
+
+${routeLines}
+
+## Diff-aware inference
+
+${diffLines}
 
 ## Snapshot
 
@@ -641,14 +744,93 @@ function collectFlowEvidence(args: QaArgs): FlowEvidence[] {
   });
 }
 
+function mergeCandidateFiles(candidates: RouteCandidate[]): Map<string, RouteProbeEvidence> {
+  const grouped = new Map<string, RouteProbeEvidence>();
+  for (const candidate of candidates) {
+    const key = `${candidate.route}:${candidate.url || candidate.unresolvedReason || "manual"}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.files.push(candidate.file);
+      continue;
+    }
+    grouped.set(key, {
+      route: candidate.route,
+      url: candidate.url,
+      ok: !candidate.dynamic,
+      status: candidate.dynamic ? "skipped" : "pass",
+      httpStatus: null,
+      title: "",
+      bodyLength: 0,
+      files: [candidate.file],
+      dynamic: candidate.dynamic,
+      reason: candidate.unresolvedReason,
+    });
+  }
+  return grouped;
+}
+
+function collectRouteEvidence(args: QaArgs): { routeEvidence: RouteProbeEvidence[]; diffSummary: QaDiffSummary | null } {
+  if (args.mode !== "diff-aware") {
+    return { routeEvidence: [], diffSummary: null };
+  }
+
+  const inferred = inferChangedRoutes({
+    cwd: process.cwd(),
+    baseRef: args.baseRef,
+    baseUrl: args.url,
+  });
+  const grouped = mergeCandidateFiles(inferred.candidates);
+  const routeEvidence = [...grouped.values()];
+
+  for (const item of routeEvidence) {
+    if (!item.url || item.dynamic) continue;
+    const result = runBrowse(["probe", item.url, "--session", args.session]);
+    if (!result.ok) {
+      item.ok = false;
+      item.status = "failed";
+      item.reason = result.stderr || "probe failed";
+      continue;
+    }
+    const parsed = asProbeCommandResult(result.parsed);
+    item.httpStatus = parsed.status ?? null;
+    item.title = parsed.title || "";
+    item.bodyLength = parsed.bodyLength || 0;
+    item.ok = parsed.ok !== false && ((parsed.status ?? null) === null || (parsed.status ?? 0) < 400);
+    item.status = item.ok ? "pass" : "failed";
+    if (!item.ok && !item.reason) {
+      item.reason = parsed.status ? `http-${parsed.status}` : "probe failed";
+    }
+  }
+
+  return {
+    routeEvidence,
+    diffSummary: {
+      baseRef: inferred.baseRef,
+      changedFiles: inferred.changedFiles,
+      candidateRoutes: routeEvidence.map((item) => ({
+        route: item.route,
+        url: item.url,
+        files: item.files,
+        framework: inferred.candidates.find((candidate) => candidate.route === item.route)?.framework || "",
+        dynamic: item.dynamic,
+        unresolvedReason: item.reason,
+      })),
+    },
+  };
+}
+
 function buildReport({
   args,
   snapshotEvidence,
   flowEvidence,
+  routeEvidence,
+  diffSummary,
 }: {
   args: QaArgs;
   snapshotEvidence: SnapshotEvidence | null;
   flowEvidence: FlowEvidence[];
+  routeEvidence: RouteProbeEvidence[];
+  diffSummary: QaDiffSummary | null;
 }): QaReport {
   const findings: QaFinding[] = [];
 
@@ -657,6 +839,7 @@ function buildReport({
       findings.push(
         finding(
           "critical",
+          "functional",
           `Flow failed: ${flow.name}`,
           flow.stderr || `The ${flow.name} flow exited with a non-zero status.`,
           { flow: flow.name },
@@ -671,6 +854,7 @@ function buildReport({
       findings.push(
         finding(
           "critical",
+          "qa-system",
           `Snapshot command failed: ${snapshotEvidence.command}`,
           snapshotEvidence.stderr || "The snapshot command failed before producing evidence.",
           { snapshot: args.snapshot },
@@ -682,6 +866,7 @@ function buildReport({
         findings.push(
           finding(
             "critical",
+            "visual",
             "Expected UI selectors are missing",
             `The live page no longer contains ${(comparison.missingSelectors || []).length} selectors from the baseline.`,
             {
@@ -701,7 +886,8 @@ function buildReport({
       ) {
         findings.push(
           finding(
-            "warning",
+            "medium",
+            "visual",
             "Snapshot drift detected",
             `The page differs from the saved baseline for ${args.snapshot}.`,
             {
@@ -712,6 +898,40 @@ function buildReport({
           ),
         );
       }
+    }
+  }
+
+  for (const route of routeEvidence) {
+    if (route.dynamic) {
+      findings.push(
+        finding(
+          "low",
+          "qa-system",
+          `Manual verification required for ${route.route}`,
+          "The changed route contains dynamic segments, so codex-stack could not derive a stable preview URL automatically.",
+          {
+            route: route.route,
+            files: route.files.join(", "),
+          },
+        ),
+      );
+      continue;
+    }
+    if (!route.ok) {
+      findings.push(
+        finding(
+          "high",
+          "functional",
+          `Route probe failed for ${route.route}`,
+          route.reason || `The inferred route ${route.route} did not return a healthy response.`,
+          {
+            route: route.route,
+            url: route.url,
+            files: route.files.join(", "),
+            status: route.httpStatus !== null ? String(route.httpStatus) : "",
+          },
+        ),
+      );
     }
   }
 
@@ -728,6 +948,18 @@ function buildReport({
     recommendation: recommendation(status, healthScore),
     findings,
     flowResults: flowEvidence.map((item) => ({ name: item.name, status: item.status, steps: item.steps })),
+    routeResults: routeEvidence.map((item) => ({
+      route: item.route,
+      url: item.url,
+      status: item.status,
+      httpStatus: item.httpStatus,
+      title: item.title,
+      bodyLength: item.bodyLength,
+      files: item.files,
+      dynamic: item.dynamic,
+      reason: item.reason,
+    })),
+    diffSummary,
     snapshotResult: snapshotEvidence
       ? {
           name: args.snapshot,
@@ -895,11 +1127,14 @@ if (args.fixture) {
           stderr: item.stderr || "",
         }))
       : [],
+    routeEvidence: [],
+    diffSummary: null,
   });
 } else {
   const snapshotEvidence = collectSnapshotEvidence(args);
   const flowEvidence = collectFlowEvidence(args);
-  report = buildReport({ args, snapshotEvidence, flowEvidence });
+  const { routeEvidence, diffSummary } = collectRouteEvidence(args);
+  report = buildReport({ args, snapshotEvidence, flowEvidence, routeEvidence, diffSummary });
   report = attachSnapshotAnnotation(report, snapshotEvidence);
 }
 

@@ -4,6 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { createHash } from "node:crypto";
+import {
+  normalizeSessionBundle,
+  readSessionBundle,
+  writeSessionBundle,
+  type BrowserSessionBundle,
+  type SessionOriginState,
+  type SessionStorageEntry,
+} from "./session-bundle.ts";
 
 type FlowFormat = "json" | "yaml" | "markdown";
 type FlowSource = "local" | "repo";
@@ -112,6 +120,20 @@ interface SnapshotComparison {
   screenshotChanged: boolean;
 }
 
+interface PlaywrightResponse {
+  status(): number;
+  ok(): boolean;
+}
+
+interface ProbeResult {
+  url: string;
+  finalUrl: string;
+  title: string;
+  status: number | null;
+  ok: boolean;
+  bodyLength: number;
+}
+
 const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
 const STATE_DIR = path.join(ROOT_DIR, "browse");
 const STATE_PATH = path.join(STATE_DIR, "state.json");
@@ -137,8 +159,12 @@ Usage:
   codex-stack browse show-flow <name>
   codex-stack browse delete-flow <name>
   codex-stack browse clear-session [name]
+  codex-stack browse export-session <path> [--url <url>] [--session <name>]
+  codex-stack browse import-session <path> [--session <name>]
+  codex-stack browse import-cookies <path> [--session <name>]
   codex-stack browse snapshot <url> [name] [--session <name>]
   codex-stack browse compare-snapshot <url> <name> [--session <name>]
+  codex-stack browse probe <url> [--session <name>]
   codex-stack browse text <url> [--session <name>]
   codex-stack browse html <url> [selector] [--session <name>]
   codex-stack browse links <url> [--session <name>]
@@ -733,6 +759,145 @@ function recordSession(sessionName: string, patch: Partial<SessionState>): void 
   writeState(state);
 }
 
+function asStorageEntries(entries: Array<{ name?: unknown; value?: unknown }> | undefined): SessionStorageEntry[] {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => ({
+      name: String(entry?.name || ""),
+      value: String(entry?.value || ""),
+    }))
+    .filter((entry) => entry.name);
+}
+
+async function captureOriginState(context: PlaywrightContext, origin: string): Promise<SessionOriginState> {
+  const page = context.pages()[0] || (await context.newPage());
+  try {
+    await page.goto(origin, { waitUntil: "domcontentloaded" });
+  } catch {
+    // Keep whatever storage the origin can provide even if navigation is imperfect.
+  }
+  const payload = await page.evaluate(() => ({
+    localStorage: Object.keys(window.localStorage).map((key) => ({ name: key, value: window.localStorage.getItem(key) || "" })),
+    sessionStorage: Object.keys(window.sessionStorage).map((key) => ({ name: key, value: window.sessionStorage.getItem(key) || "" })),
+  }));
+  return {
+    origin,
+    localStorage: asStorageEntries(payload.localStorage),
+    sessionStorage: asStorageEntries(payload.sessionStorage),
+  };
+}
+
+async function buildSessionBundle(sessionName: string, urlHint = ""): Promise<BrowserSessionBundle> {
+  const { session } = getSessionState(sessionName);
+  return withPersistentContext(sessionName, async ({ context }) => {
+    const storageState = await context.storageState();
+    const origins = new Map<string, SessionOriginState>();
+    for (const entry of Array.isArray(storageState.origins) ? storageState.origins : []) {
+      origins.set(String(entry.origin), {
+        origin: String(entry.origin),
+        localStorage: asStorageEntries(entry.localStorage),
+        sessionStorage: [],
+      });
+    }
+
+    const hintedOrigin = (() => {
+      try {
+        return new URL(urlHint || session.lastUrl || "").origin;
+      } catch {
+        return "";
+      }
+    })();
+    if (hintedOrigin && !origins.has(hintedOrigin)) {
+      origins.set(hintedOrigin, { origin: hintedOrigin, localStorage: [], sessionStorage: [] });
+    }
+
+    for (const origin of [...origins.keys()]) {
+      try {
+        origins.set(origin, await captureOriginState(context, origin));
+      } catch {
+        // Preserve the storageState-derived data even if active capture fails.
+      }
+    }
+
+    return normalizeSessionBundle(
+      {
+        exportedAt: new Date().toISOString(),
+        session: sessionName,
+        metadata: session,
+        storageState: {
+          cookies: Array.isArray(storageState.cookies) ? storageState.cookies : [],
+          origins: [...origins.values()],
+        },
+        source: {
+          type: "playwright-persistent-context",
+          profileDir: path.relative(process.cwd(), sessionProfileDir(sessionName)),
+          exportedFrom: urlHint || session.lastUrl || "",
+        },
+      },
+      sessionName,
+    );
+  });
+}
+
+async function applySessionBundle(sessionName: string, bundle: BrowserSessionBundle): Promise<void> {
+  await withPersistentContext(sessionName, async ({ context }) => {
+    if (typeof context.clearCookies === "function") {
+      await context.clearCookies();
+    }
+    if (Array.isArray(bundle.storageState.cookies) && bundle.storageState.cookies.length) {
+      await context.addCookies(bundle.storageState.cookies as Array<Record<string, unknown>>);
+    }
+
+    for (const originState of bundle.storageState.origins || []) {
+      const page = context.pages()[0] || (await context.newPage());
+      try {
+        await page.goto(originState.origin, { waitUntil: "domcontentloaded" });
+      } catch {
+        // Best effort: even if the page does not fully load, attempt storage restore.
+      }
+      await page.evaluate(
+        ({ localStorageEntries, sessionStorageEntries }: { localStorageEntries: SessionStorageEntry[]; sessionStorageEntries: SessionStorageEntry[] }) => {
+          window.localStorage.clear();
+          for (const entry of localStorageEntries) {
+            window.localStorage.setItem(entry.name, entry.value);
+          }
+          window.sessionStorage.clear();
+          for (const entry of sessionStorageEntries) {
+            window.sessionStorage.setItem(entry.name, entry.value);
+          }
+        },
+        {
+          localStorageEntries: originState.localStorage || [],
+          sessionStorageEntries: originState.sessionStorage || [],
+        },
+      );
+    }
+  });
+
+  recordSession(sessionName, {
+    lastCommand: "import-session",
+    lastUrl: bundle.metadata?.lastUrl || "",
+    authenticated: Boolean(bundle.storageState.cookies?.length || bundle.metadata?.authenticated),
+    output: `${bundle.storageState.cookies.length} cookies, ${bundle.storageState.origins.length} origins`,
+  });
+}
+
+async function probeUrl(sessionName: string, url: string): Promise<ProbeResult> {
+  return withPersistentContext(sessionName, async ({ context }) => {
+    const page = context.pages()[0] || (await context.newPage());
+    const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
+    const bodyText = await page.locator("body").innerText().catch(() => "");
+    return {
+      url,
+      finalUrl: page.url(),
+      title: await page.title().catch(() => ""),
+      status: response ? response.status() : null,
+      ok: response ? response.ok() : true,
+      bodyLength: String(bodyText || "").trim().length,
+    };
+  });
+}
+
 function assertCondition(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
@@ -748,10 +913,9 @@ async function loadPlaywright(): Promise<PlaywrightModule | null> {
   }
 }
 
-async function withPage<T>(
+async function withPersistentContext<T>(
   sessionName: string,
-  url: string,
-  callback: ({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>,
+  callback: ({ context, playwright }: { context: PlaywrightContext; playwright: PlaywrightModule }) => Promise<T>,
 ): Promise<T> {
   const playwright = await loadPlaywright();
   if (!playwright) {
@@ -772,16 +936,25 @@ async function withPage<T>(
     throw error;
   }
 
-  const page = context.pages()[0] || (await context.newPage());
-  if (url) {
-    await page.goto(url, { waitUntil: "networkidle" });
-  }
-
   try {
-    return await callback({ page, context });
+    return await callback({ context, playwright });
   } finally {
     await context.close();
   }
+}
+
+async function withPage<T>(
+  sessionName: string,
+  url: string,
+  callback: ({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>,
+): Promise<T> {
+  return withPersistentContext(sessionName, async ({ context }) => {
+    const page = context.pages()[0] || (await context.newPage());
+    if (url) {
+      await page.goto(url, { waitUntil: "networkidle" });
+    }
+    return callback({ page, context });
+  });
 }
 
 async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string): Promise<StepResult> {
@@ -950,7 +1123,7 @@ async function main(): Promise<void> {
     console.log(`- snapshot root: ${SNAPSHOT_DIR}`);
     console.log(`- artifact root: ${ARTIFACT_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, snapshot, compare-snapshot, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
@@ -1056,6 +1229,46 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "export-session") {
+    const targetPath = rest[0];
+    if (!targetPath) usage();
+    const urlFlagIndex = rest.indexOf("--url");
+    const urlHint = urlFlagIndex >= 0 ? String(rest[urlFlagIndex + 1] || "") : "";
+    const bundle = await buildSessionBundle(session, urlHint);
+    const absolute = writeSessionBundle(targetPath, bundle);
+    recordSession(session, {
+      lastCommand: "export-session",
+      output: path.relative(process.cwd(), absolute),
+      authenticated: Boolean(bundle.storageState.cookies.length || bundle.metadata.authenticated),
+    });
+    printJson({
+      status: "exported",
+      session,
+      bundle: path.relative(process.cwd(), absolute),
+      cookies: bundle.storageState.cookies.length,
+      origins: bundle.storageState.origins.length,
+    });
+    return;
+  }
+
+  if (command === "import-session" || command === "import-cookies") {
+    const sourcePath = rest[0];
+    if (!sourcePath) usage();
+    const bundle = readSessionBundle(sourcePath, session);
+    if (command === "import-cookies") {
+      bundle.storageState.origins = [];
+    }
+    await applySessionBundle(session, bundle);
+    printJson({
+      status: "imported",
+      session,
+      cookies: bundle.storageState.cookies.length,
+      origins: bundle.storageState.origins.length,
+      source: path.relative(process.cwd(), path.resolve(process.cwd(), sourcePath)),
+    });
+    return;
+  }
+
   if (command === "snapshot") {
     const [url, explicitName] = rest;
     if (!url) usage();
@@ -1134,6 +1347,15 @@ async function main(): Promise<void> {
       screenshot: path.relative(process.cwd(), artifactScreenshot),
       comparison,
     });
+    return;
+  }
+
+  if (command === "probe") {
+    const [url] = rest;
+    if (!url) usage();
+    const result = await probeUrl(session, url);
+    recordSession(session, { lastCommand: "probe", lastUrl: url, output: `${result.status ?? "n/a"}:${result.bodyLength}` });
+    printJson(result);
     return;
   }
 
