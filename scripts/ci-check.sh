@@ -68,6 +68,7 @@ run_ts scripts/review-diff.ts --help >/tmp/codex-stack-review-help.log
 run_ts scripts/issue-flow.ts --help >/tmp/codex-stack-issue-flow-help.log
 run_ts scripts/issue-flow.spec.ts >/tmp/codex-stack-issue-flow-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
+run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
