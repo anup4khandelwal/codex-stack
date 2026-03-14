@@ -61,12 +61,14 @@ bun scripts/review-diff.ts
 bun scripts/review-diff.ts --json
 bun scripts/review-diff.ts --base origin/main
 bun scripts/render-pr-review.ts --input review.json --markdown-out review.md --summary-out review-summary.json
+bun scripts/render-pr-review.ts --input review.json --preview-input preview.json --markdown-out review.md --summary-out review-summary.json
 ```
 
 Notes:
 
 - `pr-review.yml` uses `review-diff.ts` plus `render-pr-review.ts` to comment on every PR.
-- The review workflow fails when critical findings are present.
+- When `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, `pr-review.yml` also runs `preview-verify.ts` and merges the preview QA evidence into the review comment.
+- The review workflow fails when critical findings are present in either structural review or preview QA.
 
 ## Issue workflow
 
