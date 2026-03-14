@@ -1,11 +1,137 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync } from "node:child_process";
+import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
-function usage() {
+interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
+  allowFailure?: boolean;
+}
+
+interface ParsedArgs {
+  since: string;
+  out: string;
+  json: boolean;
+  jsonOut: string;
+  artifactDir: string;
+  noArtifacts: boolean;
+  repo: string;
+  noGithub: boolean;
+  githubLimit: number;
+}
+
+interface CommitRecord {
+  hash: string;
+  author: string;
+  date: string;
+  subject: string;
+}
+
+interface CountEntry {
+  name: string;
+  count: number;
+}
+
+interface RecentSubject {
+  subject: string;
+  author: string;
+}
+
+interface RetroArtifacts {
+  latestMarkdown: string;
+  latestJson: string;
+  snapshotMarkdown: string;
+  snapshotJson: string;
+}
+
+interface GithubAnalytics {
+  enabled: boolean;
+  reason: string;
+  repo: string;
+  source?: "graphql" | "rest";
+  scannedCount?: number;
+  mergedCount?: number;
+  openCount?: number;
+  closedUnmergedCount?: number;
+  draftCount?: number;
+  avgTimeToMergeHours?: number;
+  avgConversationCount?: number;
+  oldestOpenAgeHours?: number;
+  avgFirstReviewLatencyHours?: number;
+  pendingReviewCount?: number;
+  avgReviewsPerPr?: number;
+  topAuthors?: CountEntry[];
+  topReviewers?: CountEntry[];
+}
+
+interface RetroSummary {
+  since: string;
+  commitCount: number;
+  mergeCommits: number;
+  authorCount: number;
+  topAuthors: CountEntry[];
+  topAreas: CountEntry[];
+  recentSubjects: RecentSubject[];
+  recommendation: string;
+  github: GithubAnalytics;
+  artifacts: RetroArtifacts | Record<string, never>;
+}
+
+interface RepoParts {
+  owner: string;
+  name: string;
+}
+
+interface GraphqlAuthor {
+  login?: string | null;
+}
+
+interface GraphqlReviewNode {
+  createdAt: string;
+  state?: string;
+  author?: GraphqlAuthor | null;
+}
+
+interface GraphqlPullRequestNode {
+  number?: number;
+  state: string;
+  isDraft?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  mergedAt?: string | null;
+  author?: GraphqlAuthor | null;
+  comments?: {
+    totalCount?: number;
+  } | null;
+  reviews?: {
+    nodes?: GraphqlReviewNode[] | null;
+  } | null;
+}
+
+interface GraphqlPayload {
+  data?: {
+    repository?: {
+      pullRequests?: {
+        nodes?: GraphqlPullRequestNode[];
+      };
+    };
+  };
+}
+
+interface RestPullRequest {
+  user?: {
+    login?: string | null;
+  } | null;
+  state: string;
+  draft?: boolean;
+  created_at: string;
+  updated_at: string;
+  merged_at?: string | null;
+  comments?: number;
+  review_comments?: number;
+}
+
+function usage(): never {
   console.log(`retro-report
 
 Usage:
@@ -14,7 +140,7 @@ Usage:
   process.exit(0);
 }
 
-function run(cmd, options = {}) {
+function run(cmd: string, options: RunOptions = {}): string {
   try {
     const output = execSync(cmd, {
       encoding: "utf8",
@@ -22,32 +148,33 @@ function run(cmd, options = {}) {
       ...options,
     });
     return typeof output === "string" ? output.trim() : "";
-  } catch (error) {
+  } catch (error: unknown) {
     if (options.allowFailure) return "";
-    const stderr = error.stderr ? String(error.stderr) : "";
-    throw new Error(stderr || error.message);
+    const stderr = typeof error === "object" && error && "stderr" in error ? String((error as { stderr?: unknown }).stderr || "") : "";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(stderr || message);
   }
 }
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function writeFile(targetPath, content) {
+function writeFile(targetPath: string, content: string): void {
   ensureDir(path.dirname(targetPath));
   fs.writeFileSync(targetPath, content);
 }
 
-function timestampSlug() {
+function timestampSlug(): string {
   return new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
 }
 
-function round(value) {
+function round(value: number): number {
   return Number.isFinite(value) ? Math.round(value * 10) / 10 : 0;
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): ParsedArgs {
+  const out: ParsedArgs = {
     since: "7 days ago",
     out: "",
     json: false,
@@ -94,16 +221,16 @@ function parseArgs(argv) {
   return out;
 }
 
-function bucketCommits(raw) {
+function bucketCommits(raw: string): CommitRecord[] {
   const lines = raw.split(/\r?\n/).filter(Boolean);
   return lines.map((line) => {
-    const [hash, author, date, subject] = line.split("\t");
+    const [hash = "", author = "", date = "", subject = ""] = line.split("\t");
     return { hash, author, date, subject };
   });
 }
 
-function topCounts(items, selector, limit = 5) {
-  const map = new Map();
+function topCounts<T>(items: T[], selector: (item: T) => string, limit = 5): CountEntry[] {
+  const map = new Map<string, number>();
   for (const item of items) {
     const key = selector(item);
     if (!key) continue;
@@ -115,7 +242,7 @@ function topCounts(items, selector, limit = 5) {
     .slice(0, limit);
 }
 
-function summarizeWorkdirs(raw) {
+function summarizeWorkdirs(raw: string): CountEntry[] {
   const rows = raw.split(/\r?\n/).filter(Boolean);
   return topCounts(
     rows.map((row) => {
@@ -128,7 +255,7 @@ function summarizeWorkdirs(raw) {
   );
 }
 
-function parseSinceDate(since) {
+function parseSinceDate(since: string): Date | null {
   const trimmed = String(since || "").trim();
   const relative = trimmed.match(/^(\d+)\s+(hour|hours|day|days|week|weeks|month|months)\s+ago$/i);
   if (relative) {
@@ -145,23 +272,23 @@ function parseSinceDate(since) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function inferGithubRepo() {
+function inferGithubRepo(): string {
   const remote = run("git remote get-url origin", { allowFailure: true });
   const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
   return match ? match[1] : "";
 }
 
-function commandExists(command) {
+function commandExists(command: string): boolean {
   return Boolean(run(`command -v ${command}`, { allowFailure: true }));
 }
 
-function splitRepo(repo) {
+function splitRepo(repo: string): RepoParts | null {
   const [owner, name] = String(repo || "").split("/");
   if (!owner || !name) return null;
   return { owner, name };
 }
 
-function fetchGithubAnalyticsGraphql({ repo, since, limit }) {
+function fetchGithubAnalyticsGraphql({ repo, since, limit }: { repo: string; since: string; limit: number }): GithubAnalytics | null {
   const parts = splitRepo(repo);
   if (!parts) return null;
 
@@ -172,25 +299,25 @@ function fetchGithubAnalyticsGraphql({ repo, since, limit }) {
   );
   if (!raw) return null;
 
-  let payload;
+  let payload: GraphqlPayload;
   try {
-    payload = JSON.parse(raw);
+    payload = JSON.parse(raw) as GraphqlPayload;
   } catch {
     return null;
   }
 
-  const nodes = payload?.data?.repository?.pullRequests?.nodes;
+  const nodes = payload.data?.repository?.pullRequests?.nodes;
   if (!Array.isArray(nodes)) return null;
 
   const cutoff = parseSinceDate(since);
-  const filtered = nodes.filter((pr) => !cutoff || new Date(pr.updatedAt) >= cutoff);
+  const filtered = nodes.filter((pr) => !cutoff || new Date(pr.updatedAt).getTime() >= cutoff.getTime());
   const merged = filtered.filter((pr) => Boolean(pr.mergedAt));
   const open = filtered.filter((pr) => pr.state === "OPEN");
   const closedUnmerged = filtered.filter((pr) => pr.state === "CLOSED" && !pr.mergedAt);
   const draft = filtered.filter((pr) => Boolean(pr.isDraft));
   const withReviews = filtered.filter((pr) => Array.isArray(pr.reviews?.nodes) && pr.reviews.nodes.length > 0);
   const avgTimeToMergeHours = merged.length
-    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.mergedAt) - new Date(pr.createdAt)) / 36e5), 0) / merged.length)
+    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.mergedAt || pr.createdAt).getTime() - new Date(pr.createdAt).getTime()) / 36e5), 0) / merged.length)
     : 0;
   const avgConversationCount = filtered.length
     ? round(filtered.reduce((sum, pr) => sum + Number(pr.comments?.totalCount || 0) + Number(pr.reviews?.nodes?.length || 0), 0) / filtered.length)
@@ -200,11 +327,12 @@ function fetchGithubAnalyticsGraphql({ repo, since, limit }) {
     : 0;
   const avgFirstReviewLatencyHours = withReviews.length
     ? round(withReviews.reduce((sum, pr) => {
-      const sorted = [...pr.reviews.nodes].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-      return sum + ((new Date(sorted[0].createdAt) - new Date(pr.createdAt)) / 36e5);
+      const sorted = [...(pr.reviews?.nodes || [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const firstReview = sorted[0];
+      return sum + ((new Date(firstReview.createdAt).getTime() - new Date(pr.createdAt).getTime()) / 36e5);
     }, 0) / withReviews.length)
     : 0;
-  const pendingReviewCount = open.filter((pr) => (!pr.reviews?.nodes?.length) && ((Date.now() - new Date(pr.createdAt).getTime()) / 36e5 >= 24)).length;
+  const pendingReviewCount = open.filter((pr) => !pr.reviews?.nodes?.length && ((Date.now() - new Date(pr.createdAt).getTime()) / 36e5 >= 24)).length;
   const avgReviewsPerPr = filtered.length
     ? round(filtered.reduce((sum, pr) => sum + Number(pr.reviews?.nodes?.length || 0), 0) / filtered.length)
     : 0;
@@ -234,7 +362,7 @@ function fetchGithubAnalyticsGraphql({ repo, since, limit }) {
   };
 }
 
-function fetchGithubAnalytics({ repo, since, limit }) {
+function fetchGithubAnalytics({ repo, since, limit }: { repo: string; since: string; limit: number }): GithubAnalytics {
   if (!repo) {
     return { enabled: false, reason: "repo-unresolved", repo: "" };
   }
@@ -252,16 +380,16 @@ function fetchGithubAnalytics({ repo, since, limit }) {
     return { enabled: false, reason: "gh-unavailable", repo };
   }
 
-  let pulls;
+  let pulls: RestPullRequest[];
   try {
-    pulls = JSON.parse(raw);
+    pulls = JSON.parse(raw) as RestPullRequest[];
   } catch {
     return { enabled: false, reason: "gh-parse-error", repo };
   }
 
   const cutoff = parseSinceDate(since);
   const filtered = Array.isArray(pulls)
-    ? pulls.filter((pr) => !cutoff || new Date(pr.updated_at) >= cutoff)
+    ? pulls.filter((pr) => !cutoff || new Date(pr.updated_at).getTime() >= cutoff.getTime())
     : [];
 
   const merged = filtered.filter((pr) => Boolean(pr.merged_at));
@@ -269,7 +397,7 @@ function fetchGithubAnalytics({ repo, since, limit }) {
   const closedUnmerged = filtered.filter((pr) => pr.state === "closed" && !pr.merged_at);
   const draft = filtered.filter((pr) => Boolean(pr.draft));
   const avgTimeToMergeHours = merged.length
-    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.merged_at) - new Date(pr.created_at)) / 36e5), 0) / merged.length)
+    ? round(merged.reduce((sum, pr) => sum + ((new Date(pr.merged_at || pr.created_at).getTime() - new Date(pr.created_at).getTime()) / 36e5), 0) / merged.length)
     : 0;
   const avgConversationCount = filtered.length
     ? round(filtered.reduce((sum, pr) => sum + Number(pr.comments || 0) + Number(pr.review_comments || 0), 0) / filtered.length)
@@ -299,12 +427,12 @@ function fetchGithubAnalytics({ repo, since, limit }) {
   };
 }
 
-function recommendation(summary) {
-  if (summary.github.enabled && summary.github.pendingReviewCount >= 3) {
-    return `${summary.github.pendingReviewCount} open PRs have been waiting at least 24 hours for a first review. Rebalance reviewer load before opening new work.`;
+function recommendation(summary: RetroSummary): string {
+  if (summary.github.enabled && (summary.github.pendingReviewCount || 0) >= 3) {
+    return `${summary.github.pendingReviewCount || 0} open PRs have been waiting at least 24 hours for a first review. Rebalance reviewer load before opening new work.`;
   }
-  if (summary.github.enabled && summary.github.oldestOpenAgeHours >= 72) {
-    return `At least one open PR has been waiting for ${summary.github.oldestOpenAgeHours} hours. Clear review debt before new work piles up.`;
+  if (summary.github.enabled && (summary.github.oldestOpenAgeHours || 0) >= 72) {
+    return `At least one open PR has been waiting for ${summary.github.oldestOpenAgeHours || 0} hours. Clear review debt before new work piles up.`;
   }
   if (summary.mergeCommits > Math.max(2, summary.commitCount / 3)) {
     return "Too much merge churn this week. Tighten branch lifetimes and reduce parallel long-lived branches.";
@@ -318,7 +446,7 @@ function recommendation(summary) {
   return "Delivery looked steady. Keep PRs smaller and preserve explicit review ownership to avoid hidden rework.";
 }
 
-function toMarkdown(summary) {
+function toMarkdown(summary: RetroSummary): string {
   const authorLines = summary.topAuthors.length
     ? summary.topAuthors.map((item) => `- ${item.name}: ${item.count} commits`).join("\n")
     : "- none";
@@ -328,25 +456,25 @@ function toMarkdown(summary) {
   const subjectLines = summary.recentSubjects.length
     ? summary.recentSubjects.map((item) => `- ${item.subject}`).join("\n")
     : "- none";
-  const reviewerLines = summary.github.enabled && summary.github.topReviewers.length
-    ? summary.github.topReviewers.map((item) => `- ${item.name}: ${item.count} reviews`).join("\n")
+  const reviewerLines = summary.github.enabled && (summary.github.topReviewers?.length || 0)
+    ? (summary.github.topReviewers || []).map((item) => `- ${item.name}: ${item.count} reviews`).join("\n")
     : "- none";
   const githubSection = summary.github.enabled
     ? `## GitHub PR analytics
 
 - Repo: ${summary.github.repo}
 - Source: ${summary.github.source}
-- PRs scanned: ${summary.github.scannedCount}
-- Merged: ${summary.github.mergedCount}
-- Open: ${summary.github.openCount}
-- Closed without merge: ${summary.github.closedUnmergedCount}
-- Draft: ${summary.github.draftCount}
-- Avg time to merge: ${summary.github.avgTimeToMergeHours} hours
-- Avg conversation count: ${summary.github.avgConversationCount}
-- Avg first review latency: ${summary.github.avgFirstReviewLatencyHours} hours
-- Avg reviews per PR: ${summary.github.avgReviewsPerPr}
-- Pending review backlog (>24h, no reviews): ${summary.github.pendingReviewCount}
-- Oldest open PR age: ${summary.github.oldestOpenAgeHours} hours
+- PRs scanned: ${summary.github.scannedCount || 0}
+- Merged: ${summary.github.mergedCount || 0}
+- Open: ${summary.github.openCount || 0}
+- Closed without merge: ${summary.github.closedUnmergedCount || 0}
+- Draft: ${summary.github.draftCount || 0}
+- Avg time to merge: ${summary.github.avgTimeToMergeHours || 0} hours
+- Avg conversation count: ${summary.github.avgConversationCount || 0}
+- Avg first review latency: ${summary.github.avgFirstReviewLatencyHours || 0} hours
+- Avg reviews per PR: ${summary.github.avgReviewsPerPr || 0}
+- Pending review backlog (>24h, no reviews): ${summary.github.pendingReviewCount || 0}
+- Oldest open PR age: ${summary.github.oldestOpenAgeHours || 0} hours
 \n### Top reviewers\n\n${reviewerLines}
 `
     : `## GitHub PR analytics
@@ -382,7 +510,7 @@ ${subjectLines}
 ${githubSection}`;
 }
 
-function writeArtifacts(summary, markdown, artifactDir) {
+function writeArtifacts(summary: RetroSummary, markdown: string, artifactDir: string): RetroArtifacts {
   ensureDir(artifactDir);
   const stamp = timestampSlug();
   const latestMarkdown = path.join(artifactDir, "latest.md");
@@ -415,7 +543,7 @@ const github = args.noGithub
   ? { enabled: false, reason: "disabled", repo }
   : fetchGithubAnalytics({ repo, since: args.since, limit: args.githubLimit });
 
-const summary = {
+const summary: RetroSummary = {
   since: args.since,
   commitCount: commits.length,
   mergeCommits,
