@@ -33,8 +33,53 @@ jobs:
       - name: Run codex-stack review
         run: bun scripts/review-diff.ts --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
 
+      - name: Run preview verification for review evidence
+        if: vars.CODEX_STACK_PREVIEW_URL_TEMPLATE != ''
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CODEX_STACK_PREVIEW_URL_TEMPLATE: ${{ vars.CODEX_STACK_PREVIEW_URL_TEMPLATE }}
+          CODEX_STACK_PREVIEW_FLOW: ${{ vars.CODEX_STACK_PREVIEW_FLOW }}
+          CODEX_STACK_PREVIEW_SNAPSHOT: ${{ vars.CODEX_STACK_PREVIEW_SNAPSHOT }}
+        run: |
+          set -euo pipefail
+          args=(
+            "--repo" "${GITHUB_REPOSITORY}"
+            "--branch" "${GITHUB_HEAD_REF}"
+            "--sha" "${GITHUB_SHA}"
+            "--pr" "${PR_NUMBER}"
+            "--url-template" "${CODEX_STACK_PREVIEW_URL_TEMPLATE}"
+            "--publish-dir" "preview-artifacts"
+            "--markdown-out" "preview.md"
+            "--json-out" "preview.json"
+            "--comment-out" "preview-comment.md"
+          )
+
+          if [ -n "${CODEX_STACK_PREVIEW_FLOW}" ]; then
+            args+=("--flow" "${CODEX_STACK_PREVIEW_FLOW}")
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_SNAPSHOT}" ]; then
+            args+=("--snapshot" "${CODEX_STACK_PREVIEW_SNAPSHOT}")
+          fi
+
+          bun scripts/preview-verify.ts "${args[@]}"
+
       - name: Render review outputs
-        run: bun scripts/render-pr-review.ts --input review.json --markdown-out review.md --summary-out review-summary.json
+        run: |
+          set -euo pipefail
+          args=(
+            "--input" "review.json"
+            "--markdown-out" "review.md"
+            "--summary-out" "review-summary.json"
+          )
+          if [ -f preview.json ]; then
+            args+=("--preview-input" "preview.json")
+          fi
+          bun scripts/render-pr-review.ts "${args[@]}"
 
       - name: Add step summary
         run: cat review.md >> "$GITHUB_STEP_SUMMARY"
@@ -73,4 +118,13 @@ jobs:
             }
 
       - name: Fail on critical findings
-        run: bun scripts/render-pr-review.ts --input review.json --fail-on-critical >/tmp/codex-stack-pr-review.md
+        run: |
+          set -euo pipefail
+          args=(
+            "--input" "review.json"
+            "--fail-on-critical"
+          )
+          if [ -f preview.json ]; then
+            args+=("--preview-input" "preview.json")
+          fi
+          bun scripts/render-pr-review.ts "${args[@]}" >/tmp/codex-stack-pr-review.md

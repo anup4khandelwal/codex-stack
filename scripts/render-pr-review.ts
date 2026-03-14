@@ -18,6 +18,47 @@ interface ReviewReport {
   findings?: ReviewFinding[];
 }
 
+interface PreviewFinding {
+  severity?: string;
+  category?: string;
+  title?: string;
+  detail?: string;
+}
+
+interface PreviewQaReport {
+  status?: string;
+  healthScore?: number;
+  recommendation?: string;
+  findings?: PreviewFinding[];
+  snapshotResult?: {
+    name?: string;
+    status?: string;
+    screenshot?: string;
+    annotation?: string;
+  };
+  artifacts?: {
+    published?: {
+      markdown?: string;
+      json?: string;
+      annotation?: string;
+      screenshot?: string;
+    };
+  };
+}
+
+interface PreviewReport {
+  status?: string;
+  url?: string;
+  runUrl?: string;
+  recommendation?: string;
+  readiness?: {
+    status?: string;
+    attempts?: number;
+    httpStatus?: number | null;
+  };
+  qa?: PreviewQaReport;
+}
+
 interface ReviewSummary {
   status: string;
   branch: string;
@@ -27,10 +68,14 @@ interface ReviewSummary {
   warningCount: number;
   infoCount: number;
   blocking?: boolean;
+  previewIncluded?: boolean;
+  previewStatus?: string;
+  previewBlocking?: boolean;
 }
 
 interface ParsedArgs {
   input: string;
+  previewInput: string;
   markdownOut: string;
   summaryOut: string;
   failOnCritical: boolean;
@@ -41,7 +86,7 @@ function usage(): never {
   console.log(`render-pr-review
 
 Usage:
-  bun scripts/render-pr-review.ts --input <review.json> [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
+  bun scripts/render-pr-review.ts --input <review.json> [--preview-input <preview.json>] [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
 `);
   process.exit(0);
 }
@@ -49,6 +94,7 @@ Usage:
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
     input: "",
+    previewInput: "",
     markdownOut: "",
     summaryOut: "",
     failOnCritical: false,
@@ -58,6 +104,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     const arg = argv[i];
     if (arg === "--input") {
       out.input = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--preview-input") {
+      out.previewInput = argv[i + 1] || "";
       i += 1;
     } else if (arg === "--markdown-out") {
       out.markdownOut = argv[i + 1] || "";
@@ -87,6 +136,10 @@ function readJson(filePath: string): ReviewReport {
   return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8")) as ReviewReport;
 }
 
+function readPreviewJson(filePath: string): PreviewReport {
+  return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8")) as PreviewReport;
+}
+
 function countBySeverity(findings: ReviewFinding[], severity: string): number {
   return findings.filter((item) => item.severity === severity).length;
 }
@@ -99,7 +152,42 @@ function findingLines(findings: ReviewFinding[]): string[] {
   });
 }
 
-function renderMarkdown(review: ReviewReport, summary: ReviewSummary): string {
+function previewFindingLines(findings: PreviewFinding[]): string[] {
+  if (!findings.length) return ["- No preview findings."];
+  return findings.slice(0, 6).map((item) => {
+    const label = `${String(item.severity || "info").toUpperCase()}${item.category ? `/${String(item.category).toUpperCase()}` : ""}`;
+    return `- **${label}** ${item.title || "Finding"}${item.detail ? `: ${item.detail}` : ""}`;
+  });
+}
+
+function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary): string {
+  if (!preview) return "";
+  const findings = Array.isArray(preview.qa?.findings) ? preview.qa?.findings : [];
+  const published = preview.qa?.artifacts?.published || {};
+  const snapshot = preview.qa?.snapshotResult;
+  return `
+## Preview QA
+
+- Included: yes
+- Status: ${preview.status || "unknown"}
+- Readiness: ${preview.readiness?.status || "unknown"}${preview.readiness?.attempts ? ` after ${preview.readiness.attempts} attempt(s)` : ""}
+- Health score: ${preview.qa?.healthScore ?? "n/a"}
+- Block merge: ${summary.previewBlocking ? "yes" : "no"}
+- Recommendation: ${preview.recommendation || preview.qa?.recommendation || "n/a"}
+${preview.url ? `- Preview URL: ${preview.url}` : ""}
+${preview.runUrl ? `- Workflow run: ${preview.runUrl}` : ""}
+${published.markdown ? `- QA report: \`${published.markdown}\`` : ""}
+${published.annotation ? `- Annotation: \`${published.annotation}\`` : ""}
+${published.screenshot ? `- Screenshot: \`${published.screenshot}\`` : ""}
+${snapshot?.status ? `- Snapshot: ${snapshot.status}${snapshot.name ? ` (${snapshot.name})` : ""}` : ""}
+
+### Preview findings
+
+${previewFindingLines(findings).join("\n")}
+`;
+}
+
+function renderMarkdown(review: ReviewReport, summary: ReviewSummary, preview: PreviewReport | null): string {
   return `<!-- codex-stack:pr-review -->
 # codex-stack PR review
 
@@ -114,11 +202,12 @@ function renderMarkdown(review: ReviewReport, summary: ReviewSummary): string {
 ## Findings
 
 ${findingLines(review.findings ?? []).join("\n")}
-`;
+${renderPreviewSection(preview, summary)}`;
 }
 
 const args = parseArgs(process.argv.slice(2));
 const review = readJson(args.input);
+const preview = args.previewInput ? readPreviewJson(args.previewInput) : null;
 const findings: ReviewFinding[] = Array.isArray(review.findings) ? review.findings : [];
 const summary: ReviewSummary = {
   status: review.status || "ok",
@@ -129,8 +218,11 @@ const summary: ReviewSummary = {
   warningCount: countBySeverity(findings, "warning"),
   infoCount: countBySeverity(findings, "info"),
 };
-summary.blocking = summary.criticalCount > 0;
-const markdown = renderMarkdown(review, summary);
+summary.previewIncluded = Boolean(preview);
+summary.previewStatus = preview?.status || "";
+summary.previewBlocking = ["critical", "error"].includes(String(preview?.status || "").toLowerCase());
+summary.blocking = summary.criticalCount > 0 || summary.previewBlocking;
+const markdown = renderMarkdown(review, summary, preview);
 
 if (args.markdownOut) {
   const target = path.resolve(process.cwd(), args.markdownOut);

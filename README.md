@@ -145,8 +145,9 @@ bun src/cli.ts ship --message "feat: add issue-first workflow" --push --pr
 What happens next:
 
 - `pr-review.yml` runs `codex-stack` review on the PR diff
-- the workflow posts or updates a PR comment with findings
-- the job fails if critical findings are detected
+- when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, the same review workflow also runs preview QA and folds the visual evidence into the PR review comment
+- the workflow posts or updates a PR comment with structural findings plus any preview QA evidence
+- the job fails if critical findings are detected in either structural review or preview QA
 - if the PR has the `automerge` label, `pr-automerge.yml` enables GitHub auto-merge
 
 Branch naming matters: when the branch follows `<prefix>/<issue-number>-slug`, `ship` includes `Closes #<issue-number>` in the generated PR body so the issue closes on merge.
