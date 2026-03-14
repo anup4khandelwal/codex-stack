@@ -1,10 +1,112 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { createHash } from "node:crypto";
+
+type FlowFormat = "json" | "yaml" | "markdown";
+type FlowSource = "local" | "repo";
+type PlaywrightModule = any;
+type PlaywrightPage = any;
+type PlaywrightContext = any;
+type StepResult = Record<string, unknown>;
+
+interface SessionState {
+  name: string;
+  updatedAt: string;
+  lastCommand: string;
+  lastUrl: string;
+  output: string;
+  authenticated: boolean;
+  lastFlow: string;
+}
+
+interface BrowseState {
+  sessions: Record<string, SessionState>;
+}
+
+interface ParsedGlobalArgs {
+  session: string;
+  command: string;
+  rest: string[];
+}
+
+type FlowStep = Record<string, unknown>;
+
+interface LoadedFlowDocument {
+  absolute: string;
+  format: FlowFormat;
+  steps: FlowStep[];
+}
+
+interface FlowDirectoryEntry {
+  name: string;
+  steps: number;
+  path: string;
+  source: FlowSource;
+}
+
+interface ResolvedFlow {
+  name: string;
+  source: FlowSource;
+  path: string;
+  steps: FlowStep[];
+}
+
+interface SnapshotBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface SnapshotElement {
+  selector: string;
+  tag?: string;
+  text?: string;
+  bounds?: SnapshotBounds;
+}
+
+interface SnapshotPayload {
+  capturedAt: string;
+  url: string;
+  title: string;
+  bodyText: string;
+  page: {
+    width: number;
+    height: number;
+  };
+  elements: SnapshotElement[];
+  bodyHash: string;
+  name?: string;
+  screenshotPath?: string;
+  screenshotHash?: string;
+}
+
+interface ChangedSelectorEntry {
+  selector: string;
+  before?: string;
+  after?: string;
+}
+
+interface SnapshotComparison {
+  status: "changed" | "match";
+  summary: {
+    missingSelectors: number;
+    changedSelectors: number;
+    newSelectors: number;
+    titleChanged: boolean;
+    bodyTextChanged: boolean;
+    screenshotChanged: boolean;
+  };
+  missingSelectors: string[];
+  changedSelectors: ChangedSelectorEntry[];
+  newSelectors: string[];
+  titleChanged: boolean;
+  bodyTextChanged: boolean;
+  screenshotChanged: boolean;
+}
 
 const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
 const STATE_DIR = path.join(ROOT_DIR, "browse");
@@ -15,7 +117,7 @@ const SNAPSHOT_DIR = path.join(STATE_DIR, "snapshots");
 const ARTIFACT_DIR = path.join(STATE_DIR, "artifacts");
 const REPO_FLOW_DIR = path.resolve(process.cwd(), "browse", "flows");
 
-function usage() {
+function usage(): never {
   console.log(`codex-stack browse
 
 Usage:
@@ -53,11 +155,11 @@ Usage:
   process.exit(1);
 }
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function readJson(filePath, fallback) {
+function readJson<T>(filePath: string, fallback: T): T {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
@@ -65,20 +167,20 @@ function readJson(filePath, fallback) {
   }
 }
 
-function writeJson(filePath, payload) {
+function writeJson(filePath: string, payload: unknown): void {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
 }
 
-function readState() {
+function readState(): BrowseState {
   return readJson(STATE_PATH, { sessions: {} });
 }
 
-function writeState(payload) {
+function writeState(payload: BrowseState): void {
   writeJson(STATE_PATH, payload);
 }
 
-function getSessionState(name) {
+function getSessionState(name: string): { full: BrowseState; session: SessionState } {
   const full = readState();
   return {
     full,
@@ -94,35 +196,35 @@ function getSessionState(name) {
   };
 }
 
-function sessionProfileDir(name) {
+function sessionProfileDir(name: string): string {
   return path.join(SESSION_DIR, name);
 }
 
-function flowPath(name) {
+function flowPath(name: string): string {
   return path.join(FLOW_DIR, `${name}.json`);
 }
 
-function repoFlowPath(name) {
+function repoFlowPath(name: string): string {
   return path.join(REPO_FLOW_DIR, `${name}.json`);
 }
 
-function snapshotJsonPath(name) {
+function snapshotJsonPath(name: string): string {
   return path.join(SNAPSHOT_DIR, `${name}.json`);
 }
 
-function snapshotScreenshotPath(name) {
+function snapshotScreenshotPath(name: string): string {
   return path.join(SNAPSHOT_DIR, `${name}.png`);
 }
 
-function snapshotArtifactPath(name, suffix, ext) {
+function snapshotArtifactPath(name: string, suffix: string, ext: string): string {
   return path.join(ARTIFACT_DIR, `${name}-${suffix}.${ext}`);
 }
 
-function normalizeText(text) {
+function normalizeText(text: unknown): string {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-function slugify(value) {
+function slugify(value: string): string {
   return String(value || "")
     .toLowerCase()
     .replace(/https?:\/\//g, "")
@@ -131,7 +233,7 @@ function slugify(value) {
     .slice(0, 80) || "snapshot";
 }
 
-function defaultSnapshotName(url) {
+function defaultSnapshotName(url: string): string {
   try {
     const parsed = new URL(url);
     return slugify(`${parsed.hostname}${parsed.pathname}`.replace(/\/+/g, "-"));
@@ -140,23 +242,23 @@ function defaultSnapshotName(url) {
   }
 }
 
-function textHash(text) {
+function textHash(text: unknown): string {
   return createHash("sha256").update(String(text || "")).digest("hex");
 }
 
-function fileHash(filePath) {
+function fileHash(filePath: string): string {
   if (!fs.existsSync(filePath)) return "";
   return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-function assertFlowName(name) {
+function assertFlowName(name: string): void {
   if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
     throw new Error("Flow names may only contain letters, numbers, dot, underscore, and dash.");
   }
 }
 
-function parseGlobalArgs(argv) {
-  const out = { session: "default", command: "", rest: [] };
+function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
+  const out: ParsedGlobalArgs = { session: "default", command: "", rest: [] };
   const copy = [...argv];
   out.command = copy.shift() || "doctor";
 
@@ -166,12 +268,14 @@ function parseGlobalArgs(argv) {
       out.session = copy.shift() || "default";
       continue;
     }
-    out.rest.push(item);
+    if (typeof item === "string") {
+      out.rest.push(item);
+    }
   }
   return out;
 }
 
-function parseFlow(jsonText) {
+function parseFlow(jsonText: string): FlowStep[] | null {
   try {
     const steps = JSON.parse(jsonText);
     return Array.isArray(steps) ? steps : null;
@@ -180,7 +284,7 @@ function parseFlow(jsonText) {
   }
 }
 
-function detectFlowFormat(filePath) {
+function detectFlowFormat(filePath: string): FlowFormat {
   const ext = path.extname(String(filePath || "")).toLowerCase();
   if (ext === ".json") return "json";
   if (ext === ".yaml" || ext === ".yml") return "yaml";
@@ -188,7 +292,7 @@ function detectFlowFormat(filePath) {
   throw new Error("Unsupported flow format. Use .json, .yaml, .yml, or .md.");
 }
 
-function parseYamlScalar(rawValue) {
+function parseYamlScalar(rawValue: string): string | number | boolean | null {
   const value = String(rawValue || "").trim();
   if (value === "") return "";
   if (value === "null" || value === "~") return null;
@@ -205,9 +309,9 @@ function parseYamlScalar(rawValue) {
   return value;
 }
 
-function parseYamlFlow(text) {
-  const steps = [];
-  let current = null;
+function parseYamlFlow(text: string): FlowStep[] {
+  const steps: FlowStep[] = [];
+  let current: FlowStep | null = null;
 
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.replace(/\t/g, "  ");
@@ -246,14 +350,15 @@ function parseYamlFlow(text) {
   return steps;
 }
 
-function assertFlowSteps(steps, context = "flow") {
+function assertFlowSteps(steps: FlowStep[] | null, context = "flow"): asserts steps is FlowStep[] {
   assertCondition(Array.isArray(steps), `${context} must be a JSON/YAML array of step objects.`);
-  for (const [index, step] of steps.entries()) {
+  const flowSteps = steps as FlowStep[];
+  for (const [index, step] of flowSteps.entries()) {
     assertCondition(step && typeof step === "object" && !Array.isArray(step), `${context} step ${index + 1} must be an object.`);
   }
 }
 
-function parseMarkdownFlow(text) {
+function parseMarkdownFlow(text: string): FlowStep[] {
   const matches = [...String(text || "").matchAll(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g)];
   for (const match of matches) {
     const language = String(match[1] || "").toLowerCase();
@@ -276,7 +381,7 @@ function parseMarkdownFlow(text) {
   throw new Error("Markdown flow files must contain a fenced ```json or ```yaml block.");
 }
 
-function loadFlowDocument(filePath) {
+function loadFlowDocument(filePath: string): LoadedFlowDocument {
   const absolute = path.resolve(process.cwd(), filePath);
   const format = detectFlowFormat(absolute);
   const content = fs.readFileSync(absolute, "utf8");
@@ -292,13 +397,13 @@ function loadFlowDocument(filePath) {
   return { absolute, format, steps };
 }
 
-function yamlScalar(value) {
+function yamlScalar(value: unknown): string {
   if (value === null) return "null";
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(String(value ?? ""));
 }
 
-function toYamlFlow(steps) {
+function toYamlFlow(steps: FlowStep[]): string {
   return steps.map((step) => {
     const entries = Object.entries(step);
     if (!entries.length) return "- {}";
@@ -310,7 +415,7 @@ function toYamlFlow(steps) {
   }).join("\n");
 }
 
-function toMarkdownFlow(name, steps, source) {
+function toMarkdownFlow(name: string, steps: FlowStep[], source: FlowSource): string {
   return `# Flow: ${name}
 
 Exported from codex-stack browse.
@@ -330,7 +435,7 @@ bun src/cli.ts browse run-flow <url> ${name} --session demo
 `;
 }
 
-function exportFlowDocument(name, targetPath, flow) {
+function exportFlowDocument(name: string, targetPath: string, flow: ResolvedFlow): { absolute: string; format: FlowFormat } {
   const absolute = path.resolve(process.cwd(), targetPath);
   const format = detectFlowFormat(absolute);
   let content = "";
@@ -346,12 +451,13 @@ function exportFlowDocument(name, targetPath, flow) {
   return { absolute, format };
 }
 
-async function captureSnapshotPayload(page) {
+async function captureSnapshotPayload(page: PlaywrightPage): Promise<SnapshotPayload> {
   const snapshot = await page.evaluate(() => {
-    const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
-    const escape = (value) => (globalThis.CSS?.escape ? globalThis.CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&"));
+    const normalize = (value: unknown) => String(value || "").replace(/\s+/g, " ").trim();
+    const escape = (value: unknown) =>
+      globalThis.CSS?.escape ? globalThis.CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
 
-    const selectorFor = (element) => {
+    const selectorFor = (element: Element) => {
       if (!(element instanceof HTMLElement)) return "";
       if (element.id) return `#${escape(element.id)}`;
 
@@ -362,8 +468,8 @@ async function captureSnapshotPayload(page) {
       if (tag === "a" && element.getAttribute("href")) return `a[href="${escape(element.getAttribute("href")) || ""}"]`;
       if (element.hasAttribute("aria-label")) return `${tag}[aria-label="${escape(element.getAttribute("aria-label") || "")}"]`;
 
-      const parts = [];
-      let node = element;
+      const parts: string[] = [];
+      let node: HTMLElement | null = element;
       let depth = 0;
       while (node && node instanceof HTMLElement && depth < 5) {
         let part = node.tagName.toLowerCase();
@@ -384,9 +490,11 @@ async function captureSnapshotPayload(page) {
         if (node.hasAttribute("name")) {
           part += `[name="${escape(node.getAttribute("name") || "")}"]`;
         } else if (node.parentElement) {
-          const siblings = Array.from(node.parentElement.children).filter((child) => child.tagName === node.tagName);
+          const currentNode = node;
+          const parent = currentNode.parentElement as HTMLElement;
+          const siblings = Array.from(parent.children).filter((child) => child.tagName === currentNode.tagName);
           if (siblings.length > 1) {
-            part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+            part += `:nth-of-type(${siblings.indexOf(currentNode) + 1})`;
           }
         }
         parts.unshift(part);
@@ -414,8 +522,8 @@ async function captureSnapshotPayload(page) {
       "[aria-label]",
     ].join(",")));
 
-    const elements = [];
-    const seen = new Set();
+    const elements: Array<{ selector: string; tag: string; text: string; bounds: SnapshotBounds }> = [];
+    const seen = new Set<string>();
     for (const candidate of candidates) {
       if (!(candidate instanceof HTMLElement)) continue;
       const selector = selectorFor(candidate);
@@ -464,14 +572,18 @@ async function captureSnapshotPayload(page) {
   };
 }
 
-function compareSnapshotData(baseline, current, { baselineScreenshotHash = "", currentScreenshotHash = "" } = {}) {
-  const baselineElements = Array.isArray(baseline?.elements) ? baseline.elements : [];
-  const currentElements = Array.isArray(current?.elements) ? current.elements : [];
+function compareSnapshotData(
+  baseline: Partial<SnapshotPayload> | null,
+  current: Partial<SnapshotPayload>,
+  { baselineScreenshotHash = "", currentScreenshotHash = "" }: { baselineScreenshotHash?: string; currentScreenshotHash?: string } = {},
+): SnapshotComparison {
+  const baselineElements = (Array.isArray(baseline?.elements) ? baseline.elements : []) as SnapshotElement[];
+  const currentElements = (Array.isArray(current?.elements) ? current.elements : []) as SnapshotElement[];
   const baselineMap = new Map(baselineElements.map((item) => [item.selector, item]));
   const currentMap = new Map(currentElements.map((item) => [item.selector, item]));
 
-  const missingSelectors = [];
-  const changedSelectors = [];
+  const missingSelectors: string[] = [];
+  const changedSelectors: ChangedSelectorEntry[] = [];
   for (const item of baselineElements) {
     const next = currentMap.get(item.selector);
     if (!next) {
@@ -517,13 +629,13 @@ function compareSnapshotData(baseline, current, { baselineScreenshotHash = "", c
   };
 }
 
-function isPreNavigationStep(step) {
+function isPreNavigationStep(step: FlowStep): boolean {
   const action = String(step?.action || "");
   return action === "clear-storage";
 }
 
-function expandFlowSteps(steps, stack = []) {
-  const expanded = [];
+function expandFlowSteps(steps: FlowStep[], stack: string[] = []): FlowStep[] {
+  const expanded: FlowStep[] = [];
   for (const step of steps) {
     if (step && typeof step === "object" && String(step.action || "") === "use-flow") {
       const flowName = String(step.name || step.flow || "").trim();
@@ -540,7 +652,7 @@ function expandFlowSteps(steps, stack = []) {
   return expanded;
 }
 
-function readFlowDirectory(dirPath, source) {
+function readFlowDirectory(dirPath: string, source: FlowSource): FlowDirectoryEntry[] {
   if (!fs.existsSync(dirPath)) return [];
   return fs.readdirSync(dirPath)
     .filter((name) => name.endsWith(".json"))
@@ -556,9 +668,9 @@ function readFlowDirectory(dirPath, source) {
     });
 }
 
-function listNamedFlows() {
+function listNamedFlows(): FlowDirectoryEntry[] {
   ensureDir(FLOW_DIR);
-  const map = new Map();
+  const map = new Map<string, FlowDirectoryEntry>();
   for (const entry of readFlowDirectory(REPO_FLOW_DIR, "repo")) {
     map.set(entry.name, entry);
   }
@@ -568,7 +680,7 @@ function listNamedFlows() {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function resolveNamedFlow(name) {
+function resolveNamedFlow(name: string): ResolvedFlow {
   assertFlowName(name);
   const localPath = flowPath(name);
   if (fs.existsSync(localPath)) {
@@ -591,21 +703,21 @@ function resolveNamedFlow(name) {
   throw new Error(`Unknown flow: ${name}`);
 }
 
-function loadNamedFlow(name) {
+function loadNamedFlow(name: string): FlowStep[] {
   return resolveNamedFlow(name).steps;
 }
 
-function saveNamedFlow(name, steps) {
+function saveNamedFlow(name: string, steps: FlowStep[]): void {
   assertFlowName(name);
   writeJson(flowPath(name), steps);
 }
 
-function saveRepoFlow(name, steps) {
+function saveRepoFlow(name: string, steps: FlowStep[]): void {
   assertFlowName(name);
   writeJson(repoFlowPath(name), steps);
 }
 
-function recordSession(sessionName, patch) {
+function recordSession(sessionName: string, patch: Partial<SessionState>): void {
   const state = readState();
   if (!state.sessions) state.sessions = {};
   state.sessions[sessionName] = {
@@ -617,13 +729,13 @@ function recordSession(sessionName, patch) {
   writeState(state);
 }
 
-function assertCondition(condition, message) {
+function assertCondition(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
 }
 
-async function loadPlaywright() {
+async function loadPlaywright(): Promise<PlaywrightModule | null> {
   try {
     const mod = await import("playwright");
     return mod;
@@ -632,7 +744,11 @@ async function loadPlaywright() {
   }
 }
 
-async function withPage(sessionName, url, callback) {
+async function withPage<T>(
+  sessionName: string,
+  url: string,
+  callback: ({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>,
+): Promise<T> {
   const playwright = await loadPlaywright();
   if (!playwright) {
     throw new Error("Playwright is not installed. Run `bun install` and `bunx playwright install chromium`.");
@@ -641,11 +757,11 @@ async function withPage(sessionName, url, callback) {
   ensureDir(SESSION_DIR);
   const userDataDir = sessionProfileDir(sessionName);
 
-  let context;
+  let context: PlaywrightContext;
   try {
     context = await playwright.chromium.launchPersistentContext(userDataDir, { headless: true });
-  } catch (error) {
-    const message = String(error?.message || error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     if (/machport|permission denied|sandbox|Target page, context or browser has been closed/i.test(message)) {
       throw new Error("Unable to launch Chromium in the current sandboxed environment. Run the same command in a normal local shell after `bunx playwright install chromium`.");
     }
@@ -664,7 +780,7 @@ async function withPage(sessionName, url, callback) {
   }
 }
 
-async function runStep(page, step, sessionName) {
+async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string): Promise<StepResult> {
   if (!step || typeof step !== "object") {
     return { action: "unknown", status: "skipped" };
   }
@@ -745,8 +861,8 @@ async function runStep(page, step, sessionName) {
   if (action === "clear-storage") {
     const scope = String(step.scope || "both");
     const key = step.key === undefined || step.key === null ? "" : String(step.key);
-    await page.evaluate(({ scope, key }) => {
-      const clearBucket = (storage) => {
+    await page.evaluate(({ scope, key }: { scope: string; key: string }) => {
+      const clearBucket = (storage: Storage) => {
         if (key) storage.removeItem(key);
         else storage.clear();
       };
@@ -762,17 +878,29 @@ async function runStep(page, step, sessionName) {
   return { action, status: "unsupported" };
 }
 
-async function executeFlow({ sessionName, url, steps, recordName, authenticated = false }) {
+async function executeFlow({
+  sessionName,
+  url,
+  steps,
+  recordName,
+  authenticated = false,
+}: {
+  sessionName: string;
+  url: string;
+  steps: FlowStep[];
+  recordName: string;
+  authenticated?: boolean;
+}): Promise<StepResult[]> {
   const expandedSteps = expandFlowSteps(steps);
-  const preNavigationSteps = [];
-  const postNavigationSteps = [];
+  const preNavigationSteps: FlowStep[] = [];
+  const postNavigationSteps: FlowStep[] = [];
   for (const step of expandedSteps) {
     if (!postNavigationSteps.length && isPreNavigationStep(step)) preNavigationSteps.push(step);
     else postNavigationSteps.push(step);
   }
 
-  const results = await withPage(sessionName, "", async ({ page }) => {
-    const entries = [];
+  const results = await withPage(sessionName, "", async ({ page }: { page: PlaywrightPage }) => {
+    const entries: StepResult[] = [];
     if (preNavigationSteps.length) {
       if (url) {
         const origin = new URL(url).origin;
@@ -800,11 +928,11 @@ async function executeFlow({ sessionName, url, steps, recordName, authenticated 
   return results;
 }
 
-function printJson(value) {
+function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-async function main() {
+async function main(): Promise<void> {
   const parsed = parseGlobalArgs(process.argv.slice(2));
   const { command, rest, session } = parsed;
 
@@ -931,7 +1059,7 @@ async function main() {
     ensureDir(SNAPSHOT_DIR);
     const baselineJson = snapshotJsonPath(snapshotName);
     const baselineScreenshot = snapshotScreenshotPath(snapshotName);
-    const payload = await withPage(session, url, async ({ page }) => {
+    const payload = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       const snapshot = await captureSnapshotPayload(page);
       await page.screenshot({ path: baselineScreenshot, fullPage: true });
       return snapshot;
@@ -970,9 +1098,10 @@ async function main() {
     const stamp = `${Date.now()}`;
     const artifactJson = snapshotArtifactPath(snapshotName, stamp, "json");
     const artifactScreenshot = snapshotArtifactPath(snapshotName, stamp, "png");
-    const baseline = readJson(baselineJson, null);
+    const baseline = readJson<SnapshotPayload | null>(baselineJson, null);
     assertCondition(Boolean(baseline), `Unable to read snapshot baseline: ${baselineJson}`);
-    const current = await withPage(session, url, async ({ page }) => {
+    const baselineSnapshot = baseline as SnapshotPayload;
+    const current = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       const payload = await captureSnapshotPayload(page);
       await page.screenshot({ path: artifactScreenshot, fullPage: true });
       return payload;
@@ -984,8 +1113,8 @@ async function main() {
       screenshotHash: fileHash(artifactScreenshot),
     };
     writeJson(artifactJson, currentSnapshot);
-    const comparison = compareSnapshotData(baseline, currentSnapshot, {
-      baselineScreenshotHash: baseline.screenshotHash || fileHash(snapshotScreenshotPath(snapshotName)),
+    const comparison = compareSnapshotData(baselineSnapshot, currentSnapshot, {
+      baselineScreenshotHash: baselineSnapshot.screenshotHash || fileHash(snapshotScreenshotPath(snapshotName)),
       currentScreenshotHash: currentSnapshot.screenshotHash,
     });
     recordSession(session, {
@@ -1007,7 +1136,7 @@ async function main() {
   if (command === "text") {
     const url = rest[0];
     if (!url) usage();
-    const text = await withPage(session, url, async ({ page }) => page.locator("body").innerText());
+    const text = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => page.locator("body").innerText());
     recordSession(session, { lastCommand: "text", lastUrl: url, output: `${text.length} chars` });
     console.log(text);
     return;
@@ -1016,7 +1145,7 @@ async function main() {
   if (command === "html") {
     const [url, selector] = rest;
     if (!url) usage();
-    const html = await withPage(session, url, async ({ page }) => (selector ? page.locator(selector).first().innerHTML() : page.content()));
+    const html = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => (selector ? page.locator(selector).first().innerHTML() : page.content()));
     recordSession(session, { lastCommand: "html", lastUrl: url, output: `${html.length} chars` });
     console.log(html);
     return;
@@ -1025,9 +1154,9 @@ async function main() {
   if (command === "links") {
     const url = rest[0];
     if (!url) usage();
-    const links = await withPage(session, url, async ({ page }) =>
-      page.$$eval("a[href]", (anchors) =>
-        anchors.map((anchor) => ({
+    const links = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) =>
+      page.$$eval("a[href]", (anchors: HTMLAnchorElement[]) =>
+        anchors.map((anchor: HTMLAnchorElement) => ({
           text: (anchor.textContent || "").trim(),
           href: anchor.href,
         }))
@@ -1042,7 +1171,7 @@ async function main() {
     const url = rest[0];
     const outPath = rest[1] || path.join(os.tmpdir(), `codex-stack-browse-${session}.png`);
     if (!url) usage();
-    await withPage(session, url, async ({ page }) => page.screenshot({ path: outPath, fullPage: true }));
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => page.screenshot({ path: outPath, fullPage: true }));
     recordSession(session, { lastCommand: "screenshot", lastUrl: url, output: outPath });
     console.log(outPath);
     return;
@@ -1051,7 +1180,9 @@ async function main() {
   if (command === "eval") {
     const [url, expression] = rest;
     if (!url || !expression) usage();
-    const result = await withPage(session, url, async ({ page }) => page.evaluate((expressionText) => eval(expressionText), expression));
+    const result = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) =>
+      page.evaluate((expressionText: string) => eval(expressionText), expression)
+    );
     recordSession(session, { lastCommand: "eval", lastUrl: url });
     console.log(typeof result === "string" ? result : JSON.stringify(result, null, 2));
     return;
@@ -1060,7 +1191,7 @@ async function main() {
   if (command === "click") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       await page.locator(selector).first().click();
     });
     recordSession(session, { lastCommand: "click", lastUrl: url, output: selector });
@@ -1071,7 +1202,7 @@ async function main() {
   if (command === "fill") {
     const [url, selector, value] = rest;
     if (!url || !selector || value === undefined) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       await page.locator(selector).first().fill(value);
     });
     recordSession(session, { lastCommand: "fill", lastUrl: url, output: selector });
@@ -1082,7 +1213,7 @@ async function main() {
   if (command === "wait") {
     const [url, target] = rest;
     if (!url) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       if (!target) {
         await page.waitForLoadState("networkidle");
         return;
@@ -1105,7 +1236,7 @@ async function main() {
   if (command === "press") {
     const [url, selector, key] = rest;
     if (!url || !selector || !key) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       await page.locator(selector).first().press(key);
     });
     recordSession(session, { lastCommand: "press", lastUrl: url, output: `${selector}:${key}` });
@@ -1116,7 +1247,7 @@ async function main() {
   if (command === "assert-visible") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       await page.locator(selector).first().waitFor({ state: "visible" });
     });
     recordSession(session, { lastCommand: "assert-visible", lastUrl: url, output: selector });
@@ -1127,7 +1258,7 @@ async function main() {
   if (command === "assert-text") {
     const [url, selector, expected] = rest;
     if (!url || !selector || expected === undefined) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       const text = await page.locator(selector).first().innerText();
       assertCondition(text.includes(expected), `Expected text ${JSON.stringify(expected)} in ${selector}.`);
     });
@@ -1139,7 +1270,7 @@ async function main() {
   if (command === "assert-url") {
     const [url, expected] = rest;
     if (!url || expected === undefined) usage();
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       const currentUrl = page.url();
       assertCondition(currentUrl.includes(expected), `Expected URL to include ${JSON.stringify(expected)} but got ${JSON.stringify(currentUrl)}.`);
     });
@@ -1153,7 +1284,7 @@ async function main() {
     if (!url || !selector || expectedCountRaw === undefined) usage();
     const expectedCount = Number(expectedCountRaw);
     assertCondition(Number.isInteger(expectedCount), "Expected count must be an integer.");
-    await withPage(session, url, async ({ page }) => {
+    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
       const count = await page.locator(selector).count();
       assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     });
@@ -1167,6 +1298,7 @@ async function main() {
     if (!url || !jsonSteps) usage();
     const steps = parseFlow(jsonSteps);
     assertCondition(Boolean(steps), "Invalid JSON steps. Example: [{\"action\":\"click\",\"selector\":\"button\"}]");
+    assertFlowSteps(steps, "inline flow");
     const out = await executeFlow({
       sessionName: session,
       url,
@@ -1195,11 +1327,11 @@ async function main() {
   usage();
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error(cleanError(error));
   process.exit(1);
 });
 
-function cleanError(error) {
+function cleanError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
