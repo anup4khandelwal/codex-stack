@@ -18,6 +18,7 @@ const currentPath = path.join(fixtureRoot, "current.json");
 const screenshotPath = path.join(fixtureRoot, "snapshot-screenshot.png");
 const pageScreenshotA = path.join(fixtureRoot, "page-a.png");
 const pageScreenshotB = path.join(fixtureRoot, "page-b.png");
+const sessionBundlePath = path.join(fixtureRoot, "session-bundle.json");
 const markdownOut = path.join(fixtureRoot, "deploy.md");
 const jsonOut = path.join(fixtureRoot, "deploy.json");
 const commentOut = path.join(fixtureRoot, "deploy-comment.md");
@@ -28,6 +29,30 @@ async function main(): Promise<void> {
   fs.writeFileSync(screenshotPath, png);
   fs.writeFileSync(pageScreenshotA, png);
   fs.writeFileSync(pageScreenshotB, png);
+  fs.writeFileSync(sessionBundlePath, JSON.stringify({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    session: "deploy",
+    metadata: {
+      name: "deploy",
+      authenticated: true,
+    },
+    storageState: {
+      cookies: [
+        {
+          name: "session",
+          value: "fixture",
+          domain: "preview-77.example.com",
+          path: "/",
+        },
+      ],
+      origins: [],
+    },
+    source: {
+      type: "manual",
+      exportedFrom: "fixture",
+    },
+  }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "portal-dashboard",
     elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
@@ -114,6 +139,8 @@ async function main(): Promise<void> {
     "portal-dashboard",
     "--snapshot",
     "portal-dashboard",
+    "--session-bundle",
+    sessionBundlePath,
     "--strict-http",
     "--publish-dir",
     publishDir,

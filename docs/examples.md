@@ -88,6 +88,7 @@ bun src/cli.ts browse export-flow portal-full-demo /tmp/portal-full-demo.md
 bun src/cli.ts browse import-flow portal-copy /tmp/portal-full-demo.md
 bun src/cli.ts browse export-session /tmp/portal-session.json --session friend-demo
 bun src/cli.ts browse import-session /tmp/portal-session.json --session friend-demo-copy
+bun src/cli.ts browse import-browser-cookies chrome --session friend-demo --profile Default
 bun src/cli.ts browse probe http://127.0.0.1:4173/dashboard --session friend-demo
 bun src/cli.ts browse upload http://127.0.0.1:4173/profile "input[type=file]" ./fixtures/avatar.png --session friend-demo
 bun src/cli.ts browse dialog http://127.0.0.1:4173/settings accept "#delete-confirm" --session friend-demo
@@ -105,6 +106,23 @@ bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --sessio
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
 bun src/cli.ts browse screenshot http://127.0.0.1:4173/dashboard /tmp/customer-portal-demo.png --session friend-demo
+```
+
+## Authenticated preview verification
+
+```bash
+bun src/cli.ts browse import-browser-cookies chrome --session preview-auth --profile Default
+bun src/cli.ts browse export-session .codex-stack/private/preview-auth.json --session preview-auth
+bun src/cli.ts preview \
+  --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" \
+  --pr 42 \
+  --branch feat/42-preview \
+  --sha abcdef1234567890 \
+  --path /dashboard \
+  --device desktop \
+  --flow portal-dashboard \
+  --session preview-auth \
+  --session-bundle .codex-stack/private/preview-auth.json
 ```
 
 ## Retro mode

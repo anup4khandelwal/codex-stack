@@ -31,6 +31,7 @@ Give the agent eyes for QA and deployment checks.
 - `export-session <path>`
 - `import-session <path>`
 - `import-cookies <path>`
+- `import-browser-cookies <browser>`
 - `snapshot <url> [name]`
 - `compare-snapshot <url> <name>`
 - `probe <url>`
@@ -78,6 +79,7 @@ bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
 bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
 bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
 bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
+bun src/cli.ts browse import-browser-cookies chrome --session staging --profile Default
 bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
 bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
@@ -112,6 +114,7 @@ bun src/cli.ts browse sessions
 - Reuse named sessions for authenticated flows so login state persists.
 - Use `--device mobile|tablet|desktop` when the check is viewport-sensitive or when a bug only reproduces responsively.
 - Export/import session bundles when authenticated QA needs to move between machines or named sessions.
+- Use `import-browser-cookies` on macOS when you already have a signed-in Chrome, Arc, Brave, or Edge profile and want to bootstrap a named Codex session quickly.
 - Use `dialog` before the click that triggers a modal or confirm prompt so the handler is armed in time.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.

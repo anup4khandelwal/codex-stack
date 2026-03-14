@@ -17,6 +17,7 @@ const baselinePath = path.join(fixtureRoot, "baseline.json");
 const currentPath = path.join(fixtureRoot, "current.json");
 const screenshotPath = path.join(fixtureRoot, "screenshot.png");
 const pageScreenshot = path.join(fixtureRoot, "page.png");
+const sessionBundlePath = path.join(fixtureRoot, "session-bundle.json");
 const markdownOut = path.join(fixtureRoot, "preview.md");
 const jsonOut = path.join(fixtureRoot, "preview.json");
 const commentOut = path.join(fixtureRoot, "preview-comment.md");
@@ -26,6 +27,30 @@ async function main(): Promise<void> {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=", "base64");
   fs.writeFileSync(screenshotPath, png);
   fs.writeFileSync(pageScreenshot, png);
+  fs.writeFileSync(sessionBundlePath, JSON.stringify({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    session: "preview",
+    metadata: {
+      name: "preview",
+      authenticated: true,
+    },
+    storageState: {
+      cookies: [
+        {
+          name: "session",
+          value: "fixture",
+          domain: "preview-42.example.com",
+          path: "/",
+        },
+      ],
+      origins: [],
+    },
+    source: {
+      type: "manual",
+      exportedFrom: "fixture",
+    },
+  }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "landing-home",
     elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
@@ -90,6 +115,8 @@ async function main(): Promise<void> {
     "landing-smoke",
     "--snapshot",
     "landing-home",
+    "--session-bundle",
+    sessionBundlePath,
     "--publish-dir",
     publishDir,
     "--markdown-out",

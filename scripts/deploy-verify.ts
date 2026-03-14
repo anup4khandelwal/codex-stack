@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execSync, spawnSync } from "node:child_process";
+import { readSessionBundle, type SessionStorageEntry } from "../browse/src/session-bundle.ts";
 
 type DeployStatus = "pass" | "warning" | "critical" | "error";
 type UrlSource = "direct" | "template";
@@ -26,6 +27,7 @@ export interface DeployArgs {
   snapshots: string[];
   updateSnapshot: boolean;
   session: string;
+  sessionBundle: string;
   publishDir: string;
   markdownOut: string;
   jsonOut: string;
@@ -210,7 +212,7 @@ function usage(): never {
   console.log(`deploy-verify
 
 Usage:
-  bun scripts/deploy-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
+  bun scripts/deploy-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
 `);
   process.exit(0);
 }
@@ -292,6 +294,7 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
     snapshots: [],
     updateSnapshot: false,
     session: "",
+    sessionBundle: "",
     publishDir: "",
     markdownOut: "",
     jsonOut: "",
@@ -342,6 +345,9 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
       args.updateSnapshot = true;
     } else if (arg === "--session") {
       args.session = cleanSubject(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--session-bundle") {
+      args.sessionBundle = path.resolve(process.cwd(), argv[i + 1] || "");
       i += 1;
     } else if (arg === "--publish-dir") {
       args.publishDir = path.resolve(process.cwd(), argv[i + 1] || "");
@@ -644,6 +650,43 @@ function sessionProfileDir(sessionName: string): string {
   return path.join(BROWSE_SESSION_DIR, sessionName);
 }
 
+async function applySessionBundleToContext(
+  context: PlaywrightContext,
+  bundle: ReturnType<typeof readSessionBundle>,
+): Promise<void> {
+  if (typeof context.clearCookies === "function") {
+    await context.clearCookies();
+  }
+  if (Array.isArray(bundle.storageState.cookies) && bundle.storageState.cookies.length) {
+    await context.addCookies(bundle.storageState.cookies as Array<Record<string, unknown>>);
+  }
+
+  for (const originState of bundle.storageState.origins || []) {
+    const page = context.pages()[0] || (await context.newPage());
+    try {
+      await page.goto(originState.origin, { waitUntil: "domcontentloaded" });
+    } catch {
+      // Best effort: restore storage even if the page does not fully load.
+    }
+    await page.evaluate(
+      ({ localStorageEntries, sessionStorageEntries }: { localStorageEntries: SessionStorageEntry[]; sessionStorageEntries: SessionStorageEntry[] }) => {
+        window.localStorage.clear();
+        for (const entry of localStorageEntries) {
+          window.localStorage.setItem(entry.name, entry.value);
+        }
+        window.sessionStorage.clear();
+        for (const entry of sessionStorageEntries) {
+          window.sessionStorage.setItem(entry.name, entry.value);
+        }
+      },
+      {
+        localStorageEntries: originState.localStorage || [],
+        sessionStorageEntries: originState.sessionStorage || [],
+      },
+    );
+  }
+}
+
 async function withPersistentContext<T>(sessionName: string, callback: ({ context }: { context: PlaywrightContext }) => Promise<T>): Promise<T> {
   const playwright = await loadPlaywright();
   if (!playwright) {
@@ -669,6 +712,28 @@ async function withPersistentContext<T>(sessionName: string, callback: ({ contex
   } finally {
     await context.close();
   }
+}
+
+function validateSessionBundleFile(bundlePath: string, sessionName: string): string {
+  const absolute = path.resolve(process.cwd(), bundlePath);
+  try {
+    readSessionBundle(absolute, sessionName);
+  } catch {
+    throw new Error("Invalid session bundle. Export a fresh bundle with `bun src/cli.ts browse export-session <path>` and retry.");
+  }
+  return absolute;
+}
+
+async function prepareSessionBundle(args: DeployArgs, sessionName: string): Promise<string> {
+  if (!args.sessionBundle) return "";
+  const absolute = validateSessionBundleFile(args.sessionBundle, sessionName);
+  const needsRuntimeImport = !args.fixture || (!args.qaFixture && (args.flows.length > 0 || args.snapshots.length > 0));
+  if (!needsRuntimeImport) return absolute;
+  const bundle = readSessionBundle(absolute, sessionName);
+  await withPersistentContext(sessionName, async ({ context }) => {
+    await applySessionBundleToContext(context, bundle);
+  });
+  return absolute;
 }
 
 async function applyDevicePreset(page: PlaywrightPage, device: DeviceName): Promise<void> {
@@ -789,6 +854,7 @@ function verifyTargetsFromFixture(args: DeployArgs, targets: VerifyTarget[], scr
 function runQaReport({
   url,
   session,
+  sessionBundle,
   publishDir,
   flows,
   snapshot,
@@ -797,6 +863,7 @@ function runQaReport({
 }: {
   url: string;
   session: string;
+  sessionBundle: string;
   publishDir: string;
   flows: string[];
   snapshot: string;
@@ -810,6 +877,9 @@ function runQaReport({
     qaArgs.push(url);
   }
   qaArgs.push("--session", session, "--publish-dir", publishDir, "--json");
+  if (sessionBundle) {
+    qaArgs.push("--session-bundle", sessionBundle);
+  }
   for (const flow of flows) {
     qaArgs.push("--flow", flow);
   }
@@ -862,6 +932,7 @@ function aggregateQa({
   }
 
   const sessionName = cleanSubject(args.session);
+  const sessionBundle = args.sessionBundle;
   const targetPath = ensureLeadingSlash(defaultPath || "/");
   const targetUrl = urlForPath(baseUrl, targetPath);
   const reports: Array<{ report: QaRunReport; snapshotName: string; publishDir: string; targetPath: string; device: DeviceName }> = [];
@@ -872,6 +943,7 @@ function aggregateQa({
     report: runQaReport({
       url: targetUrl,
       session: sessionName,
+      sessionBundle,
       publishDir: primaryPublishDir,
         flows,
         snapshot: primarySnapshot,
@@ -890,6 +962,7 @@ function aggregateQa({
       report: runQaReport({
         url: targetUrl,
         session: sessionName,
+        sessionBundle,
         publishDir: snapshotPublishDir,
         flows: [],
         snapshot,
@@ -1093,6 +1166,7 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
   const context = buildContext(args);
   const resolved = resolveDeployUrl(args, context);
   const session = cleanSubject(args.session) || defaultSession(context);
+  const sessionBundle = await prepareSessionBundle(args, session);
   const publishDir = args.publishDir || defaultPublishDir(context);
   const screenshotsDir = path.join(publishDir, "screenshots");
   ensureDir(screenshotsDir);
@@ -1124,7 +1198,7 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     }
 
     qa = aggregateQa({
-      args: { ...args, session, publishDir },
+      args: { ...args, session, sessionBundle, publishDir },
       baseUrl: resolved.url,
       publishDir,
       defaultPath: args.paths[0] || "/",

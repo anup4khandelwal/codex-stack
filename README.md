@@ -166,9 +166,12 @@ bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
+bun src/cli.ts qa https://preview.example.com/dashboard --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
 bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
 bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -178,6 +181,7 @@ bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
 bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
 bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
+bun src/cli.ts browse import-browser-cookies chrome --session staging --profile Default
 bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
 bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
@@ -227,6 +231,7 @@ Use `browse` when you want raw control:
 - iframe targeting by frame name, URL fragment, or iframe selector
 - request blocking and mocked responses for repeatable QA and failure-path testing
 - download capture and filename assertions for export flows
+- local browser-profile import for Chrome, Arc, Brave, and Edge on macOS
 - screenshots and artifacts
 
 Use `qa` when you want a decision-ready report:
@@ -259,6 +264,25 @@ bun src/cli.ts preview \
 ```
 
 For same-repo PRs, `pr-review.yml` publishes this preview site automatically to GitHub Pages before it verifies the deployment. `preview-verify.yml` remains available as a manual rerun or for external preview URLs.
+
+Authenticated previews use the same session bundle format as `browse export-session`:
+
+```bash
+bun src/cli.ts browse import-browser-cookies chrome --session preview-auth --profile Default
+bun src/cli.ts browse export-session .codex-stack/private/preview-auth.json --session preview-auth
+bun src/cli.ts preview \
+  --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" \
+  --pr 42 \
+  --branch feat/42-preview \
+  --sha abcdef1234567890 \
+  --path /dashboard \
+  --device desktop \
+  --flow portal-dashboard \
+  --session preview-auth \
+  --session-bundle .codex-stack/private/preview-auth.json
+```
+
+For CI, base64-encode that bundle and save it as the repo secret `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64`. `pr-review.yml` and `preview-verify.yml` decode it into a temp file, pass `--session-bundle` into preview verification, and delete the temp file before the job exits.
 
 ## Ship verification
 
@@ -327,6 +351,12 @@ The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/
 - `CODEX_STACK_PREVIEW_SNAPSHOT=<optional snapshot name>`
 - `CODEX_STACK_PREVIEW_WAIT_TIMEOUT=300`
 
+Optional authenticated preview secret:
+
+- `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64=<base64 of browse export-session output>`
+
+When a PR closes, `.github/workflows/preview-cleanup.yml` removes only `gh-pages/pr-preview/pr-<number>/` and keeps the root QA site plus other active PR previews intact.
+
 ## Install skills for Codex
 
 User-level install:
@@ -347,6 +377,7 @@ This creates links such as:
 - `~/.codex/skills/codex-stack-qa`
 - `~/.codex/skills/codex-stack-review`
 - `~/.codex/skills/codex-stack-browse`
+- `~/.codex/skills/codex-stack-setup-browser-cookies`
 - `~/.codex/skills/codex-stack-upgrade`
 
 Example prompts after installation:
@@ -356,6 +387,7 @@ Use codex-stack-product to tighten this feature request into acceptance criteria
 Use codex-stack-review to audit the current branch against main and focus on production risk.
 Use codex-stack-qa to verify the staging dashboard flow and tell me if it is safe to ship.
 Use codex-stack-browse to capture a baseline snapshot for the new onboarding page.
+Use codex-stack-setup-browser-cookies to import my signed-in Chrome session and prepare a preview auth bundle for CI.
 Use codex-stack-upgrade to audit whether this codex-stack install needs dependency, workflow, or skill-link refreshes.
 ```
 

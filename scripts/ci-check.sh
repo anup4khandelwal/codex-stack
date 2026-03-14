@@ -39,6 +39,7 @@ run_ts src/cli.ts doctor >/tmp/codex-stack-doctor.log
 run_ts browse/src/cli.ts doctor >/tmp/codex-stack-browse-doctor.log
 grep -q 'snapshot' /tmp/codex-stack-browse-doctor.log
 grep -q 'export-session' /tmp/codex-stack-browse-doctor.log
+grep -q 'import-browser-cookies' /tmp/codex-stack-browse-doctor.log
 grep -q 'probe' /tmp/codex-stack-browse-doctor.log
 grep -q 'assert-focused' /tmp/codex-stack-browse-doctor.log
 grep -q 'upload' /tmp/codex-stack-browse-doctor.log
@@ -86,11 +87,14 @@ run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
 run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
+run_ts scripts/browse-browser-profile.spec.ts >/tmp/codex-stack-browse-browser-profile-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/deploy-verify.ts --help >/tmp/codex-stack-deploy-help.log
 run_ts scripts/build-preview-site.ts --help >/tmp/codex-stack-build-preview-help.log
 run_ts scripts/deploy-verify.spec.ts >/tmp/codex-stack-deploy-spec.log
 run_ts scripts/build-preview-site.spec.ts >/tmp/codex-stack-build-preview-spec.log
+run_ts scripts/cleanup-preview-site.spec.ts >/tmp/codex-stack-preview-cleanup-spec.log
+run_ts scripts/preview-workflow-auth.spec.ts >/tmp/codex-stack-preview-workflow-auth-spec.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
@@ -292,11 +296,15 @@ test -f .github/workflows/pr-review.yml
 test -f .github/workflows/pr-automerge.yml
 test -f .github/workflows/daily-update-check.yml
 test -f .github/workflows/preview-verify.yml
+test -f .github/workflows/preview-cleanup.yml
 test -f .github/ISSUE_TEMPLATE/work-item.yml
 test -f scripts/issue-flow.ts
 test -f scripts/issue-flow.spec.ts
 test -f scripts/preview-verify.ts
 test -f scripts/preview-verify.spec.ts
+test -f scripts/cleanup-preview-site.ts
+test -f scripts/cleanup-preview-site.spec.ts
+test -f scripts/preview-workflow-auth.spec.ts
 test -f scripts/build-preview-site.ts
 test -f scripts/build-preview-site.spec.ts
 test -f scripts/upgrade-check.ts
@@ -305,9 +313,12 @@ test -f scripts/render-pr-review.ts
 test -f .github/workflows/qa-pages.yml
 test -f scripts/render-qa-pages.ts
 test -f skills/preview/SKILL.md
+test -f skills/setup-browser-cookies/SKILL.md
 test -f skills/upgrade/SKILL.md
 grep -q 'clean-exclude: pr-preview' .github/workflows/qa-pages.yml
 grep -q 'force: true' .github/workflows/qa-pages.yml
+grep -q 'CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64' .github/workflows/pr-review.yml
+grep -q 'CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64' .github/workflows/preview-verify.yml
 
 echo "[8/8] cleanup"
 rm -rf .site

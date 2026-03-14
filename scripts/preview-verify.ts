@@ -58,7 +58,7 @@ function usage(): never {
   console.log(`preview-verify
 
 Usage:
-  bun scripts/preview-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--strict-console] [--strict-http] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
+  bun scripts/preview-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--strict-console] [--strict-http] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
 `);
   process.exit(0);
 }
