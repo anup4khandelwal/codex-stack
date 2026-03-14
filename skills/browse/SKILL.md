@@ -28,6 +28,8 @@ Give the agent eyes for QA and deployment checks.
 - `show-flow <name>`
 - `delete-flow <name>`
 - `clear-session`
+- `snapshot <url> [name]`
+- `compare-snapshot <url> <name>`
 - `text <url>`
 - `html <url> [selector]`
 - `links <url>`
@@ -54,6 +56,8 @@ node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"inp
 node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 node dist/cli.js browse import-flow login-local ./docs/login-flow.md
 node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
+node dist/cli.js browse snapshot https://example.com marketing-home --session staging
+node dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
 node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
@@ -69,3 +73,4 @@ node dist/cli.js browse sessions
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.
 - Prefer Markdown or YAML exports when flows need code review, because they diff more cleanly than inline JSON strings.
 - For repeatable authenticated demos, start the flow with a `clear-storage` step so persistent sessions do not skip the login screen.
+- Use snapshots when you need a baseline for later regression checks; use `qa` when you need a scored report built from those checks.

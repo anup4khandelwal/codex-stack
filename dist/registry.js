@@ -26,6 +26,12 @@ export const modeRegistry = [
     skillPath: path.join(rootDir, "skills", "review", "SKILL.md"),
   },
   {
+    name: "qa",
+    role: "QA lead",
+    summary: "Run browser flows and snapshot checks, then score release readiness.",
+    skillPath: path.join(rootDir, "skills", "qa", "SKILL.md"),
+  },
+  {
     name: "ship",
     role: "Release engineer",
     summary: "Validate release readiness and execute the shipping checklist.",

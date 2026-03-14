@@ -1,29 +1,43 @@
 # codex-stack
 
-`codex-stack` packages six specialist Codex workflows into one repo: product framing, technical planning, diff review, shipping, browser QA, and delivery retrospectives.
+`codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-It ships with installable skill directories under `skills/`, a checked-in Node CLI under `dist/cli.js`, and a Playwright-backed browser runtime under `browse/dist/cli.js`.
+Seven opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, release shipping, browser automation, and engineering retrospectives.
 
-## Requirements
+## Without codex-stack
 
-- Node `24+`
-- npm `10+`
-- Playwright browser binaries for browser automation: `npx playwright install chromium`
+- Requests stay vague, so the agent executes before the scope is really clear.
+- Review depth varies from run to run because there is no shared checklist or report shape.
+- Browser QA lives in one-off prompts instead of reusable checked-in flows.
+- Shipping still needs manual PR setup, reviewer routing, labels, assignees, and project metadata.
+- Deployment validation is disconnected from the shipping path.
+- Weekly updates for stakeholders are assembled by hand.
 
-`dist/` is checked in, so the repo works even if `tsc` is not installed locally.
+## With codex-stack
 
-## Modes
-
-| Mode | Role | What it is for |
+| Skill | Mode | What it does |
 | --- | --- | --- |
-| `product` | Product thinker | Reframe a request into the real user problem, scope, and acceptance criteria |
-| `tech` | Tech lead | Turn approved scope into architecture, trust boundaries, failure modes, and a test plan |
-| `review` | Paranoid staff engineer | Audit a branch for structural production risks instead of style noise |
-| `ship` | Release engineer | Run validation, prepare commit and PR metadata, and ship with less manual glue |
-| `browse` | QA engineer | Drive a real browser with persistent sessions and reusable flow files |
-| `retro` | Engineering manager | Summarize recent delivery patterns from git history and optional GitHub PR analytics |
+| `product` | Product thinker | Reframes a request into user outcomes, scope, and acceptance criteria. |
+| `tech` | Tech lead | Locks architecture, trust boundaries, rollout risks, and the test plan. |
+| `review` | Paranoid staff engineer | Audits the diff for structural production risks instead of style noise. |
+| `qa` | QA lead | Runs browser flows and snapshot checks, then scores release readiness. |
+| `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
+| `browse` | QA engineer | Drives a real browser with persistent sessions, named flows, snapshots, and artifacts. |
+| `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 
-## Quick Start
+## What ships today
+
+- Installable Codex skills under `skills/`
+- Checked-in root CLI under `dist/cli.js`
+- Playwright-backed browser runtime under `browse/dist/cli.js`
+- Persistent named browser sessions
+- Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
+- Page snapshots and snapshot comparison artifacts
+- QA reports with findings, severity, health score, and saved evidence
+- Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
+- Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
+
+## Quick start
 
 ```bash
 nvm use 24
@@ -31,21 +45,117 @@ nvm use 24
 npx playwright install chromium
 bash scripts/install-skills.sh user
 node dist/cli.js list
-node dist/cli.js review
 ```
 
-`./setup` runs environment checks, installs npm dependencies when needed, and creates local wrappers at:
+`./setup` runs environment checks, installs npm dependencies when needed, and creates local wrappers under `.codex-stack/bin/` for:
 
-- `.codex-stack/bin/codex-stack`
-- `.codex-stack/bin/codex-stack-browse`
+- `codex-stack`
+- `codex-stack-browse`
+- `product`
+- `tech`
+- `review`
+- `qa`
+- `ship`
+- `browse`
+- `retro`
 
-If you want global shell wrappers, link them into your `PATH`:
+If you want shell-level commands, link those wrappers into your `PATH`:
 
 ```bash
 bash scripts/link-commands.sh
 ```
 
-## Install Skills For Codex
+## Demo the sample app
+
+The repo includes a small demo app at `examples/customer-portal-demo/` so you can show a full workflow without a backend.
+
+Start it:
+
+```bash
+npm run demo:start
+```
+
+Then run a realistic sequence:
+
+```bash
+node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+node dist/cli.js browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
+node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+node dist/cli.js retro --since "30 days ago" --no-github
+npm run weekly
+```
+
+The checked-in `portal-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
+
+## Root CLI
+
+```bash
+node dist/cli.js list
+node dist/cli.js show qa
+node dist/cli.js review --json --base origin/main
+node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
+node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
+node dist/cli.js browse doctor
+node dist/cli.js browse flows
+node dist/cli.js browse snapshot https://example.com marketing-home --session staging
+node dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
+```
+
+Useful npm scripts:
+
+```bash
+npm run doctor
+npm run smoke
+npm run demo:start
+npm run demo:smoke
+npm run review
+npm run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
+npm run ship:dry
+npm run retro
+npm run weekly
+```
+
+## Browser QA model
+
+`browse` is the runtime. `qa` is the report layer.
+
+Use `browse` when you want raw control:
+
+- sessions
+- named flows
+- snapshots
+- ad hoc assertions
+- screenshots and artifacts
+
+Use `qa` when you want a decision-ready report:
+
+- pass / warning / critical status
+- health score
+- findings with evidence
+- saved markdown/json report under `.codex-stack/qa/`
+
+## Ship verification
+
+`ship` can call `qa` before push/PR creation.
+
+Example:
+
+```bash
+node dist/cli.js ship \
+  --message "feat: ready for review" \
+  --push \
+  --pr \
+  --verify-url https://staging.example.com/dashboard \
+  --verify-flow landing-smoke \
+  --verify-snapshot landing-home
+```
+
+This keeps QA in the shipping path instead of as a manual follow-up.
+
+## Install skills for Codex
 
 User-level install:
 
@@ -59,9 +169,10 @@ Project-level install:
 bash scripts/install-skills.sh project /path/to/repo
 ```
 
-This creates symlinks such as:
+This creates links such as:
 
 - `~/.codex/skills/codex-stack-product`
+- `~/.codex/skills/codex-stack-qa`
 - `~/.codex/skills/codex-stack-review`
 - `~/.codex/skills/codex-stack-browse`
 
@@ -70,117 +181,19 @@ Example prompts after installation:
 ```text
 Use codex-stack-product to tighten this feature request into acceptance criteria.
 Use codex-stack-review to audit the current branch against main and focus on production risk.
-Use codex-stack-browse to verify the staging login flow in a persistent browser session.
+Use codex-stack-qa to verify the staging dashboard flow and tell me if it is safe to ship.
+Use codex-stack-browse to capture a baseline snapshot for the new onboarding page.
 ```
 
-## Sample Project To Demo
-
-Use the built-in demo app under `examples/customer-portal-demo/`.
-
-Start it:
-
-```bash
-npm run demo:start
-```
-
-Then demo these commands:
-
-```bash
-node dist/cli.js browse flows
-node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
-node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
-node dist/cli.js ship --dry-run --pr
-node dist/cli.js retro --since "30 days ago" --no-github
-npm run weekly
-```
-
-The demo app is small on purpose: it gives you a real login and dashboard flow to browser-test without needing a backend.
-The checked-in `portal-login` flow clears the demo app's stored session before it navigates, so you can re-run it safely on the same named browser session.
-
-## CLI Overview
-
-The root CLI is a router for discovery plus the `review`, `ship`, `retro`, and `browse` workflows.
-
-```bash
-node dist/cli.js list
-node dist/cli.js show review
-node dist/cli.js path browse
-node dist/cli.js doctor
-node dist/cli.js review --json --base origin/main
-node dist/cli.js ship --dry-run
-node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
-node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
-node dist/cli.js browse doctor
-node dist/cli.js browse flows
-node dist/cli.js browse run-flow https://example.com/login landing-smoke --session staging
-```
-
-Useful npm scripts:
-
-```bash
-npm run doctor
-npm run smoke
-npm run demo:start
-npm run demo:smoke
-npm run weekly
-npm run review
-npm run ship:dry
-npm run retro
-npm run browse:doctor
-```
-
-## Workflow Notes
-
-### Review
-
-- `review` compares the current branch against a base ref and emits ordered findings.
-- It uses heuristics for large diffs, sensitive paths, destructive SQL, unsafe HTML/code execution, background-job risk, workflow changes, and missing tests.
-- The review checklist lives at `skills/review/checklist.md`.
-
-### Ship
-
-- `ship` can run repository validation before shipping. In this repo it will prefer `npm run smoke`.
-- It can generate a PR title/body from the branch diff, merge that content into a detected PR template, infer labels from branch and changed files, infer reviewers from `CODEOWNERS`, and attach assignees/projects after PR creation.
-- Supported flags include `--dry-run`, `--push`, `--pr`, `--title`, `--body`, `--body-file`, `--template`, `--reviewer`, `--team-reviewer`, `--assignee`, `--assign-self`, `--project`, `--label`, `--milestone`, `--draft`, `--no-auto-labels`, `--no-auto-reviewers`, and `--json`.
-
-### Browse
-
-- `browse` uses persistent Playwright profiles per named session.
-- Local session state and user-created flows live under `.codex-stack/browse/`.
-- Checked-in shared flows live under `browse/flows/`.
-- Local flows override repo flows with the same name, which makes ad hoc QA safe without mutating shared fixtures.
-- Checked-in flows can compose other flows with `use-flow`, which makes login + dashboard sequences reusable.
-- Flows can now be imported from or exported to `.json`, `.yaml`, `.yml`, and `.md` files. Markdown exports include a fenced YAML block so they diff cleanly in PRs.
-
-Examples:
-
-```bash
-node dist/cli.js browse text https://example.com --session staging
-node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
-node dist/cli.js browse import-flow login-local ./docs/login-flow.md
-node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
-node dist/cli.js browse login https://example.com/login login-local --session staging
-node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
-node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session staging
-```
-
-### Retro
-
-- `retro` summarizes throughput, merge churn, top work areas, and authors from git history.
-- By default it writes `latest.md`, `latest.json`, and timestamped snapshots under `.codex-stack/retros/`.
-- When `gh` is installed and repo access is available, it also adds PR analytics such as merge time, first-review latency, backlog, and reviewer load.
-- `weekly-digest.mjs` builds a friendlier markdown summary for status updates and demo wrap-ups, and also emits publish-ready summary, Slack, email, and manifest artifacts under `docs/weekly-digest-publish/` by default.
-
-## Repository Layout
+## Repository layout
 
 ```text
 codex-stack/
-  browse/              Playwright runtime and checked-in QA flows
+  browse/              Browser runtime, flows, and artifacts helpers
   dist/                Checked-in root CLI output
   docs/                Install, command, and example docs
-  examples/            Sample apps you can use to demo codex-stack
-  scripts/             Setup, install, review, ship, and retro helpers
+  examples/            Sample apps for demos
+  scripts/             Setup, review, qa, ship, retro, and digest helpers
   skills/              Installable Codex skills
   src/                 TypeScript source for the root CLI
 ```

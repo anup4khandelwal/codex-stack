@@ -8,9 +8,11 @@ node dist/cli.js show review
 node dist/cli.js path ship
 node dist/cli.js review
 node dist/cli.js review --json
+node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 node dist/cli.js ship --dry-run
 node dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
+node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 node dist/cli.js retro --since "7 days ago"
 node dist/cli.js retro --since "7 days ago" --artifact-dir .codex-stack/retros
 node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -24,6 +26,8 @@ node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible
 node dist/cli.js browse import-flow login-local ./docs/login-flow.md
 node dist/cli.js browse import-repo-flow landing-smoke ./docs/landing-smoke.yaml
 node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.md
+node dist/cli.js browse snapshot https://example.com marketing-home --session staging
+node dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
 node dist/cli.js browse login https://example.com/login login-local --session staging
 node dist/cli.js browse click https://example.com "button[type=submit]" --session staging
 node dist/cli.js browse fill https://example.com/login "input[name=email]" demo@example.com --session staging
@@ -53,6 +57,7 @@ node scripts/ship-branch.mjs --message "feat: ready for review" --push
 node scripts/ship-branch.mjs --message "feat: ready for review" --push --pr
 node scripts/ship-branch.mjs --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 node scripts/ship-branch.mjs --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
+node scripts/ship-branch.mjs --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 node scripts/ship-branch.mjs --message "feat: ready for review" --push --pr --draft
 ```
 
@@ -63,6 +68,20 @@ Notes:
 - `ship` infers labels from branch and changed files, and infers reviewers from `CODEOWNERS` unless you disable that behavior.
 - When GitHub access is available, `ship` creates missing labels before attaching them to the PR.
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
+- `ship` can call the QA workflow before push/PR creation with `--verify-url`, `--verify-flow`, and `--verify-snapshot`.
+
+## QA workflow
+
+```bash
+node scripts/qa-run.mjs http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+node scripts/qa-run.mjs http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
+```
+
+Notes:
+
+- `qa` writes markdown/json artifacts under `.codex-stack/qa/`.
+- It upgrades raw browser evidence into findings, severity, health score, and recommendation.
+- Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 
 ## Retro workflow
 
@@ -92,6 +111,8 @@ node browse/dist/cli.js save-flow smoke-login '[{"action":"fill","selector":"inp
 node browse/dist/cli.js save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 node browse/dist/cli.js import-flow smoke-login ./docs/smoke-login.yaml
 node browse/dist/cli.js export-flow portal-full-demo ./docs/portal-full-demo.md
+node browse/dist/cli.js snapshot https://example.com marketing-home --session staging
+node browse/dist/cli.js compare-snapshot https://example.com marketing-home --session staging
 node browse/dist/cli.js run-flow https://example.com/login smoke-login --session staging
 node browse/dist/cli.js press https://example.com "input[name=search]" Enter --session staging
 node browse/dist/cli.js assert-text https://example.com "h1" "Example Domain" --session staging
@@ -105,3 +126,4 @@ Notes:
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.
+- Snapshots are stored under `.codex-stack/browse/snapshots/`; comparison artifacts are stored under `.codex-stack/browse/artifacts/`.

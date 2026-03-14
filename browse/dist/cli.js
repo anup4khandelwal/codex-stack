@@ -3,12 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { createHash } from "node:crypto";
 
 const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
 const STATE_DIR = path.join(ROOT_DIR, "browse");
 const STATE_PATH = path.join(STATE_DIR, "state.json");
 const SESSION_DIR = path.join(STATE_DIR, "sessions");
 const FLOW_DIR = path.join(STATE_DIR, "flows");
+const SNAPSHOT_DIR = path.join(STATE_DIR, "snapshots");
+const ARTIFACT_DIR = path.join(STATE_DIR, "artifacts");
 const REPO_FLOW_DIR = path.resolve(process.cwd(), "browse", "flows");
 
 function usage() {
@@ -27,6 +30,8 @@ Usage:
   codex-stack browse show-flow <name>
   codex-stack browse delete-flow <name>
   codex-stack browse clear-session [name]
+  codex-stack browse snapshot <url> [name] [--session <name>]
+  codex-stack browse compare-snapshot <url> <name> [--session <name>]
   codex-stack browse text <url> [--session <name>]
   codex-stack browse html <url> [selector] [--session <name>]
   codex-stack browse links <url> [--session <name>]
@@ -98,6 +103,49 @@ function flowPath(name) {
 
 function repoFlowPath(name) {
   return path.join(REPO_FLOW_DIR, `${name}.json`);
+}
+
+function snapshotJsonPath(name) {
+  return path.join(SNAPSHOT_DIR, `${name}.json`);
+}
+
+function snapshotScreenshotPath(name) {
+  return path.join(SNAPSHOT_DIR, `${name}.png`);
+}
+
+function snapshotArtifactPath(name, suffix, ext) {
+  return path.join(ARTIFACT_DIR, `${name}-${suffix}.${ext}`);
+}
+
+function normalizeText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/https?:\/\//g, "")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "snapshot";
+}
+
+function defaultSnapshotName(url) {
+  try {
+    const parsed = new URL(url);
+    return slugify(`${parsed.hostname}${parsed.pathname}`.replace(/\/+/g, "-"));
+  } catch {
+    return slugify(url);
+  }
+}
+
+function textHash(text) {
+  return createHash("sha256").update(String(text || "")).digest("hex");
+}
+
+function fileHash(filePath) {
+  if (!fs.existsSync(filePath)) return "";
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
 function assertFlowName(name) {
@@ -295,6 +343,158 @@ function exportFlowDocument(name, targetPath, flow) {
   ensureDir(path.dirname(absolute));
   fs.writeFileSync(absolute, content);
   return { absolute, format };
+}
+
+async function captureSnapshotPayload(page) {
+  const snapshot = await page.evaluate(() => {
+    const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const escape = (value) => (globalThis.CSS?.escape ? globalThis.CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&"));
+
+    const selectorFor = (element) => {
+      if (!(element instanceof HTMLElement)) return "";
+      if (element.id) return `#${escape(element.id)}`;
+
+      const tag = element.tagName.toLowerCase();
+      if (element.dataset.testid) return `${tag}[data-testid="${escape(element.dataset.testid)}"]`;
+      if (element.dataset.qa) return `${tag}[data-qa="${escape(element.dataset.qa)}"]`;
+      if (element.hasAttribute("name")) return `${tag}[name="${escape(element.getAttribute("name") || "")}"]`;
+      if (tag === "a" && element.getAttribute("href")) return `a[href="${escape(element.getAttribute("href")) || ""}"]`;
+      if (element.hasAttribute("aria-label")) return `${tag}[aria-label="${escape(element.getAttribute("aria-label") || "")}"]`;
+
+      const parts = [];
+      let node = element;
+      let depth = 0;
+      while (node && node instanceof HTMLElement && depth < 5) {
+        let part = node.tagName.toLowerCase();
+        if (node.id) {
+          parts.unshift(`#${escape(node.id)}`);
+          break;
+        }
+        if (node.dataset.testid) {
+          part += `[data-testid="${escape(node.dataset.testid)}"]`;
+          parts.unshift(part);
+          break;
+        }
+        if (node.dataset.qa) {
+          part += `[data-qa="${escape(node.dataset.qa)}"]`;
+          parts.unshift(part);
+          break;
+        }
+        if (node.hasAttribute("name")) {
+          part += `[name="${escape(node.getAttribute("name") || "")}"]`;
+        } else if (node.parentElement) {
+          const siblings = Array.from(node.parentElement.children).filter((child) => child.tagName === node.tagName);
+          if (siblings.length > 1) {
+            part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+          }
+        }
+        parts.unshift(part);
+        node = node.parentElement;
+        depth += 1;
+      }
+      return parts.join(" > ");
+    };
+
+    const candidates = Array.from(document.querySelectorAll([
+      "[data-testid]",
+      "[data-qa]",
+      "[data-user-email]",
+      "h1",
+      "h2",
+      "h3",
+      "button",
+      "a",
+      "label",
+      "input",
+      "textarea",
+      "select",
+      "[role='alert']",
+      "[role='dialog']",
+      "[aria-label]",
+    ].join(",")));
+
+    const elements = [];
+    const seen = new Set();
+    for (const candidate of candidates) {
+      if (!(candidate instanceof HTMLElement)) continue;
+      const selector = selectorFor(candidate);
+      if (!selector || seen.has(selector)) continue;
+      seen.add(selector);
+      const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute("aria-label") || candidate.getAttribute("value") || "");
+      elements.push({
+        selector,
+        tag: candidate.tagName.toLowerCase(),
+        text,
+      });
+      if (elements.length >= 80) break;
+    }
+
+    return {
+      capturedAt: new Date().toISOString(),
+      url: window.location.href,
+      title: document.title,
+      bodyText: normalize(document.body?.innerText || ""),
+      elements,
+    };
+  });
+
+  return {
+    ...snapshot,
+    bodyHash: textHash(snapshot.bodyText),
+  };
+}
+
+function compareSnapshotData(baseline, current, { baselineScreenshotHash = "", currentScreenshotHash = "" } = {}) {
+  const baselineElements = Array.isArray(baseline?.elements) ? baseline.elements : [];
+  const currentElements = Array.isArray(current?.elements) ? current.elements : [];
+  const baselineMap = new Map(baselineElements.map((item) => [item.selector, item]));
+  const currentMap = new Map(currentElements.map((item) => [item.selector, item]));
+
+  const missingSelectors = [];
+  const changedSelectors = [];
+  for (const item of baselineElements) {
+    const next = currentMap.get(item.selector);
+    if (!next) {
+      missingSelectors.push(item.selector);
+      continue;
+    }
+    if (normalizeText(item.text) !== normalizeText(next.text)) {
+      changedSelectors.push({
+        selector: item.selector,
+        before: item.text,
+        after: next.text,
+      });
+    }
+  }
+
+  const newSelectors = currentElements
+    .filter((item) => !baselineMap.has(item.selector))
+    .map((item) => item.selector);
+
+  const titleChanged = normalizeText(baseline?.title) !== normalizeText(current?.title);
+  const bodyTextChanged = normalizeText(baseline?.bodyText) !== normalizeText(current?.bodyText);
+  const screenshotChanged = Boolean(baselineScreenshotHash && currentScreenshotHash && baselineScreenshotHash !== currentScreenshotHash);
+  const status = missingSelectors.length || changedSelectors.length || newSelectors.length || titleChanged || bodyTextChanged || screenshotChanged
+    ? "changed"
+    : "match";
+
+  return {
+    status,
+    summary: {
+      missingSelectors: missingSelectors.length,
+      changedSelectors: changedSelectors.length,
+      newSelectors: newSelectors.length,
+      titleChanged,
+      bodyTextChanged,
+      screenshotChanged,
+    },
+    missingSelectors,
+    changedSelectors,
+    newSelectors,
+    titleChanged,
+    bodyTextChanged,
+    screenshotChanged,
+  };
 }
 
 function isPreNavigationStep(step) {
@@ -595,8 +795,10 @@ async function main() {
     console.log(`- state file: ${STATE_PATH}`);
     console.log(`- session root: ${SESSION_DIR}`);
     console.log(`- flow root: ${FLOW_DIR}`);
+    console.log(`- snapshot root: ${SNAPSHOT_DIR}`);
+    console.log(`- artifact root: ${ARTIFACT_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, snapshot, compare-snapshot, text, html, links, screenshot, eval, click, fill, wait, press, assert-visible, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
@@ -699,6 +901,86 @@ async function main() {
     }
     fs.rmSync(sessionProfileDir(targetSession), { recursive: true, force: true });
     console.log(`cleared session ${targetSession}`);
+    return;
+  }
+
+  if (command === "snapshot") {
+    const [url, explicitName] = rest;
+    if (!url) usage();
+    const snapshotName = explicitName ? slugify(explicitName) : defaultSnapshotName(url);
+    ensureDir(SNAPSHOT_DIR);
+    const baselineJson = snapshotJsonPath(snapshotName);
+    const baselineScreenshot = snapshotScreenshotPath(snapshotName);
+    const payload = await withPage(session, url, async ({ page }) => {
+      const snapshot = await captureSnapshotPayload(page);
+      await page.screenshot({ path: baselineScreenshot, fullPage: true });
+      return snapshot;
+    });
+    const baseline = {
+      ...payload,
+      name: snapshotName,
+      screenshotPath: path.relative(process.cwd(), baselineScreenshot),
+      screenshotHash: fileHash(baselineScreenshot),
+    };
+    writeJson(baselineJson, baseline);
+    recordSession(session, {
+      lastCommand: "snapshot",
+      lastUrl: url,
+      output: path.relative(process.cwd(), baselineJson),
+    });
+    printJson({
+      status: "saved",
+      name: snapshotName,
+      snapshot: path.relative(process.cwd(), baselineJson),
+      screenshot: path.relative(process.cwd(), baselineScreenshot),
+      selectors: baseline.elements.length,
+      title: baseline.title,
+      url: baseline.url,
+    });
+    return;
+  }
+
+  if (command === "compare-snapshot") {
+    const [url, explicitName] = rest;
+    if (!url || !explicitName) usage();
+    const snapshotName = slugify(explicitName);
+    const baselineJson = snapshotJsonPath(snapshotName);
+    assertCondition(fs.existsSync(baselineJson), `Unknown snapshot baseline: ${snapshotName}. Run \`browse snapshot ${url} ${snapshotName}\` first.`);
+    ensureDir(ARTIFACT_DIR);
+    const stamp = `${Date.now()}`;
+    const artifactJson = snapshotArtifactPath(snapshotName, stamp, "json");
+    const artifactScreenshot = snapshotArtifactPath(snapshotName, stamp, "png");
+    const baseline = readJson(baselineJson, null);
+    assertCondition(Boolean(baseline), `Unable to read snapshot baseline: ${baselineJson}`);
+    const current = await withPage(session, url, async ({ page }) => {
+      const payload = await captureSnapshotPayload(page);
+      await page.screenshot({ path: artifactScreenshot, fullPage: true });
+      return payload;
+    });
+    const currentSnapshot = {
+      ...current,
+      name: snapshotName,
+      screenshotPath: path.relative(process.cwd(), artifactScreenshot),
+      screenshotHash: fileHash(artifactScreenshot),
+    };
+    writeJson(artifactJson, currentSnapshot);
+    const comparison = compareSnapshotData(baseline, currentSnapshot, {
+      baselineScreenshotHash: baseline.screenshotHash || fileHash(snapshotScreenshotPath(snapshotName)),
+      currentScreenshotHash: currentSnapshot.screenshotHash,
+    });
+    recordSession(session, {
+      lastCommand: "compare-snapshot",
+      lastUrl: url,
+      output: `${comparison.status}:${snapshotName}`,
+    });
+    printJson({
+      status: comparison.status,
+      name: snapshotName,
+      baseline: path.relative(process.cwd(), baselineJson),
+      current: path.relative(process.cwd(), artifactJson),
+      screenshot: path.relative(process.cwd(), artifactScreenshot),
+      comparison,
+    });
     return;
   }
 

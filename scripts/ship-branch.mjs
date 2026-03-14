@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 
 const TEMPLATE_PATHS = [
   ".github/pull_request_template.md",
@@ -22,7 +22,7 @@ function usage() {
   console.log(`ship-branch
 
 Usage:
-  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  node scripts/ship-branch.mjs [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -93,6 +93,11 @@ function parseArgs(argv) {
     projects: [],
     labels: [],
     assignSelf: false,
+    verifyUrl: "",
+    verifyFlows: [],
+    verifySnapshot: "",
+    verifySession: "",
+    updateVerifySnapshot: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -134,6 +139,20 @@ function parseArgs(argv) {
     } else if (arg === "--project") {
       out.projects.push(argv[i + 1] || "");
       i += 1;
+    } else if (arg === "--verify-url") {
+      out.verifyUrl = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--verify-flow") {
+      out.verifyFlows.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--verify-snapshot") {
+      out.verifySnapshot = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--verify-session") {
+      out.verifySession = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--update-verify-snapshot") {
+      out.updateVerifySnapshot = true;
     } else if (arg === "--label") {
       out.labels.push(argv[i + 1] || "");
       i += 1;
@@ -150,6 +169,7 @@ function parseArgs(argv) {
   out.teamReviewers = uniq(out.teamReviewers);
   out.assignees = uniq(out.assignees);
   out.projects = uniq(out.projects);
+  out.verifyFlows = uniq(out.verifyFlows);
   out.labels = uniq(out.labels);
   return out;
 }
@@ -587,6 +607,62 @@ function safeGhEdit(result, description, cmd) {
   }
 }
 
+function defaultVerifySession(branch) {
+  return `ship-${String(branch || "verify").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60)}`;
+}
+
+function shouldRunVerification(args) {
+  return Boolean(args.verifyUrl || args.verifyFlows.length || args.verifySnapshot);
+}
+
+function runQaVerification(args, branch) {
+  if (!args.verifyUrl) {
+    throw new Error("Verification requires --verify-url.");
+  }
+
+  const qaPath = path.resolve(process.cwd(), "scripts", "qa-run.mjs");
+  const sessionName = cleanSubject(args.verifySession) || defaultVerifySession(branch);
+  const qaArgs = [
+    qaPath,
+    args.verifyUrl,
+    "--session",
+    sessionName,
+    "--json",
+  ];
+  for (const flow of args.verifyFlows) {
+    qaArgs.push("--flow", flow);
+  }
+  if (args.verifySnapshot) {
+    qaArgs.push("--snapshot", args.verifySnapshot);
+  }
+  if (args.updateVerifySnapshot) {
+    qaArgs.push("--update-snapshot");
+  }
+
+  const child = spawnSync("node", qaArgs, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  const stdout = String(child.stdout || "").trim();
+  const stderr = String(child.stderr || "").trim();
+  let parsed = null;
+  if (stdout) {
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  return {
+    session: sessionName,
+    ok: (child.status ?? 1) === 0 && Boolean(parsed),
+    stdout,
+    stderr,
+    report: parsed,
+  };
+}
+
 function printText(result) {
   console.log("# Ship Summary");
   console.log();
@@ -610,6 +686,24 @@ function printText(result) {
   }
   if (result.automation.projects.length) {
     console.log(`- Projects: ${result.automation.projects.join(", ")}`);
+  }
+  if (result.verification.url) {
+    console.log(`- Verification URL: ${result.verification.url}`);
+  }
+  if (result.verification.flows.length || result.verification.snapshot) {
+    const checks = [];
+    if (result.verification.flows.length) checks.push(`flows=${result.verification.flows.join(",")}`);
+    if (result.verification.snapshot) checks.push(`snapshot=${result.verification.snapshot}`);
+    console.log(`- Verification checks: ${checks.join(" ")}`);
+  }
+  if (result.verification.status) {
+    console.log(`- Verification status: ${result.verification.status}`);
+  }
+  if (result.verification.healthScore !== null) {
+    console.log(`- Verification health score: ${result.verification.healthScore}`);
+  }
+  if (result.verification.reportPath) {
+    console.log(`- Verification report: ${result.verification.reportPath}`);
   }
   if (result.automation.milestone) {
     console.log(`- Milestone: ${result.automation.milestone}`);
@@ -643,6 +737,15 @@ const result = {
   validation: { command: "", passed: null },
   pr: null,
   prUrl: "",
+  verification: {
+    url: cleanSubject(args.verifyUrl),
+    flows: [...args.verifyFlows],
+    snapshot: cleanSubject(args.verifySnapshot),
+    session: cleanSubject(args.verifySession),
+    status: "",
+    healthScore: null,
+    reportPath: "",
+  },
   automation: {
     labels: [],
     manualLabels: [],
@@ -720,6 +823,37 @@ if (result.automation.autoReviewerSource !== "none" && result.automation.autoRev
 }
 if (result.automation.autoAssignees.length) {
   result.steps.push(`infer assignees ${result.automation.autoAssignees.join(", ")}`);
+}
+
+if (shouldRunVerification(args)) {
+  if (!args.verifyUrl) {
+    console.error("Verification requires --verify-url.");
+    process.exit(1);
+  }
+  const verificationParts = [];
+  if (args.verifyFlows.length) verificationParts.push(`flows ${args.verifyFlows.join(", ")}`);
+  if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
+  result.verification.session = result.verification.session || defaultVerifySession(result.branch);
+  result.steps.push(`verify via qa on ${args.verifyUrl}${verificationParts.length ? ` (${verificationParts.join("; ")})` : ""}`);
+  if (!args.dryRun) {
+    const verification = runQaVerification(args, result.branch);
+    result.verification.session = verification.session;
+    if (!verification.ok || !verification.report) {
+      console.error(verification.stderr || verification.stdout || "QA verification failed.");
+      process.exit(1);
+    }
+    result.verification.status = verification.report.status;
+    result.verification.healthScore = verification.report.healthScore;
+    result.verification.reportPath = verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
+    if (verification.report.status === "critical") {
+      console.error(`QA verification failed: ${verification.report.recommendation}`);
+      process.exit(1);
+    }
+    if (verification.report.status === "warning") {
+      result.status = result.status === "ok" ? "warning" : result.status;
+      result.warnings.push(`qa verification: ${verification.report.recommendation}`);
+    }
+  }
 }
 
 if (args.push || args.pr) {

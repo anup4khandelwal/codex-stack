@@ -18,7 +18,8 @@ Usage:
   codex-stack path <mode>
   codex-stack doctor
   codex-stack review [--json] [--base <ref>]
-  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--draft]
+  codex-stack qa <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--json]
+  codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]
   codex-stack browse <args...>
 `);
@@ -46,6 +47,12 @@ function runReview(args) {
 function runShip(args) {
   const shipPath = path.resolve(__dirname, "..", "scripts", "ship-branch.mjs");
   const result = spawnSync("node", [shipPath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 0);
+}
+
+function runQa(args) {
+  const qaPath = path.resolve(__dirname, "..", "scripts", "qa-run.mjs");
+  const result = spawnSync("node", [qaPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
@@ -96,6 +103,10 @@ if (command === "browse") {
 
 if (command === "review") {
   runReview(rest);
+}
+
+if (command === "qa") {
+  runQa(rest);
 }
 
 if (command === "ship") {

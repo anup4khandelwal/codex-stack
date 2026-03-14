@@ -25,6 +25,18 @@ CLI:
 node dist/cli.js review
 ```
 
+## QA mode
+
+```text
+Use codex-stack-qa to verify the staging dashboard flow, compare it to the saved snapshot, and tell me if it is safe to ship.
+```
+
+CLI:
+
+```bash
+node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+```
+
 ## Ship mode
 
 ```text
@@ -38,6 +50,7 @@ node dist/cli.js ship --dry-run
 node dist/cli.js ship --message "feat: ready for review" --push --pr
 node dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
+node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 ```
 
 ## Browse mode
@@ -47,6 +60,8 @@ npm run demo:start
 node dist/cli.js browse flows
 node dist/cli.js browse export-flow portal-full-demo /tmp/portal-full-demo.md
 node dist/cli.js browse import-flow portal-copy /tmp/portal-full-demo.md
+node dist/cli.js browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+node dist/cli.js browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
