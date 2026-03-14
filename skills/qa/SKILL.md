@@ -27,9 +27,9 @@ Run repeatable browser verification, collect evidence, and turn it into a ship/n
 ## CLI
 
 ```bash
-node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-node dist/cli.js qa http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
-node scripts/qa-run.mjs --fixture ./tmp/qa-fixture.json --json
+bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun dist/cli.js qa http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
+bun scripts/qa-run.mjs --fixture ./tmp/qa-fixture.json --json
 ```
 
 ## Output format

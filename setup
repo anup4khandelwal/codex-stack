@@ -7,11 +7,31 @@ LOCAL_BIN="$ROOT_DIR/.codex-stack/bin"
 write_wrapper() {
   local name="$1"
   local command="$2"
+  rm -f "$LOCAL_BIN/$name"
   cat > "$LOCAL_BIN/$name" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="\$(cd \"\$(dirname \"\$0\")/../..\" && pwd)"
+if command -v bun >/dev/null 2>&1; then
+  exec bun "\$ROOT_DIR/dist/cli.js" $command "\$@"
+fi
 exec node "\$ROOT_DIR/dist/cli.js" $command "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/$name"
+}
+
+write_direct_wrapper() {
+  local name="$1"
+  local target="$2"
+  rm -f "$LOCAL_BIN/$name"
+  cat > "$LOCAL_BIN/$name" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="\$(cd \"\$(dirname \"\$0\")/../..\" && pwd)"
+if command -v bun >/dev/null 2>&1; then
+  exec bun "\$ROOT_DIR/$target" "\$@"
+fi
+exec node "\$ROOT_DIR/$target" "\$@"
 EOF
   chmod +x "$LOCAL_BIN/$name"
 }
@@ -20,16 +40,24 @@ echo "[codex-stack] running environment checks"
 bash "$ROOT_DIR/scripts/doctor.sh"
 
 if [ "${SKIP_INSTALL:-0}" != "1" ] && [ ! -d "$ROOT_DIR/node_modules/playwright" ]; then
-  echo "[codex-stack] installing npm dependencies"
-  (
-    cd "$ROOT_DIR"
-    npm install
-  )
+  if command -v bun >/dev/null 2>&1; then
+    echo "[codex-stack] installing Bun dependencies"
+    (
+      cd "$ROOT_DIR"
+      bun install
+    )
+  else
+    echo "[codex-stack] bun is not installed, falling back to npm install for this shell"
+    (
+      cd "$ROOT_DIR"
+      npm install
+    )
+  fi
 fi
 
 mkdir -p "$LOCAL_BIN"
-ln -snf "$ROOT_DIR/dist/cli.js" "$LOCAL_BIN/codex-stack"
-ln -snf "$ROOT_DIR/browse/dist/cli.js" "$LOCAL_BIN/codex-stack-browse"
+write_direct_wrapper "codex-stack" "dist/cli.js"
+write_direct_wrapper "codex-stack-browse" "browse/dist/cli.js"
 
 write_wrapper "product" "show product"
 write_wrapper "tech" "show tech"
@@ -45,8 +73,8 @@ echo "  $LOCAL_BIN/codex-stack-browse"
 echo "  $LOCAL_BIN/{product,tech,review,qa,ship,browse,retro}"
 echo
 echo "Next steps:"
-echo "  1. node dist/cli.js list"
-echo "  2. use Node 24 for this repo"
-echo "  3. npx playwright install chromium"
+echo "  1. bun dist/cli.js list"
+echo "  2. use Bun 1.2+ for this repo"
+echo "  3. bunx playwright install chromium"
 echo "  4. bash scripts/install-skills.sh user"
-echo "  5. node dist/cli.js review"
+echo "  5. bun dist/cli.js review"

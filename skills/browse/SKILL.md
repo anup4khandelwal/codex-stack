@@ -51,17 +51,17 @@ Give the agent eyes for QA and deployment checks.
 ## Example
 
 ```bash
-node dist/cli.js browse text https://example.com --session staging
-node dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
-node dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
-node dist/cli.js browse import-flow login-local ./docs/login-flow.md
-node dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
-node dist/cli.js browse snapshot https://example.com marketing-home --session staging
-node dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
-node dist/cli.js browse login https://example.com/login login-local --session staging
-node dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
-node dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
-node dist/cli.js browse sessions
+bun dist/cli.js browse text https://example.com --session staging
+bun dist/cli.js browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
+bun dist/cli.js browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
+bun dist/cli.js browse import-flow login-local ./docs/login-flow.md
+bun dist/cli.js browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
+bun dist/cli.js browse snapshot https://example.com marketing-home --session staging
+bun dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
+bun dist/cli.js browse login https://example.com/login login-local --session staging
+bun dist/cli.js browse assert-text https://example.com "h1" "Example Domain" --session staging
+bun dist/cli.js browse screenshot https://example.com /tmp/example.png --session staging
+bun dist/cli.js browse sessions
 ```
 
 ## Guardrails

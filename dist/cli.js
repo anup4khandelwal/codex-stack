@@ -32,33 +32,42 @@ function runDoctor() {
   process.exit(result.status ?? 0);
 }
 
+function resolveJsRuntime() {
+  if (process.versions?.bun) return process.execPath || "bun";
+  const bunCheck = spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" });
+  if ((bunCheck.status ?? 1) === 0) return "bun";
+  return process.execPath || "node";
+}
+
+const JS_RUNTIME = resolveJsRuntime();
+
 function runBrowse(args) {
   const browsePath = path.resolve(__dirname, "..", "browse", "dist", "cli.js");
-  const result = spawnSync("node", [browsePath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [browsePath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runReview(args) {
   const reviewPath = path.resolve(__dirname, "..", "scripts", "review-diff.mjs");
-  const result = spawnSync("node", [reviewPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [reviewPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runShip(args) {
   const shipPath = path.resolve(__dirname, "..", "scripts", "ship-branch.mjs");
-  const result = spawnSync("node", [shipPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [shipPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runQa(args) {
   const qaPath = path.resolve(__dirname, "..", "scripts", "qa-run.mjs");
-  const result = spawnSync("node", [qaPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [qaPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runRetro(args) {
   const retroPath = path.resolve(__dirname, "..", "scripts", "retro-report.mjs");
-  const result = spawnSync("node", [retroPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [retroPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 

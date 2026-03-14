@@ -22,7 +22,7 @@ function usage() {
   console.log(`review-diff
 
 Usage:
-  node scripts/review-diff.mjs [--json] [--base <ref>]
+  bun scripts/review-diff.mjs [--json] [--base <ref>]
 `);
   process.exit(0);
 }

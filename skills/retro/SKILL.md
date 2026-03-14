@@ -26,12 +26,12 @@ Summarize throughput, hotspots, review bottlenecks, and recurring failure patter
 ## CLI
 
 ```bash
-node dist/cli.js retro --since "7 days ago"
-node dist/cli.js retro --since "30 days ago" --json
-node dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
-node dist/cli.js retro --since "14 days ago" --no-artifacts
-node dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
-node scripts/weekly-digest.mjs --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
+bun dist/cli.js retro --since "7 days ago"
+bun dist/cli.js retro --since "30 days ago" --json
+bun dist/cli.js retro --since "14 days ago" --artifact-dir .codex-stack/retros
+bun dist/cli.js retro --since "14 days ago" --no-artifacts
+bun dist/cli.js retro --since "14 days ago" --repo anup4khandelwal/codex-stack
+bun scripts/weekly-digest.mjs --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
 ```
 
 ## Output format

@@ -45,14 +45,14 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 ## Quick start
 
 ```bash
-nvm use 24
+bun --version
 ./setup
-npx playwright install chromium
+bunx playwright install chromium
 bash scripts/install-skills.sh user
-node dist/cli.js list
+bun dist/cli.js list
 ```
 
-`./setup` runs environment checks, installs npm dependencies when needed, and creates local wrappers under `.codex-stack/bin/` for:
+`./setup` runs environment checks, installs Bun dependencies when needed, and creates local wrappers under `.codex-stack/bin/` for:
 
 - `codex-stack`
 - `codex-stack-browse`
@@ -89,19 +89,19 @@ The repo includes a small demo app at `examples/customer-portal-demo/` so you ca
 Start it:
 
 ```bash
-npm run demo:start
+bun run demo:start
 ```
 
 Then run a realistic sequence:
 
 ```bash
-node dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
-node dist/cli.js browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
-node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-node dist/cli.js retro --since "30 days ago" --no-github
-npm run weekly
-npm run qa:site
+bun dist/cli.js browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+bun dist/cli.js browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
+bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
+bun dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun dist/cli.js retro --since "30 days ago" --no-github
+bun run weekly
+bun run qa:site
 ```
 
 The checked-in `portal-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
@@ -109,31 +109,31 @@ The checked-in `portal-login` flow clears the demo app's stored login state befo
 ## Root CLI
 
 ```bash
-node dist/cli.js list
-node dist/cli.js show qa
-node dist/cli.js review --json --base origin/main
-node dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-node dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
-node dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-node dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
-node dist/cli.js browse doctor
-node dist/cli.js browse flows
-node dist/cli.js browse snapshot https://example.com marketing-home --session staging
-node dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
+bun dist/cli.js list
+bun dist/cli.js show qa
+bun dist/cli.js review --json --base origin/main
+bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun dist/cli.js ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
+bun dist/cli.js ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun dist/cli.js retro --since "7 days ago" --repo anup4khandelwal/codex-stack
+bun dist/cli.js browse doctor
+bun dist/cli.js browse flows
+bun dist/cli.js browse snapshot https://example.com marketing-home --session staging
+bun dist/cli.js browse compare-snapshot https://example.com marketing-home --session staging
 ```
 
-Useful npm scripts:
+Useful Bun scripts:
 
 ```bash
-npm run doctor
-npm run smoke
-npm run demo:start
-npm run demo:smoke
-npm run review
-npm run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
-npm run ship:dry
-npm run retro
-npm run weekly
+bun run doctor
+bun run smoke
+bun run demo:start
+bun run demo:smoke
+bun run review
+bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
+bun run ship:dry
+bun run retro
+bun run weekly
 ```
 
 ## Browser QA model
@@ -163,7 +163,7 @@ Use `qa` when you want a decision-ready report:
 Example:
 
 ```bash
-node dist/cli.js ship \
+bun dist/cli.js ship \
   --message "feat: ready for review" \
   --push \
   --pr \
@@ -181,7 +181,7 @@ After merge, the `qa-pages` workflow renders those tracked artifacts into a GitH
 Build the static QA site locally:
 
 ```bash
-npm run qa:site
+bun run qa:site
 open .site/index.html
 ```
 

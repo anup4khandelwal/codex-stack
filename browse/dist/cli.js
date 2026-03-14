@@ -324,7 +324,7 @@ ${toYamlFlow(steps)}
 Run it with:
 
 \`\`\`bash
-node dist/cli.js browse run-flow <url> ${name} --session demo
+bun dist/cli.js browse run-flow <url> ${name} --session demo
 \`\`\`
 `;
 }
@@ -634,7 +634,7 @@ async function loadPlaywright() {
 async function withPage(sessionName, url, callback) {
   const playwright = await loadPlaywright();
   if (!playwright) {
-    throw new Error("Playwright is not installed. Run `npm install` and `npx playwright install chromium`.");
+    throw new Error("Playwright is not installed. Run `bun install` and `bunx playwright install chromium`.");
   }
 
   ensureDir(SESSION_DIR);
@@ -646,7 +646,7 @@ async function withPage(sessionName, url, callback) {
   } catch (error) {
     const message = String(error?.message || error);
     if (/machport|permission denied|sandbox|Target page, context or browser has been closed/i.test(message)) {
-      throw new Error("Unable to launch Chromium in the current sandboxed environment. Run the same command in a normal local shell after `npx playwright install chromium`.");
+      throw new Error("Unable to launch Chromium in the current sandboxed environment. Run the same command in a normal local shell after `bunx playwright install chromium`.");
     }
     throw error;
   }
@@ -821,7 +821,7 @@ async function main() {
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
-    console.log("- browser install: run `npx playwright install chromium` after npm install");
+    console.log("- browser install: run `bunx playwright install chromium` after bun install");
     return;
   }
 

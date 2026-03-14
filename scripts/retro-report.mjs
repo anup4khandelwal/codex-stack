@@ -8,7 +8,7 @@ function usage() {
   console.log(`retro-report
 
 Usage:
-  node scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github] [--github-limit <n>]
+  bun scripts/retro-report.mjs [--since <range>] [--out <path>] [--json] [--json-out <path>] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github] [--github-limit <n>]
 `);
   process.exit(0);
 }

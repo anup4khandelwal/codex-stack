@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[doctor] node: $(node -v)"
-echo "[doctor] npm: $(npm -v)"
-
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 24 ]; then
-  echo "[doctor] node support: expected Node 24+, current runtime is below target"
+if command -v bun >/dev/null 2>&1; then
+  BUN_VERSION="$(bun --version)"
+  echo "[doctor] bun: $BUN_VERSION"
+  BUN_MAJOR="$(printf '%s' "$BUN_VERSION" | cut -d. -f1)"
+  BUN_MINOR="$(printf '%s' "$BUN_VERSION" | cut -d. -f2)"
+  if [ "$BUN_MAJOR" -lt 1 ] || { [ "$BUN_MAJOR" -eq 1 ] && [ "${BUN_MINOR:-0}" -lt 2 ]; }; then
+    echo "[doctor] bun support: expected Bun 1.2+, current runtime is below target"
+  else
+    echo "[doctor] bun support: ok (Bun 1.2+ target)"
+  fi
 else
-  echo "[doctor] node support: ok (Node 24+)"
+  echo "[doctor] bun: missing"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  echo "[doctor] node fallback: $(node -v)"
+else
+  echo "[doctor] node fallback: missing"
 fi
 
 if command -v git >/dev/null 2>&1; then

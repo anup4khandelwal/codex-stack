@@ -8,7 +8,7 @@ function usage() {
   console.log(`weekly-digest
 
 Usage:
-  node scripts/weekly-digest.mjs [--since <range>] [--repo <owner/name>] [--out <path>] [--json-out <path>] [--publish-dir <path>] [--summary-out <path>] [--slack-out <path>] [--slack-json-out <path>] [--email-out <path>] [--manifest-out <path>] [--no-publish] [--no-github]
+  bun scripts/weekly-digest.mjs [--since <range>] [--repo <owner/name>] [--out <path>] [--json-out <path>] [--publish-dir <path>] [--summary-out <path>] [--slack-out <path>] [--slack-json-out <path>] [--email-out <path>] [--manifest-out <path>] [--no-publish] [--no-github]
 `);
   process.exit(0);
 }
@@ -78,6 +78,16 @@ function ensureDir(dirPath) {
 function writeFile(filePath, content) {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, content);
+}
+
+function resolveJsRuntime() {
+  if (process.versions?.bun) return process.execPath || "bun";
+  try {
+    execFileSync("bun", ["--version"], { stdio: "pipe" });
+    return "bun";
+  } catch {
+    return process.execPath || "node";
+  }
 }
 
 function relative(targetPath) {
@@ -305,7 +315,7 @@ if (args.noGithub) {
   retroArgs.push("--no-github");
 }
 
-const retro = JSON.parse(execFileSync("node", retroArgs, {
+const retro = JSON.parse(execFileSync(resolveJsRuntime(), retroArgs, {
   cwd: process.cwd(),
   encoding: "utf8",
 }));

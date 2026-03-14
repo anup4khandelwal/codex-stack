@@ -12,8 +12,18 @@ function read(relativePath) {
   return fs.readFileSync(path.join(PUBLIC_DIR, relativePath), "utf8");
 }
 
+function resolveJsRuntime() {
+  if (process.versions?.bun) return process.execPath || "bun";
+  try {
+    execFileSync("bun", ["--version"], { stdio: "pipe" });
+    return "bun";
+  } catch {
+    return process.execPath || "node";
+  }
+}
+
 async function main() {
-  execFileSync("node", ["examples/customer-portal-demo/server.mjs", "--check"], {
+  execFileSync(resolveJsRuntime(), ["examples/customer-portal-demo/server.mjs", "--check"], {
     cwd: ROOT,
     stdio: "pipe",
   });

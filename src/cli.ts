@@ -29,33 +29,46 @@ function runDoctor(): void {
   process.exit(result.status ?? 0);
 }
 
+function resolveJsRuntime(): string {
+  if ((process.versions as Record<string, string | undefined>).bun) {
+    return process.execPath || "bun";
+  }
+  const bunCheck = spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" });
+  if ((bunCheck.status ?? 1) === 0) {
+    return "bun";
+  }
+  return process.execPath || "node";
+}
+
+const JS_RUNTIME = resolveJsRuntime();
+
 function runBrowse(args: string[]): void {
   const browsePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "browse", "dist", "cli.js");
-  const result = spawnSync("node", [browsePath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [browsePath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runReview(args: string[]): void {
   const reviewPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "review-diff.mjs");
-  const result = spawnSync("node", [reviewPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [reviewPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runShip(args: string[]): void {
   const shipPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "ship-branch.mjs");
-  const result = spawnSync("node", [shipPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [shipPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runQa(args: string[]): void {
   const qaPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "qa-run.mjs");
-  const result = spawnSync("node", [qaPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [qaPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
 function runRetro(args: string[]): void {
   const retroPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "retro-report.mjs");
-  const result = spawnSync("node", [retroPath, ...args], { stdio: "inherit" });
+  const result = spawnSync(JS_RUNTIME, [retroPath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 

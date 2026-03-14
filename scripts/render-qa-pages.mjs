@@ -8,7 +8,7 @@ function usage() {
   console.log(`render-qa-pages
 
 Usage:
-  node scripts/render-qa-pages.mjs [--source <dir>] [--out <dir>] [--base-url <url>] [--json]
+  bun scripts/render-qa-pages.mjs [--source <dir>] [--out <dir>] [--base-url <url>] [--json]
 `);
   process.exit(0);
 }

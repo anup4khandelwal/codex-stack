@@ -12,8 +12,8 @@ function usage() {
   console.log(`qa-run
 
 Usage:
-  node scripts/qa-run.mjs <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
-  node scripts/qa-run.mjs --fixture <path> [--publish-dir <path>] [--json]
+  bun scripts/qa-run.mjs <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
+  bun scripts/qa-run.mjs --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
 }
@@ -89,7 +89,10 @@ function timestampSlug() {
 }
 
 function runBrowse(args) {
-  const result = spawnSync("node", [BROWSE_CLI, ...args], {
+  const runtime = process.versions?.bun
+    ? (process.execPath || "bun")
+    : (((spawnSync("bun", ["--version"], { stdio: "pipe", encoding: "utf8" }).status ?? 1) === 0) ? "bun" : (process.execPath || "node"));
+  const result = spawnSync(runtime, [BROWSE_CLI, ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
   });

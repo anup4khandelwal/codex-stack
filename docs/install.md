@@ -3,11 +3,11 @@
 ## Local setup
 
 ```bash
-nvm use 24
+bun --version
 ./setup
 ```
 
-This repo targets Node `24`.
+This repo targets Bun `1.2+`.
 
 `./setup` also creates project-local wrappers under `.codex-stack/bin/` for:
 
@@ -21,7 +21,7 @@ This repo targets Node `24`.
 Then install a browser for Playwright:
 
 ```bash
-npx playwright install chromium
+bunx playwright install chromium
 ```
 
 Named browser sessions are stored under `.codex-stack/browse/` and are already ignored by git.
