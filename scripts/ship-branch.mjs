@@ -663,6 +663,103 @@ function runQaVerification(args, branch) {
   };
 }
 
+function trackedRepoPath(targetPath) {
+  const cleaned = cleanSubject(targetPath);
+  if (!cleaned) return "";
+  const absolute = path.resolve(process.cwd(), cleaned);
+  const relative = path.relative(process.cwd(), absolute);
+  if (relative.startsWith("..")) return "";
+  return relative.replace(/\\/g, "/");
+}
+
+function repoBlobUrl(repo, branch, relativePath) {
+  if (!repo || !branch || !relativePath) return "";
+  const encoded = relativePath.split("/").map((part) => encodeURIComponent(part)).join("/");
+  return `https://github.com/${repo}/blob/${encodeURIComponent(branch)}/${encoded}`;
+}
+
+function isTrackedPath(relativePath) {
+  if (!relativePath) return false;
+  return Boolean(run(`git ls-files --error-unmatch -- ${quote(relativePath)}`, { allowFailure: true }));
+}
+
+function markdownReference(repo, branch, targetPath) {
+  const relative = trackedRepoPath(targetPath);
+  if (!relative) return "";
+  if (isTrackedPath(relative)) {
+    return `[${relative}](${repoBlobUrl(repo, branch, relative)})`;
+  }
+  return `\`${relative}\` (local only)`;
+}
+
+function qaFindingSummary(findings, limit = 5) {
+  if (!Array.isArray(findings) || !findings.length) return ["- No findings."];
+  const lines = findings.slice(0, limit).map((item) => `- ${String(item.severity || "info").toUpperCase()}: ${item.title}`);
+  if (findings.length > limit) {
+    lines.push(`- ...and ${findings.length - limit} more`);
+  }
+  return lines;
+}
+
+function buildQaPrComment({ report, repo, branch }) {
+  if (!report) return "";
+  const reportRef = markdownReference(repo, branch, report.artifacts?.markdown || report.artifacts?.json || "");
+  const annotationRef = markdownReference(repo, branch, report.snapshotResult?.annotation || report.artifacts?.annotation || "");
+  const screenshotRef = markdownReference(repo, branch, report.snapshotResult?.screenshot || "");
+  const flowLines = Array.isArray(report.flowResults) && report.flowResults.length
+    ? report.flowResults.map((item) => `- ${item.name}: ${item.status}${item.steps ? ` (${item.steps} steps)` : ""}`)
+    : ["- No flows configured."];
+
+  const sections = [
+    "## QA Verification",
+    "",
+    `- Status: ${report.status}`,
+    `- Health score: ${report.healthScore}`,
+    `- Recommendation: ${report.recommendation}`,
+    "",
+    "### Findings",
+    "",
+    ...qaFindingSummary(report.findings),
+    "",
+    "### Flow results",
+    "",
+    ...flowLines,
+  ];
+
+  if (report.snapshotResult) {
+    sections.push(
+      "",
+      "### Snapshot evidence",
+      "",
+      `- Snapshot: ${report.snapshotResult.name || "n/a"} (${report.snapshotResult.status || "unknown"})`
+    );
+    if (reportRef) sections.push(`- QA report: ${reportRef}`);
+    if (annotationRef) sections.push(`- Annotation: ${annotationRef}`);
+    if (screenshotRef) sections.push(`- Screenshot: ${screenshotRef}`);
+  } else if (reportRef) {
+    sections.push("", `QA report: ${reportRef}`);
+  }
+
+  return `${sections.join("\n").trim()}\n`;
+}
+
+function safeGhComment(result, prUrl, body) {
+  if (!prUrl || !body) return;
+  const workDir = path.resolve(process.cwd(), ".codex-stack", "ship");
+  const tempPath = path.join(workDir, `pr-comment-${Date.now()}-${process.pid}.md`);
+  ensureDir(workDir);
+  fs.writeFileSync(tempPath, body);
+  try {
+    run(`gh pr comment ${quote(prUrl)} --body-file ${quote(tempPath)}`, { stdio: ["ignore", "pipe", "pipe"] });
+    result.verification.commentPosted = true;
+  } catch (error) {
+    result.status = result.status === "ok" ? "warning" : result.status;
+    result.warnings.push(`post qa comment: ${cleanSubject(error.message)}`);
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
+}
+
 function printText(result) {
   console.log("# Ship Summary");
   console.log();
@@ -705,6 +802,9 @@ function printText(result) {
   if (result.verification.reportPath) {
     console.log(`- Verification report: ${result.verification.reportPath}`);
   }
+  if (result.verification.commentPosted) {
+    console.log("- Verification comment: posted");
+  }
   if (result.automation.milestone) {
     console.log(`- Milestone: ${result.automation.milestone}`);
   }
@@ -745,6 +845,8 @@ const result = {
     status: "",
     healthScore: null,
     reportPath: "",
+    commentPreview: "",
+    commentPosted: false,
   },
   automation: {
     labels: [],
@@ -768,6 +870,7 @@ const result = {
   warnings: [],
   steps: [],
 };
+let verificationCommentBody = "";
 
 result.branch = run("git branch --show-current");
 if (!result.branch) {
@@ -845,6 +948,12 @@ if (shouldRunVerification(args)) {
     result.verification.status = verification.report.status;
     result.verification.healthScore = verification.report.healthScore;
     result.verification.reportPath = verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
+    verificationCommentBody = buildQaPrComment({
+      report: verification.report,
+      repo: result.automation.repo,
+      branch: result.branch,
+    });
+    result.verification.commentPreview = verificationCommentBody.split(/\r?\n/).slice(0, 20).join("\n");
     if (verification.report.status === "critical") {
       console.error(`QA verification failed: ${verification.report.recommendation}`);
       process.exit(1);
@@ -893,6 +1002,9 @@ if (args.pr) {
   }
   if (result.automation.milestone) {
     result.steps.push(`plan milestone ${result.automation.milestone}`);
+  }
+  if (shouldRunVerification(args)) {
+    result.steps.push("plan qa verification comment");
   }
   result.steps.push("open pull request");
 
@@ -954,6 +1066,9 @@ if (args.pr) {
           "set milestone",
           `gh pr edit ${quote(result.prUrl)} --milestone ${quote(result.automation.milestone)}`
         );
+      }
+      if (result.prUrl && verificationCommentBody) {
+        safeGhComment(result, result.prUrl, verificationCommentBody);
       }
     } finally {
       fs.rmSync(tempPath, { force: true });

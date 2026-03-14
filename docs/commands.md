@@ -69,6 +69,7 @@ Notes:
 - When GitHub access is available, `ship` creates missing labels before attaching them to the PR.
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
 - `ship` can call the QA workflow before push/PR creation with `--verify-url`, `--verify-flow`, and `--verify-snapshot`.
+- When `ship --pr` runs with QA verification, it also posts a PR comment with the QA summary and any available artifact references.
 
 ## QA workflow
 

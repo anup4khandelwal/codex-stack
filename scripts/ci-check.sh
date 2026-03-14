@@ -149,6 +149,7 @@ grep -q '"Engineering Roadmap"' /tmp/codex-stack-ship.json
 grep -q '"verifyUrl": "https://example.com"' /tmp/codex-stack-ship.json || grep -q '"url": "https://example.com"' /tmp/codex-stack-ship.json
 grep -q '"landing-smoke"' /tmp/codex-stack-ship.json
 grep -q '"landing-home"' /tmp/codex-stack-ship.json
+grep -q 'plan qa verification comment' /tmp/codex-stack-ship.json
 
 echo "[6/7] demo files present"
 test -f examples/customer-portal-demo/README.md

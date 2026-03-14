@@ -4,6 +4,8 @@
 
 Seven opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, release shipping, browser automation, and engineering retrospectives.
 
+Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
+
 ## Without codex-stack
 
 - Requests stay vague, so the agent executes before the scope is really clear.
@@ -35,6 +37,7 @@ Seven opinionated workflow modes for Codex: product framing, technical planning,
 - Page snapshots and snapshot comparison artifacts
 - QA reports with findings, severity, health score, saved evidence, and annotated screenshots for snapshot failures
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
+- PR comments with QA verification summaries and artifact references after `ship --pr`
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
 
 ## Quick start
@@ -64,6 +67,18 @@ If you want shell-level commands, link those wrappers into your `PATH`:
 ```bash
 bash scripts/link-commands.sh
 ```
+
+## Swarm multiple agents
+
+You can run multiple Codex sessions in parallel across separate worktrees or terminals.
+
+Typical split:
+
+- one agent in `review`
+- one agent in `qa`
+- one agent in `ship`
+
+Because the command contracts are shared, those agents stay aligned on the same review, QA, and shipping workflow.
 
 ## Demo the sample app
 

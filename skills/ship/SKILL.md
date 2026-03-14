@@ -25,7 +25,7 @@ Run the shipping checklist with minimal back-and-forth.
 6. Infer labels from branch/files and reviewers from `CODEOWNERS` unless disabled.
 7. Run QA verification first when the operator provides a verification URL, flow, or snapshot.
 8. Apply assignee and project metadata when the operator requests it.
-9. Create missing labels in GitHub if required, then stage, commit, push, open PR, and apply metadata.
+9. Create missing labels in GitHub if required, then stage, commit, push, open PR, apply metadata, and post the QA summary comment when verification ran.
 10. Report the exact commands executed.
 
 ## CLI
