@@ -79,3 +79,17 @@ bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun run weekly
 bun scripts/weekly-digest.ts --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
 ```
+
+## Upgrade mode
+
+```text
+Use codex-stack-upgrade to check whether this codex-stack install is behind on dependencies, workflow actions, or local skill links.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts upgrade --offline
+bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
+```

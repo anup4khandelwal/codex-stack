@@ -21,11 +21,13 @@ run_eval() {
 echo "[1/8] root CLI list"
 run_ts src/cli.ts list >/tmp/codex-stack-list.log
 grep -q '^qa' /tmp/codex-stack-list.log
+grep -q '^upgrade' /tmp/codex-stack-list.log
 
 echo "[2/8] root CLI show/path"
 run_ts src/cli.ts show review >/tmp/codex-stack-show.log
 run_ts src/cli.ts path review >/tmp/codex-stack-path.log
 run_ts src/cli.ts show qa >/tmp/codex-stack-show-qa.log
+run_ts src/cli.ts show upgrade >/tmp/codex-stack-show-upgrade.log
 run_ts src/cli.ts issue --help >/tmp/codex-stack-issue-help.log
 
 echo "[3/8] doctor checks"
@@ -56,6 +58,7 @@ test -x .codex-stack/bin/review
 test -x .codex-stack/bin/qa
 test -x .codex-stack/bin/ship
 test -x .codex-stack/bin/browse
+test -x .codex-stack/bin/upgrade
 
 echo "[5/8] review, ship, retro, and demo interfaces"
 run_ts scripts/review-diff.ts --help >/tmp/codex-stack-review-help.log
@@ -63,6 +66,10 @@ run_ts scripts/issue-flow.ts --help >/tmp/codex-stack-issue-flow-help.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
+run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
+run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
+grep -q '"overallStatus"' /tmp/codex-stack-upgrade.json
+grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
 run_ts scripts/weekly-digest.ts --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --publish-dir /tmp/codex-stack-weekly-publish --no-github >/tmp/codex-stack-weekly.log
 mkdir -p .codex-stack/browse/snapshots .codex-stack/browse/artifacts
@@ -238,11 +245,15 @@ test -f skills/review/checklist.md
 test -f .github/PULL_REQUEST_TEMPLATE.md
 test -f .github/workflows/pr-review.yml
 test -f .github/workflows/pr-automerge.yml
+test -f .github/workflows/daily-update-check.yml
 test -f .github/ISSUE_TEMPLATE/work-item.yml
 test -f scripts/issue-flow.ts
+test -f scripts/upgrade-check.ts
+test -f scripts/upgrade-check.spec.ts
 test -f scripts/render-pr-review.ts
 test -f .github/workflows/qa-pages.yml
 test -f scripts/render-qa-pages.ts
+test -f skills/upgrade/SKILL.md
 
 echo "[8/8] cleanup"
 rm -rf .site

@@ -1,4 +1,4 @@
-export type ModeName = "product" | "tech" | "review" | "qa" | "ship" | "browse" | "retro";
+export type ModeName = "product" | "tech" | "review" | "qa" | "ship" | "browse" | "retro" | "upgrade";
 
 export interface ModeDefinition {
   name: ModeName;
