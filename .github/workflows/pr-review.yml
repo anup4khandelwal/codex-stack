@@ -27,9 +27,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Fetch base branch
-        run: git fetch origin "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}" --depth=1
-
       - name: Build preview site
         if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -49,7 +46,7 @@ jobs:
           attempt-limit: 3
 
       - name: Run codex-stack review
-        run: bun scripts/review-diff.ts --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
+        run: bun scripts/review-diff.ts --json --base "${{ github.event.pull_request.base.sha }}" > review.json
 
       - name: Run preview verification for review evidence
         if: github.event.pull_request.head.repo.full_name == github.repository
