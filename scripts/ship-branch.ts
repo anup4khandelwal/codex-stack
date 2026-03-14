@@ -1,9 +1,201 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+
+interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
+  allowFailure?: boolean;
+}
+
+interface ShipArgs {
+  dryRun: boolean;
+  skipTests: boolean;
+  push: boolean;
+  pr: boolean;
+  json: boolean;
+  draft: boolean;
+  noAutoLabels: boolean;
+  noAutoReviewers: boolean;
+  base: string;
+  message: string;
+  title: string;
+  body: string;
+  bodyFile: string;
+  template: string;
+  milestone: string;
+  reviewers: string[];
+  teamReviewers: string[];
+  assignees: string[];
+  projects: string[];
+  labels: string[];
+  assignSelf: boolean;
+  verifyUrl: string;
+  verifyFlows: string[];
+  verifySnapshot: string;
+  verifySession: string;
+  updateVerifySnapshot: boolean;
+}
+
+interface BaseParts {
+  remote: string;
+  branch: string;
+  display: string;
+}
+
+interface DiffContext {
+  range: string;
+  commitSubjects: string[];
+  changedFiles: string[];
+  changedAreas: string[];
+  latestCommitSubject: string;
+}
+
+interface GeneratedSectionsResult {
+  sections: Record<string, string>;
+  generatedBody: string;
+}
+
+interface PrContent {
+  title: string;
+  body: string;
+  bodySource: string;
+  templatePath: string;
+  bodyPreview: string;
+}
+
+interface CodeownersEntry {
+  pattern: string;
+  owners: string[];
+  regex?: RegExp;
+}
+
+interface ReviewerSplit {
+  users: string[];
+  teams: string[];
+}
+
+interface ReviewerInference extends ReviewerSplit {
+  source: string;
+  matchedRules: number;
+}
+
+interface LabelPreset {
+  color: string;
+  description: string;
+}
+
+interface AutomationPlan {
+  repo: string;
+  labels: string[];
+  manualLabels: string[];
+  autoLabels: string[];
+  reviewers: string[];
+  manualReviewers: string[];
+  teamReviewers: string[];
+  manualTeamReviewers: string[];
+  assignees: string[];
+  manualAssignees: string[];
+  autoAssignees: string[];
+  projects: string[];
+  manualProjects: string[];
+  autoReviewerSource: string;
+  matchedCodeownersRules: number;
+  milestone: string;
+  createdLabels: string[];
+}
+
+interface QaFinding {
+  severity?: string;
+  title?: string;
+}
+
+interface QaFlowResult {
+  name?: string;
+  status?: string;
+  steps?: number;
+}
+
+interface QaSnapshotResult {
+  name?: string;
+  status?: string;
+  annotation?: string;
+  screenshot?: string;
+}
+
+interface QaPublishedArtifacts {
+  markdown?: string;
+  json?: string;
+  annotation?: string;
+  screenshot?: string;
+}
+
+interface QaArtifacts {
+  markdown?: string;
+  json?: string;
+  annotation?: string;
+  published?: QaPublishedArtifacts;
+}
+
+interface QaReportSummary {
+  status?: string;
+  healthScore?: number;
+  recommendation?: string;
+  findings?: QaFinding[];
+  flowResults?: QaFlowResult[];
+  snapshotResult?: QaSnapshotResult | null;
+  artifacts?: QaArtifacts;
+}
+
+interface QaVerificationRun {
+  session: string;
+  publishDir: string;
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  report: QaReportSummary | null;
+}
+
+interface ValidationSummary {
+  command: string;
+  passed: boolean | null;
+}
+
+interface PrSummary {
+  title: string;
+  bodySource: string;
+  templatePath: string;
+  bodyPreview: string;
+}
+
+interface VerificationSummary {
+  url: string;
+  flows: string[];
+  snapshot: string;
+  session: string;
+  status: string;
+  healthScore: number | null;
+  reportPath: string;
+  stableReportUrl: string;
+  publishDir: string;
+  commentPreview: string;
+  commentPosted: boolean;
+}
+
+interface ShipResult {
+  status: "ok" | "warning";
+  branch: string;
+  base: string;
+  dryRun: boolean;
+  dirtyBefore: boolean;
+  validation: ValidationSummary;
+  pr: PrSummary | null;
+  prUrl: string;
+  verification: VerificationSummary;
+  automation: AutomationPlan;
+  warnings: string[];
+  steps: string[];
+}
 
 const TEMPLATE_PATHS = [
   ".github/pull_request_template.md",
@@ -19,7 +211,7 @@ const CODEOWNERS_PATHS = [
   "docs/CODEOWNERS",
 ];
 
-function usage() {
+function usage(): never {
   console.log(`ship-branch
 
 Usage:
@@ -28,17 +220,17 @@ Usage:
   process.exit(0);
 }
 
-function quote(value) {
+function quote(value: string): string {
   return JSON.stringify(String(value));
 }
 
-function cleanSubject(text) {
+function cleanSubject(text: unknown): string {
   return String(text || "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function run(cmd, options = {}) {
+function run(cmd: string, options: RunOptions = {}): string {
   try {
     const output = execSync(cmd, {
       encoding: "utf8",
@@ -46,24 +238,27 @@ function run(cmd, options = {}) {
       ...options,
     });
     return typeof output === "string" ? output.trim() : "";
-  } catch (error) {
+  } catch (error: unknown) {
     if (options.allowFailure) return "";
-    const stderr = error.stderr ? String(error.stderr) : "";
-    throw new Error(cleanSubject(stderr || error.message));
+    const stderr = typeof error === "object" && error && "stderr" in error
+      ? String((error as { stderr?: unknown }).stderr || "")
+      : "";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(cleanSubject(stderr || message));
   }
 }
 
 const BUN_RUNTIME = process.execPath || "bun";
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function uniq(items) {
+function uniq(items: string[]): string[] {
   return [...new Set(items.filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
 }
 
-function readPackageScripts() {
+function readPackageScripts(): Record<string, string> {
   try {
     const packagePath = path.resolve(process.cwd(), "package.json");
     const parsed = JSON.parse(fs.readFileSync(packagePath, "utf8"));
@@ -73,8 +268,8 @@ function readPackageScripts() {
   }
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): ShipArgs {
+  const out: ShipArgs = {
     dryRun: false,
     skipTests: false,
     push: false,
@@ -177,14 +372,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function detectValidationCommand() {
+function detectValidationCommand(): string {
   const scripts = readPackageScripts();
   if (scripts.smoke) return "bun run smoke";
   if (scripts.test) return "bun test";
   return "";
 }
 
-function baseParts(baseRef) {
+function baseParts(baseRef: string): BaseParts {
   if (baseRef.includes("/")) {
     const [remote, ...rest] = baseRef.split("/");
     return {
@@ -200,22 +395,22 @@ function baseParts(baseRef) {
   };
 }
 
-function deriveTitleFromBranch(branch) {
-  return branch
+function deriveTitleFromBranch(branch: string): string {
+  return (branch
     .split("/")
-    .at(-1)
+    .at(-1) || branch)
     .split("-")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ") || `Ship ${branch}`;
 }
 
-function issueNumberFromBranch(branch) {
+function issueNumberFromBranch(branch: string): string {
   const match = String(branch || "").match(/^[^/]+\/(\d+)-/);
   return match ? match[1] : "";
 }
 
-function findTemplatePath(explicitPath) {
+function findTemplatePath(explicitPath: string): string {
   const candidates = explicitPath ? [explicitPath] : TEMPLATE_PATHS;
   for (const candidate of candidates) {
     const absolute = path.resolve(process.cwd(), candidate);
@@ -226,7 +421,7 @@ function findTemplatePath(explicitPath) {
   return "";
 }
 
-function collectDiffContext(base) {
+function collectDiffContext(base: string): DiffContext {
   const range = `${base}...HEAD`;
   const commitSubjects = run(`git log --format=%s ${quote(`${base}..HEAD`)}`, { allowFailure: true })
     .split(/\r?\n/)
@@ -256,7 +451,7 @@ function collectDiffContext(base) {
   };
 }
 
-function bulletize(items, emptyMessage, limit = 5) {
+function bulletize(items: string[], emptyMessage: string, limit = 5): string[] {
   if (!items.length) return [`- ${emptyMessage}`];
   const lines = items.slice(0, limit).map((item) => `- ${item}`);
   if (items.length > limit) {
@@ -265,7 +460,17 @@ function bulletize(items, emptyMessage, limit = 5) {
   return lines;
 }
 
-function buildGeneratedSections({ branch, base, validationCommand, diffContext }) {
+function buildGeneratedSections({
+  branch,
+  base,
+  validationCommand,
+  diffContext,
+}: {
+  branch: string;
+  base: string;
+  validationCommand: string;
+  diffContext: DiffContext;
+}): GeneratedSectionsResult {
   const summaryItems = diffContext.commitSubjects.length
     ? diffContext.commitSubjects
     : diffContext.changedAreas.map((area) => `Touches ${area}`);
@@ -308,7 +513,7 @@ function buildGeneratedSections({ branch, base, validationCommand, diffContext }
   return { sections, generatedBody };
 }
 
-function applyTemplate(templateContent, sections, generatedBody) {
+function applyTemplate(templateContent: string, sections: Record<string, string>, generatedBody: string): string {
   let replaced = false;
   const rendered = templateContent.replace(/\{\{([A-Z_]+)\}\}/g, (match, key) => {
     if (Object.prototype.hasOwnProperty.call(sections, key)) {
@@ -329,7 +534,19 @@ function applyTemplate(templateContent, sections, generatedBody) {
   return `${rendered}\n\n---\n\n${generatedBody}`;
 }
 
-function resolvePrContent({ args, branch, base, validationCommand, diffContext }) {
+function resolvePrContent({
+  args,
+  branch,
+  base,
+  validationCommand,
+  diffContext,
+}: {
+  args: ShipArgs;
+  branch: string;
+  base: string;
+  validationCommand: string;
+  diffContext: DiffContext;
+}): PrContent {
   const templatePath = findTemplatePath(args.template);
   const templateContent = templatePath ? fs.readFileSync(templatePath, "utf8") : "";
   const generated = buildGeneratedSections({ branch, base, validationCommand, diffContext });
@@ -365,7 +582,7 @@ function resolvePrContent({ args, branch, base, validationCommand, diffContext }
   };
 }
 
-function findCodeownersPath() {
+function findCodeownersPath(): string {
   for (const candidate of CODEOWNERS_PATHS) {
     const absolute = path.resolve(process.cwd(), candidate);
     if (fs.existsSync(absolute)) {
@@ -375,7 +592,7 @@ function findCodeownersPath() {
   return "";
 }
 
-function parseCodeownersEntries(filePath) {
+function parseCodeownersEntries(filePath: string): CodeownersEntry[] {
   if (!filePath) return [];
   const content = fs.readFileSync(filePath, "utf8");
   const entries = [];
@@ -392,11 +609,11 @@ function parseCodeownersEntries(filePath) {
   return entries;
 }
 
-function escapeRegex(text) {
+function escapeRegex(text: string): string {
   return text.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 }
 
-function codeownersPatternToRegex(pattern) {
+function codeownersPatternToRegex(pattern: string): RegExp {
   let normalized = pattern.trim();
   const anchored = normalized.startsWith("/");
   normalized = normalized.replace(/^\/+/, "");
@@ -428,7 +645,7 @@ function codeownersPatternToRegex(pattern) {
   return new RegExp(`${prefix}${body}$`);
 }
 
-function splitOwners(owners) {
+function splitOwners(owners: string[]): ReviewerSplit {
   const users = [];
   const teams = [];
   for (const owner of owners) {
@@ -443,7 +660,7 @@ function splitOwners(owners) {
   };
 }
 
-function inferReviewersFromCodeowners(changedFiles) {
+function inferReviewersFromCodeowners(changedFiles: string[]): ReviewerInference {
   const codeownersPath = findCodeownersPath();
   if (!codeownersPath) {
     return {
@@ -459,10 +676,10 @@ function inferReviewersFromCodeowners(changedFiles) {
     regex: codeownersPatternToRegex(entry.pattern),
   }));
 
-  const owners = [];
+  const owners: string[] = [];
   let matchedRules = 0;
   for (const file of changedFiles) {
-    let matchOwners = [];
+    let matchOwners: string[] = [];
     for (const entry of entries) {
       if (entry.regex.test(file)) {
         matchOwners = entry.owners;
@@ -482,12 +699,12 @@ function inferReviewersFromCodeowners(changedFiles) {
   };
 }
 
-function inferLabels(branch, changedFiles) {
-  const labels = new Set();
+function inferLabels(branch: string, changedFiles: string[]): string[] {
+  const labels = new Set<string>();
   const branchPrefix = branch.split("/")[0].toLowerCase();
   const lowerFiles = changedFiles.map((file) => file.toLowerCase());
 
-  const branchMap = {
+  const branchMap: Record<string, string> = {
     feat: "feature",
     feature: "feature",
     fix: "bugfix",
@@ -524,11 +741,11 @@ function inferLabels(branch, changedFiles) {
   return [...labels];
 }
 
-function getCurrentGitHubLogin() {
+function getCurrentGitHubLogin(): string {
   return cleanSubject(run("gh api user --jq .login", { allowFailure: true }));
 }
 
-function inferGithubRepo() {
+function inferGithubRepo(): string {
   if (process.env.GITHUB_REPOSITORY) {
     return cleanSubject(process.env.GITHUB_REPOSITORY);
   }
@@ -537,9 +754,9 @@ function inferGithubRepo() {
   return match ? match[1] : "";
 }
 
-function labelSpec(label) {
+function labelSpec(label: string): LabelPreset {
   const normalized = String(label || "").toLowerCase();
-  const presets = {
+  const presets: Record<string, LabelPreset> = {
     feature: { color: "1f6feb", description: "Feature work" },
     bugfix: { color: "d73a4a", description: "Bug fix" },
     docs: { color: "0e8a16", description: "Documentation change" },
@@ -558,7 +775,7 @@ function labelSpec(label) {
   };
 }
 
-function ensureLabelExists(repo, label, result) {
+function ensureLabelExists(repo: string, label: string, result: ShipResult): void {
   if (!repo || !label) return;
   const encoded = encodeURIComponent(label);
   const exists = run(`gh api repos/${repo}/labels/${encoded}`, { allowFailure: true });
@@ -570,13 +787,13 @@ function ensureLabelExists(repo, label, result) {
       { stdio: ["ignore", "pipe", "pipe"] }
     );
     result.automation.createdLabels.push(label);
-  } catch (error) {
+  } catch (error: unknown) {
     result.status = result.status === "ok" ? "warning" : result.status;
-    result.warnings.push(`create label ${label}: ${cleanSubject(error.message)}`);
+    result.warnings.push(`create label ${label}: ${cleanSubject(error instanceof Error ? error.message : String(error))}`);
   }
 }
 
-function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
+function buildAutomationPlan(args: ShipArgs, branch: string, diffContext: DiffContext, currentLogin = ""): AutomationPlan {
   const autoLabels = args.noAutoLabels ? [] : inferLabels(branch, diffContext.changedFiles);
   const codeowners = args.noAutoReviewers
     ? { users: [], teams: [], source: "disabled", matchedRules: 0 }
@@ -611,20 +828,20 @@ function buildAutomationPlan(args, branch, diffContext, currentLogin = "") {
   };
 }
 
-function safeGhEdit(result, description, cmd) {
+function safeGhEdit(result: ShipResult, description: string, cmd: string): void {
   try {
     run(cmd, { stdio: ["ignore", "pipe", "pipe"] });
-  } catch (error) {
+  } catch (error: unknown) {
     result.status = result.status === "ok" ? "warning" : result.status;
-    result.warnings.push(`${description}: ${cleanSubject(error.message)}`);
+    result.warnings.push(`${description}: ${cleanSubject(error instanceof Error ? error.message : String(error))}`);
   }
 }
 
-function defaultVerifySession(branch) {
+function defaultVerifySession(branch: string): string {
   return `ship-${String(branch || "verify").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60)}`;
 }
 
-function slugify(value) {
+function slugify(value: string): string {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")
@@ -632,15 +849,15 @@ function slugify(value) {
     .slice(0, 80) || "qa";
 }
 
-function defaultVerifyPublishDir(branch) {
+function defaultVerifyPublishDir(branch: string): string {
   return path.join("docs", "qa", slugify(branch));
 }
 
-function shouldRunVerification(args) {
+function shouldRunVerification(args: ShipArgs): boolean {
   return Boolean(args.verifyUrl || args.verifyFlows.length || args.verifySnapshot);
 }
 
-function runQaVerification(args, branch) {
+function runQaVerification(args: ShipArgs, branch: string): QaVerificationRun {
   if (!args.verifyUrl) {
     throw new Error("Verification requires --verify-url.");
   }
@@ -692,7 +909,7 @@ function runQaVerification(args, branch) {
   };
 }
 
-function trackedRepoPath(targetPath) {
+function trackedRepoPath(targetPath: string): string {
   const cleaned = cleanSubject(targetPath);
   if (!cleaned) return "";
   const absolute = path.resolve(process.cwd(), cleaned);
@@ -701,13 +918,13 @@ function trackedRepoPath(targetPath) {
   return relative.replace(/\\/g, "/");
 }
 
-function repoBlobUrl(repo, branch, relativePath) {
+function repoBlobUrl(repo: string, branch: string, relativePath: string): string {
   if (!repo || !branch || !relativePath) return "";
   const encoded = relativePath.split("/").map((part) => encodeURIComponent(part)).join("/");
   return `https://github.com/${repo}/blob/${encodeURIComponent(branch)}/${encoded}`;
 }
 
-function defaultPagesBaseUrl(repo) {
+function defaultPagesBaseUrl(repo: string): string {
   const [owner, name] = String(repo || "").split("/");
   if (!owner || !name) return "";
   if (name.toLowerCase() === `${owner.toLowerCase()}.github.io`) {
@@ -716,15 +933,15 @@ function defaultPagesBaseUrl(repo) {
   return `https://${owner}.github.io/${name}/`;
 }
 
-function ensureTrailingSlash(value) {
+function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function pagesBaseUrl(repo) {
+function pagesBaseUrl(repo: string): string {
   return cleanSubject(process.env.CODEX_STACK_PAGES_BASE_URL || defaultPagesBaseUrl(repo));
 }
 
-function pagesSitePath(targetPath) {
+function pagesSitePath(targetPath: string): string {
   const relative = trackedRepoPath(targetPath);
   if (!relative || !relative.startsWith("docs/qa/")) return "";
   const sitePath = relative.slice("docs/".length);
@@ -733,19 +950,19 @@ function pagesSitePath(targetPath) {
     : sitePath;
 }
 
-function pagesUrl(repo, targetPath) {
+function pagesUrl(repo: string, targetPath: string): string {
   const baseUrl = pagesBaseUrl(repo);
   const sitePath = pagesSitePath(targetPath);
   if (!baseUrl || !sitePath) return "";
   return new URL(sitePath.replace(/^\/+/, ""), ensureTrailingSlash(baseUrl)).toString();
 }
 
-function isTrackedPath(relativePath) {
+function isTrackedPath(relativePath: string): boolean {
   if (!relativePath) return false;
   return Boolean(run(`git ls-files --error-unmatch -- ${quote(relativePath)}`, { allowFailure: true }));
 }
 
-function markdownReference(repo, branch, targetPath) {
+function markdownReference(repo: string, branch: string, targetPath: string): string {
   const relative = trackedRepoPath(targetPath);
   if (!relative) return "";
   if (isTrackedPath(relative)) {
@@ -754,14 +971,14 @@ function markdownReference(repo, branch, targetPath) {
   return `\`${relative}\` (local only)`;
 }
 
-function pagesReference(repo, targetPath, label = "") {
+function pagesReference(repo: string, targetPath: string, label = ""): string {
   const stableUrl = pagesUrl(repo, targetPath);
   const sitePath = pagesSitePath(targetPath);
   if (!stableUrl || !sitePath) return "";
   return `[${label || sitePath}](${stableUrl})`;
 }
 
-function qaFindingSummary(findings, limit = 5) {
+function qaFindingSummary(findings: QaFinding[] | undefined, limit = 5): string[] {
   if (!Array.isArray(findings) || !findings.length) return ["- No findings."];
   const lines = findings.slice(0, limit).map((item) => `- ${String(item.severity || "info").toUpperCase()}: ${item.title}`);
   if (findings.length > limit) {
@@ -770,7 +987,15 @@ function qaFindingSummary(findings, limit = 5) {
   return lines;
 }
 
-function buildQaPrComment({ report, repo, branch }) {
+function buildQaPrComment({
+  report,
+  repo,
+  branch,
+}: {
+  report: QaReportSummary | null;
+  repo: string;
+  branch: string;
+}): string {
   if (!report) return "";
   const published = report.artifacts?.published || {};
   const trackedReportRef = markdownReference(repo, branch, published.markdown || published.json || report.artifacts?.markdown || report.artifacts?.json || "");
@@ -821,7 +1046,7 @@ function buildQaPrComment({ report, repo, branch }) {
   return `${sections.join("\n").trim()}\n`;
 }
 
-function safeGhComment(result, prUrl, body) {
+function safeGhComment(result: ShipResult, prUrl: string, body: string): void {
   if (!prUrl || !body) return;
   const workDir = path.resolve(process.cwd(), ".codex-stack", "ship");
   const tempPath = path.join(workDir, `pr-comment-${Date.now()}-${process.pid}.md`);
@@ -830,15 +1055,15 @@ function safeGhComment(result, prUrl, body) {
   try {
     run(`gh pr comment ${quote(prUrl)} --body-file ${quote(tempPath)}`, { stdio: ["ignore", "pipe", "pipe"] });
     result.verification.commentPosted = true;
-  } catch (error) {
+  } catch (error: unknown) {
     result.status = result.status === "ok" ? "warning" : result.status;
-    result.warnings.push(`post qa comment: ${cleanSubject(error.message)}`);
+    result.warnings.push(`post qa comment: ${cleanSubject(error instanceof Error ? error.message : String(error))}`);
   } finally {
     fs.rmSync(tempPath, { force: true });
   }
 }
 
-function printText(result) {
+function printText(result: ShipResult): void {
   console.log("# Ship Summary");
   console.log();
   console.log(`- Branch: ${result.branch}`);
@@ -909,7 +1134,7 @@ function printText(result) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const result = {
+const result: ShipResult = {
   status: "ok",
   branch: "",
   base: args.base,
@@ -1008,7 +1233,7 @@ if (shouldRunVerification(args)) {
     console.error("Verification requires --verify-url.");
     process.exit(1);
   }
-  const verificationParts = [];
+  const verificationParts: string[] = [];
   if (args.verifyFlows.length) verificationParts.push(`flows ${args.verifyFlows.join(", ")}`);
   if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
   result.verification.session = result.verification.session || defaultVerifySession(result.branch);
@@ -1027,8 +1252,8 @@ if (shouldRunVerification(args)) {
       console.error(verification.stderr || verification.stdout || "QA verification failed.");
       process.exit(1);
     }
-    result.verification.status = verification.report.status;
-    result.verification.healthScore = verification.report.healthScore;
+    result.verification.status = verification.report.status || "";
+    result.verification.healthScore = verification.report.healthScore ?? null;
     result.verification.reportPath = verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
     result.verification.stableReportUrl = pagesUrl(
       result.automation.repo,
@@ -1121,7 +1346,7 @@ if (args.pr) {
     ensureDir(workDir);
     fs.writeFileSync(tempPath, prContent.body);
     try {
-      const prCmd = [
+      const prCmd: string[] = [
         "gh pr create",
         `--base ${quote(args.base.replace(/^origin\//, ""))}`,
         `--head ${quote(result.branch)}`,
