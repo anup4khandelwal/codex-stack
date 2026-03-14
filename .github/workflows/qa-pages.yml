@@ -34,6 +34,6 @@ jobs:
           folder: .site
           clean: true
           clean-exclude: pr-preview
-          force: false
+          force: true
           single-commit: true
           attempt-limit: 3
