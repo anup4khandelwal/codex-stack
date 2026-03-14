@@ -157,6 +157,7 @@ bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer oc
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
+bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
@@ -176,6 +177,7 @@ bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot
 bun run ship:dry
 bun run retro
 bun run upgrade
+bun run upgrade:apply
 bun run weekly
 ```
 
@@ -228,6 +230,7 @@ Examples:
 ```bash
 bun src/cli.ts upgrade --offline
 bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```
 
@@ -237,6 +240,9 @@ The upgrade report covers:
 - dependency drift from npm when network access is available
 - GitHub Actions `uses:` ref drift
 - local wrapper and installed Codex skill link health
+- optional safe local refresh results when `--apply` is used
+
+`--apply` is intentionally narrow. It regenerates `.codex-stack/bin` wrappers with dependency install skipped and refreshes project skill links under `.codex/skills`. It does not mutate dependency versions or workflow refs.
 
 `.github/workflows/daily-update-check.yml` runs that same report on a daily schedule, uploads the markdown/json artifacts, writes the markdown into the workflow summary, and syncs a stable GitHub issue titled `Daily codex-stack update check`.
 

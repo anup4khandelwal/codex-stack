@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
 type CheckStatus = "ok" | "warning" | "error" | "skipped";
 type CheckCategory = "runtime" | "dependencies" | "workflows" | "installHealth";
@@ -17,6 +17,7 @@ interface ParsedArgs {
   markdownOut: string;
   repo: string;
   offline: boolean;
+  apply: boolean;
 }
 
 interface PackageManifest {
@@ -50,10 +51,28 @@ interface UpgradeReport {
   generatedAt: string;
   repo: string;
   offline: boolean;
+  applyRequested: boolean;
+  applyResults: ApplyResult[];
   overallStatus: CheckStatus;
   counts: CheckCounts;
   checks: Record<CheckCategory, CheckItem[]>;
   recommendedActions: string[];
+}
+
+interface ApplyResult {
+  name: string;
+  status: CheckStatus;
+  command: string;
+  detail: string;
+}
+
+interface ApplyStep {
+  name: string;
+  command: string;
+  program: string;
+  args: string[];
+  env?: Record<string, string>;
+  successDetail: string;
 }
 
 interface WorkflowReference {
@@ -71,7 +90,7 @@ function usage(): never {
   console.log(`upgrade-check
 
 Usage:
-  bun scripts/upgrade-check.ts [--json] [--json-out <path>] [--markdown-out <path>] [--repo <owner/name>] [--offline]
+  bun scripts/upgrade-check.ts [--json] [--json-out <path>] [--markdown-out <path>] [--repo <owner/name>] [--offline] [--apply]
 `);
   process.exit(0);
 }
@@ -99,6 +118,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     markdownOut: "",
     repo: "",
     offline: false,
+    apply: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -115,6 +135,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       i += 1;
     } else if (arg === "--offline") {
       args.offline = true;
+    } else if (arg === "--apply") {
+      args.apply = true;
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
@@ -581,6 +603,56 @@ function collectInstallHealthChecks(modeNames: string[]): CheckItem[] {
   return checks;
 }
 
+function applyLocalRefreshes(): ApplyResult[] {
+  const cwd = process.cwd();
+  const steps: ApplyStep[] = [
+    {
+      name: "Local wrapper refresh",
+      command: "SKIP_INSTALL=1 bash ./setup",
+      program: "bash",
+      args: ["./setup"],
+      env: { SKIP_INSTALL: "1" },
+      successDetail: "Regenerated local codex-stack wrappers without reinstalling dependencies.",
+    },
+    {
+      name: "Project skill link refresh",
+      command: "bash scripts/install-skills.sh project $(pwd)",
+      program: "bash",
+      args: ["scripts/install-skills.sh", "project", cwd],
+      successDetail: "Refreshed project-level Codex skill links under `.codex/skills`.",
+    },
+  ];
+
+  return steps.map((step) => {
+    const result = spawnSync(step.program, step.args, {
+      cwd,
+      env: { ...process.env, ...step.env },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.status === 0) {
+      return {
+        name: step.name,
+        status: "ok",
+        command: step.command,
+        detail: step.successDetail,
+      };
+    }
+
+    const errorOutput = [result.stderr, result.stdout]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" | ");
+
+    return {
+      name: step.name,
+      status: "error",
+      command: step.command,
+      detail: errorOutput || `${step.command} exited with status ${result.status ?? 1}.`,
+    };
+  });
+}
+
 function flattenChecks(checks: Record<CheckCategory, CheckItem[]>): CheckItem[] {
   return [...checks.runtime, ...checks.dependencies, ...checks.workflows, ...checks.installHealth];
 }
@@ -650,6 +722,19 @@ function renderSection(items: CheckItem[], emptyMessage: string): string {
     .join("\n");
 }
 
+function renderApplySection(report: UpgradeReport): string {
+  if (!report.applyRequested) {
+    return "- Requested: no";
+  }
+  if (!report.applyResults.length) {
+    return "- Requested: yes\n- No apply steps were executed.";
+  }
+  return [
+    "- Requested: yes",
+    ...report.applyResults.map((item) => `- **${statusIcon(item.status)}** ${item.name}: ${item.detail} | command: ${item.command}`),
+  ].join("\n");
+}
+
 function renderMarkdown(report: UpgradeReport): string {
   return `${report.marker}
 # codex-stack daily update check
@@ -676,6 +761,10 @@ ${renderSection(report.checks.workflows, "No workflow checks were generated.")}
 
 ${renderSection(report.checks.installHealth, "No install health checks were generated.")}
 
+## Apply results
+
+${renderApplySection(report)}
+
 ## Recommended actions
 
 ${report.recommendedActions.map((item) => `- ${item}`).join("\n")}
@@ -695,14 +784,22 @@ async function main(): Promise<void> {
     installHealth: collectInstallHealthChecks(modeNames),
   };
 
+  const applyResults = args.apply ? applyLocalRefreshes() : [];
+  if (args.apply) {
+    checks.installHealth = collectInstallHealthChecks(modeNames);
+  }
+
   const allChecks = flattenChecks(checks);
   const counts = countStatuses(allChecks);
+  const reportStatus = applyResults.some((item) => item.status === "error") ? "error" : overallStatus(counts);
   const report: UpgradeReport = {
     marker: "<!-- codex-stack:daily-update-check -->",
     generatedAt: new Date().toISOString(),
     repo,
     offline: args.offline,
-    overallStatus: overallStatus(counts),
+    applyRequested: args.apply,
+    applyResults,
+    overallStatus: reportStatus,
     counts,
     checks,
     recommendedActions: recommendedActions(checks),
