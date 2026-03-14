@@ -36,6 +36,8 @@ echo "[3/8] doctor checks"
 run_ts src/cli.ts doctor >/tmp/codex-stack-doctor.log
 run_ts browse/src/cli.ts doctor >/tmp/codex-stack-browse-doctor.log
 grep -q 'snapshot' /tmp/codex-stack-browse-doctor.log
+grep -q 'export-session' /tmp/codex-stack-browse-doctor.log
+grep -q 'probe' /tmp/codex-stack-browse-doctor.log
 
 echo "[4/8] browse flow registry"
 run_ts browse/src/cli.ts save-flow smoke '[{"action":"wait","ms":1},{"action":"assert-url","value":"example.com"}]' >/tmp/codex-stack-flow-save.log
@@ -67,8 +69,11 @@ echo "[5/8] review, ship, retro, and demo interfaces"
 run_ts scripts/review-diff.ts --help >/tmp/codex-stack-review-help.log
 run_ts scripts/issue-flow.ts --help >/tmp/codex-stack-issue-flow-help.log
 run_ts scripts/issue-flow.spec.ts >/tmp/codex-stack-issue-flow-spec.log
+run_ts scripts/qa-diff.spec.ts >/tmp/codex-stack-qa-diff-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
+run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
+run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
@@ -130,7 +135,7 @@ cat > /tmp/codex-stack-qa-fixture.json <<'JSON'
 JSON
 run_ts scripts/qa-run.ts --fixture /tmp/codex-stack-qa-fixture.json --json >/tmp/codex-stack-qa.json
 grep -q '"status": "critical"' /tmp/codex-stack-qa.json
-grep -q '"healthScore": 45' /tmp/codex-stack-qa.json
+grep -q '"healthScore": 48' /tmp/codex-stack-qa.json
 grep -q '"annotation": ".codex-stack/qa/annotations/' /tmp/codex-stack-qa.json
 rm -rf docs/qa/smoke-fixture
 run_ts scripts/qa-run.ts --fixture /tmp/codex-stack-qa-fixture.json --publish-dir docs/qa/smoke-fixture --json >/tmp/codex-stack-qa-published.json

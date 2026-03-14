@@ -35,6 +35,7 @@ CLI:
 
 ```bash
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 ```
 
 ## Preview mode
@@ -73,6 +74,9 @@ bun run demo:start
 bun src/cli.ts browse flows
 bun src/cli.ts browse export-flow portal-full-demo /tmp/portal-full-demo.md
 bun src/cli.ts browse import-flow portal-copy /tmp/portal-full-demo.md
+bun src/cli.ts browse export-session /tmp/portal-session.json --session friend-demo
+bun src/cli.ts browse import-session /tmp/portal-session.json --session friend-demo-copy
+bun src/cli.ts browse probe http://127.0.0.1:4173/dashboard --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo

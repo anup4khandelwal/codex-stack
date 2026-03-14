@@ -56,6 +56,7 @@ interface QaFlowResult {
 
 interface QaFinding {
   severity?: string;
+  category?: string;
   title?: string;
   detail?: string;
 }
@@ -431,7 +432,9 @@ function recommendation(status: PreviewStatus, qa: QaReport, readiness: Readines
 
 function renderFindingLines(findings: QaFinding[]): string[] {
   if (!findings.length) return ["- No findings."];
-  return findings.slice(0, 8).map((item) => `- ${String(item.severity || "info").toUpperCase()}: ${item.title || "Finding"}${item.detail ? ` - ${item.detail}` : ""}`);
+  return findings
+    .slice(0, 8)
+    .map((item) => `- ${String(item.severity || "info").toUpperCase()}${item.category ? `/${String(item.category).toUpperCase()}` : ""}: ${item.title || "Finding"}${item.detail ? ` - ${item.detail}` : ""}`);
 }
 
 function renderFlowLines(flowResults: QaFlowResult[]): string[] {

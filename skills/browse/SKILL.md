@@ -28,8 +28,12 @@ Give the agent eyes for QA and deployment checks.
 - `show-flow <name>`
 - `delete-flow <name>`
 - `clear-session`
+- `export-session <path>`
+- `import-session <path>`
+- `import-cookies <path>`
 - `snapshot <url> [name]`
 - `compare-snapshot <url> <name>`
+- `probe <url>`
 - `text <url>`
 - `html <url> [selector]`
 - `links <url>`
@@ -56,6 +60,9 @@ bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
 bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
+bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
+bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
+bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse login https://example.com/login login-local --session staging
@@ -69,6 +76,7 @@ bun src/cli.ts browse sessions
 - Do not claim visual validation without screenshots or runtime output.
 - Prefer deterministic selectors and stable flows.
 - Reuse named sessions for authenticated flows so login state persists.
+- Export/import session bundles when authenticated QA needs to move between machines or named sessions.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.
 - Prefer composing shared flows with `use-flow` instead of duplicating login/setup steps across many files.
 - Prefer Markdown or YAML exports when flows need code review, because they diff more cleanly than inline JSON strings.
