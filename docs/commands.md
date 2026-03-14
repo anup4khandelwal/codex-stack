@@ -87,7 +87,7 @@ bun scripts/render-pr-review.ts --input review.json --preview-input preview.json
 Notes:
 
 - `pr-review.yml` uses `review-diff.ts` plus `render-pr-review.ts` to comment on every PR.
-- When `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, `pr-review.yml` also runs `preview-verify.ts` and merges the preview deploy evidence into the review comment.
+- For same-repo PRs, `pr-review.yml` also publishes a GitHub Pages preview under `pr-preview/pr-<number>/`, runs `preview-verify.ts` against that live URL, and merges the preview deploy evidence into the review comment.
 - The review workflow fails when critical findings are present in either structural review or preview verification.
 
 ## Issue workflow
@@ -145,9 +145,22 @@ Notes:
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.
 
+## Preview site build
+
+```bash
+bun scripts/build-preview-site.ts --out .preview-site
+open .preview-site/index.html
+```
+
+Notes:
+
+- `build-preview-site.ts` rewrites the demo app into a path-based static site that works under GitHub Pages subpaths like `pr-preview/pr-42/`.
+- The generated site includes `index.html`, `login/index.html`, `dashboard/index.html`, and `.nojekyll`.
+
 ## Preview workflow
 
 ```bash
+bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url https://preview.example.com --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --json
 ```
@@ -157,7 +170,7 @@ Notes:
 - `preview-verify.ts` resolves the preview URL from either `--url` or `--url-template`.
 - Template placeholders support `{repo}`, `{owner}`, `{repo_name}`, `{pr}`, `{branch}`, `{branch_slug}`, `{sha}`, and `{short_sha}`.
 - The script polls preview readiness before it delegates to `deploy-verify.ts`.
-- `preview-verify.yml` runs this flow on pull requests when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured as a repo variable.
+- `preview-verify.yml` is the manual rerun path. `pr-review.yml` is the automatic PR-time path and publishes the GitHub Pages preview before verification.
 - The workflow uploads `preview.md`, `preview.json`, `preview-comment.md`, and the published deploy artifacts as a workflow artifact, then updates a stable PR comment.
 
 ## Deploy workflow

@@ -29,7 +29,10 @@ bun src/cli.ts browse flows
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+bun scripts/build-preview-site.ts --out .preview-site
 ```
+
+The preview-site builder turns the demo into a GitHub Pages-safe site with `/login/` and `/dashboard/` subpaths so PR previews can be hosted under `pr-preview/pr-<number>/`.
 
 ## Recommended login
 

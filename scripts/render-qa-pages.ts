@@ -607,6 +607,7 @@ function main(): void {
     })),
   };
   fs.writeFileSync(path.join(args.out, "manifest.json"), JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(path.join(args.out, ".nojekyll"), "");
 
   if (args.json) {
     console.log(JSON.stringify(manifest, null, 2));

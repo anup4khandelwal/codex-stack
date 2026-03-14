@@ -6,7 +6,7 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -27,14 +27,33 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Fetch base branch
-        run: git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
+      - name: Install Playwright browser
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: bunx playwright install chromium
+
+      - name: Build preview site
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          bun run build
+          bun scripts/build-preview-site.ts --out .preview-site
+
+      - name: Publish PR preview
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: JamesIves/github-pages-deploy-action@v4.8.0
+        with:
+          branch: gh-pages
+          folder: .preview-site
+          target-folder: pr-preview/pr-${{ github.event.pull_request.number }}
+          clean: true
+          force: false
+          single-commit: true
+          attempt-limit: 3
 
       - name: Run codex-stack review
-        run: bun scripts/review-diff.ts --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
+        run: bun scripts/review-diff.ts --json --base "${{ github.event.pull_request.base.sha }}" > review.json
 
       - name: Run preview verification for review evidence
-        if: vars.CODEX_STACK_PREVIEW_URL_TEMPLATE != ''
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
@@ -42,28 +61,54 @@ jobs:
           GITHUB_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          CODEX_STACK_PREVIEW_URL_TEMPLATE: ${{ vars.CODEX_STACK_PREVIEW_URL_TEMPLATE }}
+          CODEX_STACK_PREVIEW_PATHS: ${{ vars.CODEX_STACK_PREVIEW_PATHS }}
+          CODEX_STACK_PREVIEW_DEVICES: ${{ vars.CODEX_STACK_PREVIEW_DEVICES }}
           CODEX_STACK_PREVIEW_FLOW: ${{ vars.CODEX_STACK_PREVIEW_FLOW }}
           CODEX_STACK_PREVIEW_SNAPSHOT: ${{ vars.CODEX_STACK_PREVIEW_SNAPSHOT }}
+          CODEX_STACK_PREVIEW_WAIT_TIMEOUT: ${{ vars.CODEX_STACK_PREVIEW_WAIT_TIMEOUT }}
         run: |
           set -euo pipefail
+          owner="${GITHUB_REPOSITORY%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          preview_url="https://${owner}.github.io/${repo}/pr-preview/pr-${PR_NUMBER}/"
           args=(
             "--repo" "${GITHUB_REPOSITORY}"
             "--branch" "${GITHUB_HEAD_REF}"
             "--sha" "${GITHUB_SHA}"
             "--pr" "${PR_NUMBER}"
-            "--url-template" "${CODEX_STACK_PREVIEW_URL_TEMPLATE}"
+            "--url" "${preview_url}"
             "--publish-dir" "preview-artifacts"
             "--markdown-out" "preview.md"
             "--json-out" "preview.json"
             "--comment-out" "preview-comment.md"
           )
 
+          if [ -n "${CODEX_STACK_PREVIEW_PATHS}" ]; then
+            IFS=',' read -r -a preview_paths <<< "${CODEX_STACK_PREVIEW_PATHS}"
+            for preview_path in "${preview_paths[@]}"; do
+              preview_path="$(printf '%s' "${preview_path}" | xargs)"
+              if [ -n "${preview_path}" ]; then
+                args+=("--path" "${preview_path}")
+              fi
+            done
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_DEVICES}" ]; then
+            IFS=',' read -r -a preview_devices <<< "${CODEX_STACK_PREVIEW_DEVICES}"
+            for preview_device in "${preview_devices[@]}"; do
+              preview_device="$(printf '%s' "${preview_device}" | xargs)"
+              if [ -n "${preview_device}" ]; then
+                args+=("--device" "${preview_device}")
+              fi
+            done
+          fi
           if [ -n "${CODEX_STACK_PREVIEW_FLOW}" ]; then
             args+=("--flow" "${CODEX_STACK_PREVIEW_FLOW}")
           fi
           if [ -n "${CODEX_STACK_PREVIEW_SNAPSHOT}" ]; then
             args+=("--snapshot" "${CODEX_STACK_PREVIEW_SNAPSHOT}")
+          fi
+          if [ -n "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}" ]; then
+            args+=("--wait-timeout" "${CODEX_STACK_PREVIEW_WAIT_TIMEOUT}")
           fi
 
           bun scripts/preview-verify.ts "${args[@]}"

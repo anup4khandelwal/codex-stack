@@ -88,7 +88,9 @@ run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/deploy-verify.ts --help >/tmp/codex-stack-deploy-help.log
+run_ts scripts/build-preview-site.ts --help >/tmp/codex-stack-build-preview-help.log
 run_ts scripts/deploy-verify.spec.ts >/tmp/codex-stack-deploy-spec.log
+run_ts scripts/build-preview-site.spec.ts >/tmp/codex-stack-build-preview-spec.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
@@ -163,11 +165,21 @@ test -f .site/index.html
 test -f .site/qa/index.html
 test -f .site/qa/smoke-fixture/index.html
 test -f .site/manifest.json
+test -f .site/.nojekyll
 grep -q 'codex-stack QA Reports' .site/index.html
 grep -q 'smoke-fixture' .site/manifest.json
 grep -q 'github.io' .site/manifest.json
+bun run build >/tmp/codex-stack-preview-build.log
+run_ts scripts/build-preview-site.ts --out .preview-site >/tmp/codex-stack-preview-site.log
+test -f .preview-site/index.html
+test -f .preview-site/login/index.html
+test -f .preview-site/dashboard/index.html
+test -f .preview-site/.nojekyll
+grep -q '\./login/' .preview-site/index.html
+grep -q '\.\./app.css' .preview-site/login/index.html
 rm -rf docs/qa/smoke-fixture
 rm -rf .site
+rm -rf .preview-site
 run_ts scripts/demo-smoke.ts >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
@@ -285,6 +297,8 @@ test -f scripts/issue-flow.ts
 test -f scripts/issue-flow.spec.ts
 test -f scripts/preview-verify.ts
 test -f scripts/preview-verify.spec.ts
+test -f scripts/build-preview-site.ts
+test -f scripts/build-preview-site.spec.ts
 test -f scripts/upgrade-check.ts
 test -f scripts/upgrade-check.spec.ts
 test -f scripts/render-pr-review.ts

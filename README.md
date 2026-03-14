@@ -151,7 +151,7 @@ bun src/cli.ts ship --message "feat: add issue-first workflow" --push --pr
 What happens next:
 
 - `pr-review.yml` runs `codex-stack` review on the PR diff
-- when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured, the same review workflow also runs preview deploy verification and folds the visual evidence into the PR review comment
+- for same-repo PRs, the review workflow publishes a GitHub Pages preview at `https://<owner>.github.io/<repo>/pr-preview/pr-<number>/` and verifies that live preview before merging
 - the workflow posts or updates a PR comment with structural findings plus any preview deploy evidence
 - the job fails if critical findings are detected in either structural review or preview verification
 - if the PR has the `automerge` label, `pr-automerge.yml` enables GitHub auto-merge
@@ -166,6 +166,7 @@ bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
@@ -246,15 +247,18 @@ Example:
 
 ```bash
 bun src/cli.ts preview \
-  --url-template "https://preview-{pr}.example.com" \
+  --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" \
   --pr 42 \
   --branch feat/42-preview \
   --sha abcdef1234567890 \
-  --flow landing-smoke \
-  --snapshot landing-home
+  --path /login \
+  --path /dashboard \
+  --device desktop \
+  --device mobile \
+  --flow portal-full-demo
 ```
 
-The preview workflow resolves the preview URL from the PR context, waits for the deployment to respond, runs `qa`, publishes artifacts, and generates a PR-comment-ready markdown summary.
+For same-repo PRs, `pr-review.yml` publishes this preview site automatically to GitHub Pages before it verifies the deployment. `preview-verify.yml` remains available as a manual rerun or for external preview URLs.
 
 ## Ship verification
 
@@ -314,6 +318,14 @@ On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` report
 
 - branch artifact links that work immediately on the PR branch
 - stable Pages links that activate after the branch is merged to `main`
+
+The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:
+
+- `CODEX_STACK_PREVIEW_PATHS=/login,/dashboard`
+- `CODEX_STACK_PREVIEW_DEVICES=desktop,mobile`
+- `CODEX_STACK_PREVIEW_FLOW=portal-full-demo`
+- `CODEX_STACK_PREVIEW_SNAPSHOT=<optional snapshot name>`
+- `CODEX_STACK_PREVIEW_WAIT_TIMEOUT=300`
 
 ## Install skills for Codex
 
