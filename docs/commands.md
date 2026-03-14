@@ -42,6 +42,8 @@ bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --se
 bun src/cli.ts browse click https://example.com/checkout "role:button:Pay now" --session staging --frame "name:payment"
 bun src/cli.ts browse mock https://example.com/app "**/api/profile" '{"status":503,"json":{"error":"offline"}}' --session staging
 bun src/cli.ts browse block https://example.com/app "**/analytics/**" --session staging
+bun src/cli.ts browse download https://example.com/reports "role:button:Export CSV" ./artifacts/report.csv --session staging
+bun src/cli.ts browse assert-download https://example.com/reports "role:button:Export CSV" report.csv ./artifacts/report.csv --session staging
 bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"main"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
@@ -226,6 +228,8 @@ Notes:
 - Flow steps can override the default frame with a `frame` property, for example `{ "action": "assert-text", "selector": "text:Frame ready", "frame": "name:payment" }`.
 - Use `mock` for one-off fulfilled responses and `block` for one-off aborted requests on direct browser commands.
 - Flow steps also support `{ "action": "route", ... }` and `{ "action": "clear-routes" }` so network controls can be armed before navigation.
+- Use `download` to save a file to disk and `assert-download` when the filename fragment itself is part of the assertion.
+- Flow steps also support `{ "action": "download", ... }` and `{ "action": "assert-download", ... }` for checked-in export flows.
 - Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.

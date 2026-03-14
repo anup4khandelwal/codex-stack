@@ -196,6 +196,8 @@ Usage:
   codex-stack browse screenshot <url> [path] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse mock <url> <pattern> <json-config> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse block <url> <pattern> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse download <url> <selector> [path] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-download <url> <selector> <expected-name-fragment> [path] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse eval <url> <expression> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse click <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse fill <url> <selector> <value> [--session <name>] [--device <desktop|tablet|mobile>]
@@ -1056,6 +1058,33 @@ async function clearRouteRules(page: PlaywrightPage): Promise<void> {
   }
 }
 
+function resolveDownloadPath(targetPath: string, suggestedFilename: string): string {
+  const raw = String(targetPath || "").trim();
+  if (!raw) return path.join(os.tmpdir(), suggestedFilename || `codex-stack-download-${Date.now()}`);
+  const absolute = path.resolve(process.cwd(), raw);
+  if (fs.existsSync(absolute) && fs.statSync(absolute).isDirectory()) {
+    return path.join(absolute, suggestedFilename || `codex-stack-download-${Date.now()}`);
+  }
+  return absolute;
+}
+
+async function captureDownload(page: PlaywrightPage, scope: PlaywrightScope, selector: string, targetPath = ""): Promise<{ path: string; suggestedFilename: string }> {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    resolveLocator(scope, selector).click(),
+  ]);
+  const suggestedFilename = typeof download.suggestedFilename === "function" ? String(download.suggestedFilename() || "") : "";
+  const outputPath = resolveDownloadPath(targetPath, suggestedFilename);
+  ensureDir(path.dirname(outputPath));
+  if (typeof download.saveAs === "function") {
+    await download.saveAs(outputPath);
+  }
+  return {
+    path: outputPath,
+    suggestedFilename,
+  };
+}
+
 async function installRouteRule(page: PlaywrightPage, step: FlowStep): Promise<StepResult> {
   const pattern = String(step.pattern ?? step.match ?? step.url ?? "").trim();
   assertCondition(pattern, "route steps require a pattern.");
@@ -1277,6 +1306,22 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
     const target = String(step.path || path.join(os.tmpdir(), `codex-stack-flow-${sessionName}.png`));
     await page.screenshot({ path: target, fullPage: true });
     return { action, path: target, frame: frame || undefined, status: "ok" };
+  }
+  if (action === "download") {
+    const selector = String(step.selector || "");
+    const download = await captureDownload(page, scope, selector, String(step.path || ""));
+    return { action, selector, frame: frame || undefined, ...download, status: "ok" };
+  }
+  if (action === "assert-download") {
+    const selector = String(step.selector || "");
+    const expected = String(step.expected ?? step.value ?? step.name ?? "");
+    assertCondition(expected, "assert-download steps require an expected filename fragment.");
+    const download = await captureDownload(page, scope, selector, String(step.path || ""));
+    assertCondition(
+      download.suggestedFilename.includes(expected),
+      `Expected downloaded filename to include ${JSON.stringify(expected)} but got ${JSON.stringify(download.suggestedFilename)}.`,
+    );
+    return { action, selector, expected, frame: frame || undefined, ...download, status: "ok" };
   }
   if (action === "route") {
     const configured = await installRouteRule(page, step);
@@ -1790,6 +1835,38 @@ async function main(): Promise<void> {
       };
     });
     recordSession(session, { lastCommand: "block", lastUrl: url, output: pattern });
+    printJson(result);
+    return;
+  }
+
+  if (command === "download") {
+    const [url, selector, targetPath] = rest;
+    if (!url || !selector) usage();
+    const result = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
+      return captureDownload(page, scope, selector, targetPath || "");
+    });
+    recordSession(session, { lastCommand: "download", lastUrl: url, output: result.path });
+    printJson(result);
+    return;
+  }
+
+  if (command === "assert-download") {
+    const [url, selector, expected, targetPath] = rest;
+    if (!url || !selector || !expected) usage();
+    const result = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const scope = await resolveScope(page, frame);
+      const download = await captureDownload(page, scope, selector, targetPath || "");
+      assertCondition(
+        download.suggestedFilename.includes(expected),
+        `Expected downloaded filename to include ${JSON.stringify(expected)} but got ${JSON.stringify(download.suggestedFilename)}.`,
+      );
+      return {
+        ...download,
+        expected,
+      };
+    });
+    recordSession(session, { lastCommand: "assert-download", lastUrl: url, output: `${result.path}:${expected}` });
     printJson(result);
     return;
   }
