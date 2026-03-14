@@ -8,8 +8,11 @@ import { createHash } from "node:crypto";
 type FlowFormat = "json" | "yaml" | "markdown";
 type FlowSource = "local" | "repo";
 type PlaywrightModule = any;
-type PlaywrightPage = any;
-type PlaywrightContext = any;
+type PlaywrightPage = {
+  evaluate<TResult>(pageFunction: () => TResult): Promise<TResult>;
+  evaluate<TArg, TResult>(pageFunction: (arg: TArg) => TResult, arg: TArg): Promise<TResult>;
+} & Record<string, any>;
+type PlaywrightContext = Record<string, any>;
 type StepResult = Record<string, unknown>;
 
 interface SessionState {
@@ -1180,9 +1183,7 @@ async function main(): Promise<void> {
   if (command === "eval") {
     const [url, expression] = rest;
     if (!url || !expression) usage();
-    const result = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) =>
-      page.evaluate((expressionText: string) => eval(expressionText), expression)
-    );
+    const result = await withPage(session, url, async ({ page }) => page.evaluate((expressionText) => eval(expressionText), expression));
     recordSession(session, { lastCommand: "eval", lastUrl: url });
     console.log(typeof result === "string" ? result : JSON.stringify(result, null, 2));
     return;
