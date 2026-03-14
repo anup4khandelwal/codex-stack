@@ -33,7 +33,7 @@ Seven opinionated workflow modes for Codex: product framing, technical planning,
 - Persistent named browser sessions
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts
-- QA reports with findings, severity, health score, and saved evidence
+- QA reports with findings, severity, health score, saved evidence, and annotated screenshots for snapshot failures
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
 
@@ -135,6 +135,7 @@ Use `qa` when you want a decision-ready report:
 - pass / warning / critical status
 - health score
 - findings with evidence
+- annotated SVG evidence for snapshot-based failures
 - saved markdown/json report under `.codex-stack/qa/`
 
 ## Ship verification

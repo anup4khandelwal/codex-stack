@@ -50,6 +50,25 @@ node scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
 node scripts/retro-report.mjs --help >/tmp/codex-stack-retro-help.log
 node scripts/retro-report.mjs --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
 node scripts/weekly-digest.mjs --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --publish-dir /tmp/codex-stack-weekly-publish --no-github >/tmp/codex-stack-weekly.log
+mkdir -p .codex-stack/browse/snapshots .codex-stack/browse/artifacts
+node -e "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=','base64'))" > .codex-stack/browse/artifacts/example-1.png
+cat > .codex-stack/browse/snapshots/example.json <<'JSON'
+{
+  "name": "example",
+  "elements": [
+    {
+      "selector": "h1",
+      "bounds": { "x": 0, "y": 0, "width": 1, "height": 1 }
+    }
+  ]
+}
+JSON
+cat > .codex-stack/browse/artifacts/example-1.json <<'JSON'
+{
+  "name": "example",
+  "elements": []
+}
+JSON
 cat > /tmp/codex-stack-qa-fixture.json <<'JSON'
 {
   "url": "https://example.com/demo",
@@ -82,6 +101,7 @@ JSON
 node scripts/qa-run.mjs --fixture /tmp/codex-stack-qa-fixture.json --json >/tmp/codex-stack-qa.json
 grep -q '"status": "critical"' /tmp/codex-stack-qa.json
 grep -q '"healthScore": 45' /tmp/codex-stack-qa.json
+grep -q '"annotation": ".codex-stack/qa/annotations/' /tmp/codex-stack-qa.json
 node scripts/demo-smoke.mjs >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
@@ -94,6 +114,7 @@ test -f /tmp/codex-stack-weekly-publish/email.md
 test -f /tmp/codex-stack-weekly-publish/manifest.json
 test -f .codex-stack/qa/latest.md
 test -f .codex-stack/qa/latest.json
+test -n "$(find .codex-stack/qa/annotations -name '*.svg' -print -quit)"
 
 git -C "$TMP_REPO" init -b main >/tmp/codex-stack-temp-git-init.log
 git -C "$TMP_REPO" config user.email "smoke@example.com"

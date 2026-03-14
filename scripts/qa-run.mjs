@@ -5,6 +5,7 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 
 const QA_DIR = path.resolve(process.cwd(), ".codex-stack", "qa");
+const QA_ANNOTATION_DIR = path.join(QA_DIR, "annotations");
 const BROWSE_CLI = path.resolve(process.cwd(), "browse", "dist", "cli.js");
 
 function usage() {
@@ -148,7 +149,11 @@ function buildMarkdown(report) {
     ? report.flowResults.map((item) => `- ${item.name}: ${item.status}`).join("\n")
     : "- none";
   const snapshotLine = report.snapshotResult
-    ? `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`
+    ? [
+      `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
+      report.snapshotResult.screenshot ? `- Screenshot: ${report.snapshotResult.screenshot}` : "",
+      report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
+    ].filter(Boolean).join("\n")
     : "- Snapshot: none";
 
   return `# QA Report
@@ -177,6 +182,163 @@ ${snapshotLine}
 
 function relative(filePath) {
   return path.relative(process.cwd(), filePath) || path.basename(filePath);
+}
+
+function readJson(filePath, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function resolveMaybeRelative(filePath) {
+  if (!filePath) return "";
+  return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function loadSnapshotDocument(refOrObject) {
+  if (!refOrObject) return null;
+  if (typeof refOrObject === "object") return refOrObject;
+  const resolved = resolveMaybeRelative(refOrObject);
+  return resolved && fs.existsSync(resolved) ? readJson(resolved, null) : null;
+}
+
+function pngDimensions(filePath) {
+  const resolved = resolveMaybeRelative(filePath);
+  if (!resolved || !fs.existsSync(resolved)) return { width: 1, height: 1 };
+  const buffer = fs.readFileSync(resolved);
+  if (buffer.length < 24 || buffer.toString("ascii", 1, 4) !== "PNG") {
+    return { width: 1, height: 1 };
+  }
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  };
+}
+
+function screenshotDataUri(filePath) {
+  const resolved = resolveMaybeRelative(filePath);
+  if (!resolved || !fs.existsSync(resolved)) return "";
+  return `data:image/png;base64,${fs.readFileSync(resolved).toString("base64")}`;
+}
+
+function selectorBounds(snapshot, selector) {
+  const elements = Array.isArray(snapshot?.elements) ? snapshot.elements : [];
+  const match = elements.find((item) => item?.selector === selector);
+  return match?.bounds || null;
+}
+
+function annotationMarkers(comparison, baselineSnapshot, currentSnapshot) {
+  const markers = [];
+  const missingSelectors = Array.isArray(comparison?.missingSelectors) ? comparison.missingSelectors : [];
+  for (const selector of missingSelectors) {
+    const bounds = selectorBounds(baselineSnapshot, selector);
+    if (!bounds) continue;
+    markers.push({
+      selector,
+      kind: "missing",
+      color: "#d73a49",
+      label: `Missing: ${selector}`,
+      bounds,
+    });
+  }
+
+  const changedSelectors = Array.isArray(comparison?.changedSelectors) ? comparison.changedSelectors : [];
+  for (const item of changedSelectors) {
+    const selector = item?.selector || "";
+    const bounds = selectorBounds(currentSnapshot, selector) || selectorBounds(baselineSnapshot, selector);
+    if (!selector || !bounds) continue;
+    markers.push({
+      selector,
+      kind: "changed",
+      color: "#fb8500",
+      label: `Changed: ${selector}`,
+      bounds,
+    });
+  }
+
+  const newSelectors = Array.isArray(comparison?.newSelectors) ? comparison.newSelectors : [];
+  for (const selector of newSelectors) {
+    const bounds = selectorBounds(currentSnapshot, selector);
+    if (!bounds) continue;
+    markers.push({
+      selector,
+      kind: "new",
+      color: "#2563eb",
+      label: `New: ${selector}`,
+      bounds,
+    });
+  }
+
+  return markers;
+}
+
+function renderAnnotationSvg({ screenshotPath, markers, title }) {
+  const screenshot = resolveMaybeRelative(screenshotPath);
+  if (!screenshot || !fs.existsSync(screenshot)) return "";
+  const { width, height } = pngDimensions(screenshot);
+  const imageHref = screenshotDataUri(screenshot);
+  const topPadding = 56;
+  const markerSvg = markers.map((marker, index) => {
+    const x = Number(marker.bounds?.x || 0);
+    const y = Number(marker.bounds?.y || 0) + topPadding;
+    const w = Math.max(4, Number(marker.bounds?.width || 0));
+    const h = Math.max(4, Number(marker.bounds?.height || 0));
+    const labelY = Math.max(20, y - 6);
+    return [
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${marker.color}" stroke-width="3"/>`,
+      `<rect x="${x}" y="${Math.max(4, labelY - 18)}" width="${Math.min(width - x, Math.max(80, marker.label.length * 7))}" height="18" fill="${marker.color}" opacity="0.92"/>`,
+      `<text x="${x + 6}" y="${labelY - 5}" font-family="monospace" font-size="11" fill="#ffffff">${escapeXml(`${index + 1}. ${marker.label}`)}</text>`,
+    ].join("");
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + topPadding}" viewBox="0 0 ${width} ${height + topPadding}">
+  <rect width="${width}" height="${height + topPadding}" fill="#0f172a"/>
+  <text x="16" y="24" font-family="monospace" font-size="14" fill="#ffffff">${escapeXml(title)}</text>
+  <text x="16" y="44" font-family="monospace" font-size="11" fill="#cbd5e1">${escapeXml(markers.length ? `${markers.length} annotated issue(s)` : "No element-level annotations available")}</text>
+  <image href="${imageHref}" x="0" y="${topPadding}" width="${width}" height="${height}"/>
+  ${markerSvg}
+</svg>
+`;
+}
+
+function createAnnotatedSnapshotArtifact(report, snapshotEvidence) {
+  if (!snapshotEvidence?.ok) return null;
+  if (snapshotEvidence.command !== "compare-snapshot") return null;
+  const result = snapshotEvidence.result || {};
+  const comparison = result.comparison || {};
+  const baselineSnapshot = loadSnapshotDocument(result.baseline);
+  const currentSnapshot = loadSnapshotDocument(result.current);
+  const markers = annotationMarkers(comparison, baselineSnapshot, currentSnapshot);
+  const screenshotPath = result.screenshot || currentSnapshot?.screenshotPath || "";
+  if (!screenshotPath) return null;
+
+  ensureDir(QA_ANNOTATION_DIR);
+  const annotationPath = path.join(QA_ANNOTATION_DIR, `${timestampSlug()}-${slugify(report.url || report.snapshotResult?.name || "qa")}.svg`);
+  const svg = renderAnnotationSvg({
+    screenshotPath,
+    markers,
+    title: `QA annotation • ${report.snapshotResult?.name || "snapshot"}`,
+  });
+  if (!svg) return null;
+  writeFile(annotationPath, svg);
+
+  return {
+    annotation: relative(annotationPath),
+    screenshot: result.screenshot || "",
+    markers: markers.length,
+  };
 }
 
 function collectSnapshotEvidence(args) {
@@ -278,9 +440,27 @@ function buildReport({ args, snapshotEvidence, flowEvidence }) {
       baseline: snapshotEvidence.result?.baseline || snapshotEvidence.result?.snapshot || "",
       current: snapshotEvidence.result?.current || "",
       screenshot: snapshotEvidence.result?.screenshot || "",
+      annotation: "",
     } : null,
     artifacts: {},
   };
+  return report;
+}
+
+function attachSnapshotAnnotation(report, snapshotEvidence) {
+  const artifact = createAnnotatedSnapshotArtifact(report, snapshotEvidence);
+  if (!artifact) return report;
+
+  if (report.snapshotResult) {
+    report.snapshotResult.annotation = artifact.annotation;
+  }
+  for (const item of report.findings) {
+    if (item.evidence?.snapshot) {
+      item.evidence.annotation = artifact.annotation;
+      item.evidence.screenshot = item.evidence.screenshot || artifact.screenshot;
+    }
+  }
+  report.artifacts.annotation = artifact.annotation;
   return report;
 }
 
@@ -292,6 +472,7 @@ function writeArtifacts(report) {
   const latestJsonPath = path.join(QA_DIR, "latest.json");
   const latestMarkdownPath = path.join(QA_DIR, "latest.md");
   report.artifacts = {
+    ...(report.artifacts || {}),
     json: relative(jsonPath),
     markdown: relative(markdownPath),
     latestJson: relative(latestJsonPath),
@@ -312,9 +493,10 @@ function loadFixture(filePath) {
 
 const args = parseArgs(process.argv.slice(2));
 let report;
+let fixture = null;
 
 if (args.fixture) {
-  const fixture = loadFixture(args.fixture);
+  fixture = loadFixture(args.fixture);
   report = buildReport({
     args: {
       ...args,
@@ -341,6 +523,15 @@ if (args.fixture) {
   const snapshotEvidence = collectSnapshotEvidence(args);
   const flowEvidence = collectFlowEvidence(args);
   report = buildReport({ args, snapshotEvidence, flowEvidence });
+  report = attachSnapshotAnnotation(report, snapshotEvidence);
+}
+
+if (args.fixture) {
+  report = attachSnapshotAnnotation(report, fixture.snapshot ? {
+    ok: fixture.snapshot.ok !== false,
+    command: fixture.snapshot.command || "compare-snapshot",
+    result: fixture.snapshot.result || fixture.snapshot,
+  } : null);
 }
 
 report = writeArtifacts(report);

@@ -81,6 +81,7 @@ Notes:
 
 - `qa` writes markdown/json artifacts under `.codex-stack/qa/`.
 - It upgrades raw browser evidence into findings, severity, health score, and recommendation.
+- Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 
 ## Retro workflow

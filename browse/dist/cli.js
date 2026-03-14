@@ -421,10 +421,17 @@ async function captureSnapshotPayload(page) {
       if (!selector || seen.has(selector)) continue;
       seen.add(selector);
       const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute("aria-label") || candidate.getAttribute("value") || "");
+      const rect = candidate.getBoundingClientRect();
       elements.push({
         selector,
         tag: candidate.tagName.toLowerCase(),
         text,
+        bounds: {
+          x: Math.round((window.scrollX + rect.left) * 10) / 10,
+          y: Math.round((window.scrollY + rect.top) * 10) / 10,
+          width: Math.round(rect.width * 10) / 10,
+          height: Math.round(rect.height * 10) / 10,
+        },
       });
       if (elements.length >= 80) break;
     }
@@ -434,6 +441,18 @@ async function captureSnapshotPayload(page) {
       url: window.location.href,
       title: document.title,
       bodyText: normalize(document.body?.innerText || ""),
+      page: {
+        width: Math.max(
+          document.documentElement?.scrollWidth || 0,
+          document.body?.scrollWidth || 0,
+          window.innerWidth || 0
+        ),
+        height: Math.max(
+          document.documentElement?.scrollHeight || 0,
+          document.body?.scrollHeight || 0,
+          window.innerHeight || 0
+        ),
+      },
       elements,
     };
   });
