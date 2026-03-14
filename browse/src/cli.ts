@@ -11,6 +11,7 @@ type PlaywrightModule = any;
 type PlaywrightPage = {
   evaluate<TResult>(pageFunction: () => TResult): Promise<TResult>;
   evaluate<TArg, TResult>(pageFunction: (arg: TArg) => TResult, arg: TArg): Promise<TResult>;
+  $$eval<TResult>(selector: string, pageFunction: (elements: HTMLAnchorElement[]) => TResult): Promise<TResult>;
 } & Record<string, any>;
 type PlaywrightContext = Record<string, any>;
 type StepResult = Record<string, unknown>;
@@ -1157,9 +1158,9 @@ async function main(): Promise<void> {
   if (command === "links") {
     const url = rest[0];
     if (!url) usage();
-    const links = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) =>
-      page.$$eval("a[href]", (anchors: HTMLAnchorElement[]) =>
-        anchors.map((anchor: HTMLAnchorElement) => ({
+    const links = await withPage(session, url, async ({ page }) =>
+      page.$$eval("a[href]", (anchors) =>
+        anchors.map((anchor) => ({
           text: (anchor.textContent || "").trim(),
           href: anchor.href,
         }))
