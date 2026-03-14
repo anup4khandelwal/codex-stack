@@ -77,6 +77,10 @@ bun src/cli.ts browse import-flow portal-copy /tmp/portal-full-demo.md
 bun src/cli.ts browse export-session /tmp/portal-session.json --session friend-demo
 bun src/cli.ts browse import-session /tmp/portal-session.json --session friend-demo-copy
 bun src/cli.ts browse probe http://127.0.0.1:4173/dashboard --session friend-demo
+bun src/cli.ts browse upload http://127.0.0.1:4173/profile "input[type=file]" ./fixtures/avatar.png --session friend-demo
+bun src/cli.ts browse dialog http://127.0.0.1:4173/settings accept "#delete-confirm" --session friend-demo
+bun src/cli.ts browse wait http://127.0.0.1:4173/dashboard load:domcontentloaded --session friend-demo
+bun src/cli.ts browse assert-focused http://127.0.0.1:4173/login "input[name=email]" --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
