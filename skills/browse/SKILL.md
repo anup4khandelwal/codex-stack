@@ -74,6 +74,10 @@ bun src/cli.ts browse probe https://example.com/settings --session staging
 bun src/cli.ts browse upload https://example.com/profile "input[type=file]" ./fixtures/avatar.png --session staging
 bun src/cli.ts browse dialog https://example.com/settings accept "#delete-confirm" --session staging
 bun src/cli.ts browse wait https://example.com/dashboard load:domcontentloaded --session staging
+bun src/cli.ts browse click https://example.com/login "role:button:Continue" --session staging --device mobile
+bun src/cli.ts browse fill https://example.com/login "label:Email" demo@example.com --session staging
+bun src/cli.ts browse html https://example.com/search "placeholder:Search" --session staging
+bun src/cli.ts browse assert-visible https://example.com/home "testid:hero" --session staging
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse login https://example.com/login login-local --session staging
@@ -88,7 +92,9 @@ bun src/cli.ts browse sessions
 
 - Do not claim visual validation without screenshots or runtime output.
 - Prefer deterministic selectors and stable flows.
+- Prefer semantic selectors when possible: `role:button:Save`, `label:Email`, `placeholder:Search`, `text:Welcome back`, `testid:hero`.
 - Reuse named sessions for authenticated flows so login state persists.
+- Use `--device mobile|tablet|desktop` when the check is viewport-sensitive or when a bug only reproduces responsively.
 - Export/import session bundles when authenticated QA needs to move between machines or named sessions.
 - Use `dialog` before the click that triggers a modal or confirm prompt so the handler is armed in time.
 - Check in shared flows under `browse/flows/`; keep machine-specific experiments in `.codex-stack/browse/flows/`.

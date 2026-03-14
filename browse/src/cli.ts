@@ -40,6 +40,7 @@ interface BrowseState {
 
 interface ParsedGlobalArgs {
   session: string;
+  device: string;
   command: string;
   rest: string[];
 }
@@ -136,6 +137,20 @@ interface ProbeResult {
 
 type WaitState = "visible" | "hidden" | "attached" | "detached";
 type LoadState = "load" | "domcontentloaded" | "networkidle" | "commit";
+type DevicePresetName = "desktop" | "tablet" | "mobile";
+
+interface DevicePreset {
+  name: DevicePresetName;
+  width: number;
+  height: number;
+}
+
+interface LocatorDescriptor {
+  mode: "css" | "role" | "label" | "placeholder" | "text" | "testid";
+  value: string;
+  name?: string;
+  raw: string;
+}
 
 const ROOT_DIR = path.resolve(process.cwd(), ".codex-stack");
 const STATE_DIR = path.join(ROOT_DIR, "browse");
@@ -145,53 +160,58 @@ const FLOW_DIR = path.join(STATE_DIR, "flows");
 const SNAPSHOT_DIR = path.join(STATE_DIR, "snapshots");
 const ARTIFACT_DIR = path.join(STATE_DIR, "artifacts");
 const REPO_FLOW_DIR = path.resolve(process.cwd(), "browse", "flows");
+const DEVICE_PRESETS: Record<DevicePresetName, DevicePreset> = {
+  desktop: { name: "desktop", width: 1440, height: 960 },
+  tablet: { name: "tablet", width: 834, height: 1194 },
+  mobile: { name: "mobile", width: 390, height: 844 },
+};
 
 function usage(): never {
   console.log(`codex-stack browse
 
 Usage:
   codex-stack browse doctor
-  codex-stack browse status [--session <name>]
-  codex-stack browse sessions
-  codex-stack browse flows
-  codex-stack browse save-flow <name> <json-steps>
-  codex-stack browse save-repo-flow <name> <json-steps>
-  codex-stack browse import-flow <name> <path>
-  codex-stack browse import-repo-flow <name> <path>
-  codex-stack browse export-flow <name> <path>
-  codex-stack browse show-flow <name>
-  codex-stack browse delete-flow <name>
-  codex-stack browse clear-session [name]
-  codex-stack browse export-session <path> [--url <url>] [--session <name>]
-  codex-stack browse import-session <path> [--session <name>]
-  codex-stack browse import-cookies <path> [--session <name>]
-  codex-stack browse snapshot <url> [name] [--session <name>]
-  codex-stack browse compare-snapshot <url> <name> [--session <name>]
-  codex-stack browse probe <url> [--session <name>]
-  codex-stack browse text <url> [--session <name>]
-  codex-stack browse html <url> [selector] [--session <name>]
-  codex-stack browse links <url> [--session <name>]
-  codex-stack browse screenshot <url> [path] [--session <name>]
-  codex-stack browse eval <url> <expression> [--session <name>]
-  codex-stack browse click <url> <selector> [--session <name>]
-  codex-stack browse fill <url> <selector> <value> [--session <name>]
-  codex-stack browse upload <url> <selector> <path> [--session <name>]
-  codex-stack browse dialog <url> <accept|dismiss> [selector] [prompt] [--session <name>]
-  codex-stack browse wait <url> [selector|ms:<n>|url:<target>|load:<state>|state:<state>:<selector>] [--session <name>]
-  codex-stack browse press <url> <selector> <key> [--session <name>]
-  codex-stack browse assert-visible <url> <selector> [--session <name>]
-  codex-stack browse assert-hidden <url> <selector> [--session <name>]
-  codex-stack browse assert-enabled <url> <selector> [--session <name>]
-  codex-stack browse assert-disabled <url> <selector> [--session <name>]
-  codex-stack browse assert-checked <url> <selector> [--session <name>]
-  codex-stack browse assert-editable <url> <selector> [--session <name>]
-  codex-stack browse assert-focused <url> <selector> [--session <name>]
-  codex-stack browse assert-text <url> <selector> <expected> [--session <name>]
-  codex-stack browse assert-url <url> <expected> [--session <name>]
-  codex-stack browse assert-count <url> <selector> <expected-count> [--session <name>]
-  codex-stack browse flow <url> <json-steps> [--session <name>]
-  codex-stack browse run-flow <url> <name> [--session <name>]
-  codex-stack browse login <url> <name> [--session <name>]
+  codex-stack browse status [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse sessions [--device <desktop|tablet|mobile>]
+  codex-stack browse flows [--device <desktop|tablet|mobile>]
+  codex-stack browse save-flow <name> <json-steps> [--device <desktop|tablet|mobile>]
+  codex-stack browse save-repo-flow <name> <json-steps> [--device <desktop|tablet|mobile>]
+  codex-stack browse import-flow <name> <path> [--device <desktop|tablet|mobile>]
+  codex-stack browse import-repo-flow <name> <path> [--device <desktop|tablet|mobile>]
+  codex-stack browse export-flow <name> <path> [--device <desktop|tablet|mobile>]
+  codex-stack browse show-flow <name> [--device <desktop|tablet|mobile>]
+  codex-stack browse delete-flow <name> [--device <desktop|tablet|mobile>]
+  codex-stack browse clear-session [name] [--device <desktop|tablet|mobile>]
+  codex-stack browse export-session <path> [--url <url>] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse import-session <path> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse import-cookies <path> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse snapshot <url> [name] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse compare-snapshot <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse probe <url> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse text <url> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse html <url> [selector] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse links <url> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse screenshot <url> [path] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse eval <url> <expression> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse click <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse fill <url> <selector> <value> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse upload <url> <selector> <path> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse dialog <url> <accept|dismiss> [selector] [prompt] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse wait <url> [selector|ms:<n>|url:<target>|load:<state>|state:<state>:<selector>] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse press <url> <selector> <key> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-visible <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-hidden <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-enabled <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-disabled <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-checked <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-editable <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-focused <url> <selector> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-text <url> <selector> <expected> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-url <url> <expected> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse assert-count <url> <selector> <expected-count> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse flow <url> <json-steps> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse run-flow <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse login <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
 `);
   process.exit(1);
 }
@@ -299,7 +319,7 @@ function assertFlowName(name: string): void {
 }
 
 function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
-  const out: ParsedGlobalArgs = { session: "default", command: "", rest: [] };
+  const out: ParsedGlobalArgs = { session: "default", device: "", command: "", rest: [] };
   const copy = [...argv];
   out.command = copy.shift() || "doctor";
 
@@ -307,6 +327,10 @@ function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
     const item = copy.shift();
     if (item === "--session") {
       out.session = copy.shift() || "default";
+      continue;
+    }
+    if (item === "--device") {
+      out.device = copy.shift() || "";
       continue;
     }
     if (typeof item === "string") {
@@ -893,22 +917,6 @@ async function applySessionBundle(sessionName: string, bundle: BrowserSessionBun
   });
 }
 
-async function probeUrl(sessionName: string, url: string): Promise<ProbeResult> {
-  return withPersistentContext(sessionName, async ({ context }) => {
-    const page = context.pages()[0] || (await context.newPage());
-    const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
-    const bodyText = await page.locator("body").innerText().catch(() => "");
-    return {
-      url,
-      finalUrl: page.url(),
-      title: await page.title().catch(() => ""),
-      status: response ? response.status() : null,
-      ok: response ? response.ok() : true,
-      bodyLength: String(bodyText || "").trim().length,
-    };
-  });
-}
-
 function assertCondition(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
@@ -925,6 +933,72 @@ function parseLoadState(value: unknown, fallback: LoadState = "networkidle"): Lo
   const normalized = String(value || fallback).toLowerCase();
   if (normalized === "load" || normalized === "domcontentloaded" || normalized === "commit") return normalized;
   return "networkidle";
+}
+
+function parseDevicePreset(value: unknown): DevicePreset | null {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "desktop" || normalized === "tablet" || normalized === "mobile") {
+    return DEVICE_PRESETS[normalized];
+  }
+  throw new Error(`Unknown device preset: ${JSON.stringify(value)}. Use desktop, tablet, or mobile.`);
+}
+
+function parseLocatorDescriptor(selector: string): LocatorDescriptor {
+  const raw = String(selector || "");
+  const value = raw.trim();
+  const [prefix, ...rest] = value.split(":");
+  const mode = prefix.toLowerCase();
+  if (mode === "role" && rest.length) {
+    const [role, ...nameParts] = rest;
+    return {
+      mode: "role",
+      value: role.trim(),
+      name: nameParts.join(":").trim() || undefined,
+      raw,
+    };
+  }
+  if ((mode === "label" || mode === "placeholder" || mode === "text" || mode === "testid") && rest.length) {
+    return {
+      mode,
+      value: rest.join(":").trim(),
+      raw,
+    };
+  }
+  return {
+    mode: "css",
+    value,
+    raw,
+  };
+}
+
+function resolveLocator(page: PlaywrightPage, selector: string): Record<string, any> {
+  const descriptor = parseLocatorDescriptor(selector);
+  assertCondition(Boolean(descriptor.value), `Selector cannot be empty: ${JSON.stringify(selector)}.`);
+  if (descriptor.mode === "role") {
+    const options = descriptor.name ? { name: descriptor.name } : undefined;
+    return page.getByRole(descriptor.value, options).first();
+  }
+  if (descriptor.mode === "label") {
+    return page.getByLabel(descriptor.value).first();
+  }
+  if (descriptor.mode === "placeholder") {
+    return page.getByPlaceholder(descriptor.value).first();
+  }
+  if (descriptor.mode === "text") {
+    return page.getByText(descriptor.value).first();
+  }
+  if (descriptor.mode === "testid") {
+    return page.getByTestId(descriptor.value).first();
+  }
+  return page.locator(descriptor.value).first();
+}
+
+async function applyDevicePreset(page: PlaywrightPage, preset: DevicePreset | null): Promise<void> {
+  if (!preset) return;
+  if (typeof page.setViewportSize === "function") {
+    await page.setViewportSize({ width: preset.width, height: preset.height });
+  }
 }
 
 async function armDialog(
@@ -947,7 +1021,7 @@ async function armDialog(
 }
 
 async function assertLocatorState(page: PlaywrightPage, selector: string, state: string): Promise<void> {
-  const locator = page.locator(selector).first();
+  const locator = resolveLocator(page, selector);
   if (state === "visible") {
     await locator.waitFor({ state: "visible" });
     return;
@@ -1022,10 +1096,15 @@ async function withPersistentContext<T>(
 async function withPage<T>(
   sessionName: string,
   url: string,
-  callback: ({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>,
+  deviceOrCallback: DevicePreset | null | (({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>),
+  maybeCallback?: ({ page, context }: { page: PlaywrightPage; context: PlaywrightContext }) => Promise<T>,
 ): Promise<T> {
+  const device = typeof deviceOrCallback === "function" ? null : deviceOrCallback;
+  const callback = typeof deviceOrCallback === "function" ? deviceOrCallback : maybeCallback;
+  assertCondition(typeof callback === "function", "withPage requires a callback.");
   return withPersistentContext(sessionName, async ({ context }) => {
     const page = context.pages()[0] || (await context.newPage());
+    await applyDevicePreset(page, device);
     if (url) {
       await page.goto(url, { waitUntil: "networkidle" });
     }
@@ -1044,11 +1123,11 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
     return { action, url: step.url, status: "ok" };
   }
   if (action === "click") {
-    await page.locator(String(step.selector)).first().click();
+    await resolveLocator(page, String(step.selector)).click();
     return { action, selector: step.selector, status: "ok" };
   }
   if (action === "fill") {
-    await page.locator(String(step.selector)).first().fill(String(step.value || ""));
+    await resolveLocator(page, String(step.selector)).fill(String(step.value || ""));
     return { action, selector: step.selector, status: "ok" };
   }
   if (action === "upload") {
@@ -1058,25 +1137,25 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
       : [String(step.path ?? step.value ?? "")].filter(Boolean);
     assertCondition(selector, "upload steps require a selector.");
     assertCondition(files.length > 0, "upload steps require a file path.");
-    await page.locator(selector).first().setInputFiles(files.length === 1 ? files[0] : files);
+    await resolveLocator(page, selector).setInputFiles(files.length === 1 ? files[0] : files);
     return { action, selector, files, status: "ok" };
   }
   if (action === "dialog") {
     const dialog = await armDialog(page, String(step.mode ?? step.value ?? "accept"), String(step.prompt ?? ""));
     const selector = String(step.selector || "");
     if (selector) {
-      await page.locator(selector).first().click();
+      await resolveLocator(page, selector).click();
     }
     return { action, selector, mode: dialog.mode, promptText: dialog.promptText, status: "ok" };
   }
   if (action === "press") {
-    await page.locator(String(step.selector)).first().press(String(step.key || "Enter"));
+    await resolveLocator(page, String(step.selector)).press(String(step.key || "Enter"));
     return { action, selector: step.selector, key: step.key || "Enter", status: "ok" };
   }
   if (action === "wait") {
     if (step.selector) {
       const state = parseWaitState(step.state);
-      await page.locator(String(step.selector)).first().waitFor({ state });
+      await resolveLocator(page, String(step.selector)).waitFor({ state });
       return { action, selector: step.selector, state, status: "ok" };
     }
     if (step.url) {
@@ -1096,12 +1175,12 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
     return { action, path: target, status: "ok" };
   }
   if (action === "text") {
-    const text = await page.locator(String(step.selector || "body")).first().innerText();
+    const text = await resolveLocator(page, String(step.selector || "body")).innerText();
     return { action, selector: step.selector || "body", text, status: "ok" };
   }
   if (action === "html") {
     const html = step.selector
-      ? await page.locator(String(step.selector)).first().innerHTML()
+      ? await resolveLocator(page, String(step.selector)).innerHTML()
       : await page.content();
     return { action, selector: step.selector || "document", html, status: "ok" };
   }
@@ -1143,7 +1222,7 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
   if (action === "assert-text") {
     const selector = String(step.selector || "body");
     const expected = String(step.value ?? step.text ?? "");
-    const text = await page.locator(selector).first().innerText();
+    const text = await resolveLocator(page, selector).innerText();
     assertCondition(text.includes(expected), `Expected text ${JSON.stringify(expected)} in ${selector}.`);
     return { action, selector, expected, status: "ok" };
   }
@@ -1156,7 +1235,7 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
   if (action === "assert-count") {
     const selector = String(step.selector || "");
     const expectedCount = Number(step.count ?? step.value ?? 0);
-    const count = await page.locator(selector).count();
+    const count = await resolveLocator(page, selector).count();
     assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     return { action, selector, expectedCount, count, status: "ok" };
   }
@@ -1186,12 +1265,14 @@ async function executeFlow({
   steps,
   recordName,
   authenticated = false,
+  device = null,
 }: {
   sessionName: string;
   url: string;
   steps: FlowStep[];
   recordName: string;
   authenticated?: boolean;
+  device?: DevicePreset | null;
 }): Promise<StepResult[]> {
   const expandedSteps = expandFlowSteps(steps);
   const preNavigationSteps: FlowStep[] = [];
@@ -1201,7 +1282,7 @@ async function executeFlow({
     else postNavigationSteps.push(step);
   }
 
-  const results = await withPage(sessionName, "", async ({ page }: { page: PlaywrightPage }) => {
+  const results = await withPage(sessionName, "", device, async ({ page }: { page: PlaywrightPage }) => {
     const entries: StepResult[] = [];
     if (preNavigationSteps.length) {
       if (url) {
@@ -1236,7 +1317,8 @@ function printJson(value: unknown): void {
 
 async function main(): Promise<void> {
   const parsed = parseGlobalArgs(process.argv.slice(2));
-  const { command, rest, session } = parsed;
+  const { command, rest, session, device: deviceRaw } = parsed;
+  const device = parseDevicePreset(deviceRaw);
 
   if (command === "doctor") {
     const playwrightInstalled = fs.existsSync(path.resolve(process.cwd(), "node_modules", "playwright"));
@@ -1401,7 +1483,7 @@ async function main(): Promise<void> {
     ensureDir(SNAPSHOT_DIR);
     const baselineJson = snapshotJsonPath(snapshotName);
     const baselineScreenshot = snapshotScreenshotPath(snapshotName);
-    const payload = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    const payload = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       const snapshot = await captureSnapshotPayload(page);
       await page.screenshot({ path: baselineScreenshot, fullPage: true });
       return snapshot;
@@ -1443,7 +1525,7 @@ async function main(): Promise<void> {
     const baseline = readJson<SnapshotPayload | null>(baselineJson, null);
     assertCondition(Boolean(baseline), `Unable to read snapshot baseline: ${baselineJson}`);
     const baselineSnapshot = baseline as SnapshotPayload;
-    const current = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    const current = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       const payload = await captureSnapshotPayload(page);
       await page.screenshot({ path: artifactScreenshot, fullPage: true });
       return payload;
@@ -1478,7 +1560,18 @@ async function main(): Promise<void> {
   if (command === "probe") {
     const [url] = rest;
     if (!url) usage();
-    const result = await probeUrl(session, url);
+    const result = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const response = (await page.goto(url, { waitUntil: "networkidle" })) as PlaywrightResponse | null;
+      const bodyText = await resolveLocator(page, "body").innerText().catch(() => "");
+      return {
+        url,
+        finalUrl: page.url(),
+        title: await page.title().catch(() => ""),
+        status: response ? response.status() : null,
+        ok: response ? response.ok() : true,
+        bodyLength: String(bodyText || "").trim().length,
+      };
+    });
     recordSession(session, { lastCommand: "probe", lastUrl: url, output: `${result.status ?? "n/a"}:${result.bodyLength}` });
     printJson(result);
     return;
@@ -1487,7 +1580,7 @@ async function main(): Promise<void> {
   if (command === "text") {
     const url = rest[0];
     if (!url) usage();
-    const text = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => page.locator("body").innerText());
+    const text = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => resolveLocator(page, "body").innerText());
     recordSession(session, { lastCommand: "text", lastUrl: url, output: `${text.length} chars` });
     console.log(text);
     return;
@@ -1496,7 +1589,7 @@ async function main(): Promise<void> {
   if (command === "html") {
     const [url, selector] = rest;
     if (!url) usage();
-    const html = await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => (selector ? page.locator(selector).first().innerHTML() : page.content()));
+    const html = await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => (selector ? resolveLocator(page, selector).innerHTML() : page.content()));
     recordSession(session, { lastCommand: "html", lastUrl: url, output: `${html.length} chars` });
     console.log(html);
     return;
@@ -1505,7 +1598,7 @@ async function main(): Promise<void> {
   if (command === "links") {
     const url = rest[0];
     if (!url) usage();
-    const links = await withPage(session, url, async ({ page }) =>
+    const links = await withPage(session, url, device, async ({ page }) =>
       page.$$eval("a[href]", (anchors) =>
         anchors.map((anchor) => ({
           text: (anchor.textContent || "").trim(),
@@ -1522,7 +1615,7 @@ async function main(): Promise<void> {
     const url = rest[0];
     const outPath = rest[1] || path.join(os.tmpdir(), `codex-stack-browse-${session}.png`);
     if (!url) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => page.screenshot({ path: outPath, fullPage: true }));
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => page.screenshot({ path: outPath, fullPage: true }));
     recordSession(session, { lastCommand: "screenshot", lastUrl: url, output: outPath });
     console.log(outPath);
     return;
@@ -1540,8 +1633,8 @@ async function main(): Promise<void> {
   if (command === "click") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      await page.locator(selector).first().click();
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      await resolveLocator(page, selector).click();
     });
     recordSession(session, { lastCommand: "click", lastUrl: url, output: selector });
     console.log(`clicked ${selector}`);
@@ -1551,8 +1644,8 @@ async function main(): Promise<void> {
   if (command === "fill") {
     const [url, selector, value] = rest;
     if (!url || !selector || value === undefined) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      await page.locator(selector).first().fill(value);
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      await resolveLocator(page, selector).fill(value);
     });
     recordSession(session, { lastCommand: "fill", lastUrl: url, output: selector });
     console.log(`filled ${selector}`);
@@ -1564,8 +1657,8 @@ async function main(): Promise<void> {
     if (!url || !selector || !filePath) usage();
     const absolute = path.resolve(process.cwd(), filePath);
     assertCondition(fs.existsSync(absolute), `Upload file not found: ${absolute}`);
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      await page.locator(selector).first().setInputFiles(absolute);
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      await resolveLocator(page, selector).setInputFiles(absolute);
     });
     recordSession(session, { lastCommand: "upload", lastUrl: url, output: `${selector}:${absolute}` });
     console.log(`uploaded ${absolute} into ${selector}`);
@@ -1576,10 +1669,10 @@ async function main(): Promise<void> {
     const [url, modeRaw, selector, promptText] = rest;
     if (!url || !modeRaw) usage();
     const mode = String(modeRaw || "accept").toLowerCase() === "dismiss" ? "dismiss" : "accept";
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await armDialog(page, mode, promptText || "");
       if (selector) {
-        await page.locator(selector).first().click();
+        await resolveLocator(page, selector).click();
       }
     });
     recordSession(session, { lastCommand: "dialog", lastUrl: url, output: `${mode}${selector ? `:${selector}` : ""}` });
@@ -1590,7 +1683,7 @@ async function main(): Promise<void> {
   if (command === "wait") {
     const [url, target] = rest;
     if (!url) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       if (!target) {
         await page.waitForLoadState("networkidle");
         return;
@@ -1611,10 +1704,10 @@ async function main(): Promise<void> {
         const [, stateRaw = "visible", ...selectorParts] = target.split(":");
         const selector = selectorParts.join(":");
         assertCondition(selector, "state waits require a selector. Use state:<state>:<selector>.");
-        await page.locator(selector).first().waitFor({ state: parseWaitState(stateRaw) });
+        await resolveLocator(page, selector).waitFor({ state: parseWaitState(stateRaw) });
         return;
       }
-      await page.locator(target).first().waitFor({ state: "visible" });
+      await resolveLocator(page, target).waitFor({ state: "visible" });
     });
     recordSession(session, { lastCommand: "wait", lastUrl: url, output: target || "networkidle" });
     console.log(`waited for ${target || "networkidle"}`);
@@ -1624,8 +1717,8 @@ async function main(): Promise<void> {
   if (command === "press") {
     const [url, selector, key] = rest;
     if (!url || !selector || !key) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      await page.locator(selector).first().press(key);
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      await resolveLocator(page, selector).press(key);
     });
     recordSession(session, { lastCommand: "press", lastUrl: url, output: `${selector}:${key}` });
     console.log(`pressed ${key} on ${selector}`);
@@ -1635,7 +1728,7 @@ async function main(): Promise<void> {
   if (command === "assert-visible") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "visible");
     });
     recordSession(session, { lastCommand: "assert-visible", lastUrl: url, output: selector });
@@ -1646,7 +1739,7 @@ async function main(): Promise<void> {
   if (command === "assert-hidden") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "hidden");
     });
     recordSession(session, { lastCommand: "assert-hidden", lastUrl: url, output: selector });
@@ -1657,7 +1750,7 @@ async function main(): Promise<void> {
   if (command === "assert-enabled") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "enabled");
     });
     recordSession(session, { lastCommand: "assert-enabled", lastUrl: url, output: selector });
@@ -1668,7 +1761,7 @@ async function main(): Promise<void> {
   if (command === "assert-disabled") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "disabled");
     });
     recordSession(session, { lastCommand: "assert-disabled", lastUrl: url, output: selector });
@@ -1679,7 +1772,7 @@ async function main(): Promise<void> {
   if (command === "assert-checked") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "checked");
     });
     recordSession(session, { lastCommand: "assert-checked", lastUrl: url, output: selector });
@@ -1690,7 +1783,7 @@ async function main(): Promise<void> {
   if (command === "assert-editable") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "editable");
     });
     recordSession(session, { lastCommand: "assert-editable", lastUrl: url, output: selector });
@@ -1701,7 +1794,7 @@ async function main(): Promise<void> {
   if (command === "assert-focused") {
     const [url, selector] = rest;
     if (!url || !selector) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       await assertLocatorState(page, selector, "focused");
     });
     recordSession(session, { lastCommand: "assert-focused", lastUrl: url, output: selector });
@@ -1712,8 +1805,8 @@ async function main(): Promise<void> {
   if (command === "assert-text") {
     const [url, selector, expected] = rest;
     if (!url || !selector || expected === undefined) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      const text = await page.locator(selector).first().innerText();
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const text = await resolveLocator(page, selector).innerText();
       assertCondition(text.includes(expected), `Expected text ${JSON.stringify(expected)} in ${selector}.`);
     });
     recordSession(session, { lastCommand: "assert-text", lastUrl: url, output: `${selector}:${expected}` });
@@ -1724,7 +1817,7 @@ async function main(): Promise<void> {
   if (command === "assert-url") {
     const [url, expected] = rest;
     if (!url || expected === undefined) usage();
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       const currentUrl = page.url();
       assertCondition(currentUrl.includes(expected), `Expected URL to include ${JSON.stringify(expected)} but got ${JSON.stringify(currentUrl)}.`);
     });
@@ -1738,8 +1831,8 @@ async function main(): Promise<void> {
     if (!url || !selector || expectedCountRaw === undefined) usage();
     const expectedCount = Number(expectedCountRaw);
     assertCondition(Number.isInteger(expectedCount), "Expected count must be an integer.");
-    await withPage(session, url, async ({ page }: { page: PlaywrightPage }) => {
-      const count = await page.locator(selector).count();
+    await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
+      const count = await resolveLocator(page, selector).count();
       assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     });
     recordSession(session, { lastCommand: "assert-count", lastUrl: url, output: `${selector}:${expectedCount}` });
@@ -1758,6 +1851,7 @@ async function main(): Promise<void> {
       url,
       steps,
       recordName: "flow:inline",
+      device,
     });
     printJson(out);
     return;
@@ -1773,6 +1867,7 @@ async function main(): Promise<void> {
       steps,
       recordName: `${command}:${name}`,
       authenticated: command === "login",
+      device,
     });
     printJson(out);
     return;
