@@ -83,6 +83,7 @@ bun src/cli.ts browse wait http://127.0.0.1:4173/dashboard load:domcontentloaded
 bun src/cli.ts browse click http://127.0.0.1:4173/login "role:button:Continue" --session friend-demo --device mobile
 bun src/cli.ts browse fill http://127.0.0.1:4173/login "label:Email" demo@example.com --session friend-demo
 bun src/cli.ts browse assert-visible http://127.0.0.1:4173/dashboard "testid:hero" --session friend-demo
+bun src/cli.ts browse click http://127.0.0.1:4173/checkout "role:button:Pay now" --session friend-demo --frame "name:payment"
 bun src/cli.ts browse assert-focused http://127.0.0.1:4173/login "input[name=email]" --session friend-demo
 bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
 bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo

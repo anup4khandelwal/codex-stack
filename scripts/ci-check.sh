@@ -74,6 +74,7 @@ run_ts scripts/issue-flow.spec.ts >/tmp/codex-stack-issue-flow-spec.log
 run_ts scripts/render-pr-review.spec.ts >/tmp/codex-stack-render-pr-review-spec.log
 run_ts scripts/browse-advanced.spec.ts >/tmp/codex-stack-browse-advanced-spec.log
 run_ts scripts/browse-semantic-device.spec.ts >/tmp/codex-stack-browse-semantic-device-spec.log
+run_ts scripts/browse-iframe.spec.ts >/tmp/codex-stack-browse-iframe-spec.log
 run_ts scripts/qa-diff.spec.ts >/tmp/codex-stack-qa-diff-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
