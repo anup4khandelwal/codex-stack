@@ -46,6 +46,7 @@ Use codex-stack-ship to validate the branch, push it, and open a PR if checks pa
 CLI:
 
 ```bash
+bun dist/cli.js issue start --title "Harden PR workflow" --label automation --prefix feat
 bun dist/cli.js ship --dry-run
 bun dist/cli.js ship --message "feat: ready for review" --push --pr
 bun dist/cli.js ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md

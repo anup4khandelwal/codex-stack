@@ -27,6 +27,16 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `browse` | QA engineer | Drives a real browser with persistent sessions, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 
+## Default workflow
+
+Use the repo in this order:
+
+1. Open an issue
+2. Create a branch from that issue
+3. Open a PR from the issue branch
+4. Let `pr-review` comment and gate the PR automatically
+5. Add the `automerge` label when the PR is ready to merge after checks
+
 ## What ships today
 
 - Installable Codex skills under `skills/`
@@ -40,6 +50,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 - PR comments with QA verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
+- Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
 
 ## Quick start
@@ -105,6 +116,31 @@ bun run qa:site
 ```
 
 The checked-in `portal-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
+
+## Issue to merge flow
+
+Create the work item and branch:
+
+```bash
+bun dist/cli.js issue start --title "Add issue-first PR workflow" --label automation --prefix feat
+```
+
+This creates a GitHub issue and a local branch like `feat/123-add-issue-first-pr-workflow`.
+
+Ship the branch as a PR:
+
+```bash
+bun dist/cli.js ship --message "feat: add issue-first workflow" --push --pr
+```
+
+What happens next:
+
+- `pr-review.yml` runs `codex-stack` review on the PR diff
+- the workflow posts or updates a PR comment with findings
+- the job fails if critical findings are detected
+- if the PR has the `automerge` label, `pr-automerge.yml` enables GitHub auto-merge
+
+Branch naming matters: when the branch follows `<prefix>/<issue-number>-slug`, `ship` includes `Closes #<issue-number>` in the generated PR body so the issue closes on merge.
 
 ## Root CLI
 

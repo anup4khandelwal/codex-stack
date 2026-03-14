@@ -1,0 +1,27 @@
+name: Work Item
+description: Create a scoped engineering task before opening a branch or PR.
+title: "[work] "
+labels:
+  - backlog
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should be built or changed?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected Outcome
+      description: What should be true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: Tests, QA, or review evidence required before merge.
+    validations:
+      required: true

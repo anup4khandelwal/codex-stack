@@ -1,0 +1,76 @@
+name: pr-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.5"
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
+
+      - name: Run codex-stack review
+        run: bun scripts/review-diff.mjs --json --base "origin/${{ github.event.pull_request.base.ref }}" > review.json
+
+      - name: Render review outputs
+        run: bun scripts/render-pr-review.mjs --input review.json --markdown-out review.md --summary-out review-summary.json
+
+      - name: Add step summary
+        run: cat review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sync PR review comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("review.md", "utf8");
+            const marker = "<!-- codex-stack:pr-review -->";
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Fail on critical findings
+        run: bun scripts/render-pr-review.mjs --input review.json --fail-on-critical >/tmp/codex-stack-pr-review.md

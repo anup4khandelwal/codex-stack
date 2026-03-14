@@ -12,6 +12,7 @@ Usage:
   codex-stack show <mode>
   codex-stack path <mode>
   codex-stack doctor
+  codex-stack issue <create|branch|start> <args...>
   codex-stack review [--json] [--base <ref>]
   codex-stack qa <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--json]
   codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--update-verify-snapshot] [--draft]
@@ -51,6 +52,12 @@ function runBrowse(args: string[]): void {
 function runReview(args: string[]): void {
   const reviewPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "review-diff.mjs");
   const result = spawnSync(JS_RUNTIME, [reviewPath, ...args], { stdio: "inherit" });
+  process.exit(result.status ?? 0);
+}
+
+function runIssue(args: string[]): void {
+  const issuePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", "issue-flow.mjs");
+  const result = spawnSync(JS_RUNTIME, [issuePath, ...args], { stdio: "inherit" });
   process.exit(result.status ?? 0);
 }
 
@@ -117,6 +124,10 @@ if (command === "browse") {
 
 if (command === "review") {
   runReview(rest);
+}
+
+if (command === "issue") {
+  runIssue(rest);
 }
 
 if (command === "qa") {

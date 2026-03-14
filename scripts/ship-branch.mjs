@@ -216,6 +216,11 @@ function deriveTitleFromBranch(branch) {
     .join(" ") || `Ship ${branch}`;
 }
 
+function issueNumberFromBranch(branch) {
+  const match = String(branch || "").match(/^[^/]+\/(\d+)-/);
+  return match ? match[1] : "";
+}
+
 function findTemplatePath(explicitPath) {
   const candidates = explicitPath ? [explicitPath] : TEMPLATE_PATHS;
   for (const candidate of candidates) {
@@ -283,6 +288,7 @@ function buildGeneratedSections({ branch, base, validationCommand, diffContext }
     CHANGED_FILES: bulletize(changedFileItems, "No changed files detected", 10).join("\n"),
     BRANCH: `\`${branch}\``,
     BASE: `\`${base.replace(/^origin\//, "")}\``,
+    ISSUE_CLOSER: issueNumberFromBranch(branch) ? `Closes #${issueNumberFromBranch(branch)}` : "",
   };
 
   const generatedBody = [
@@ -302,6 +308,7 @@ function buildGeneratedSections({ branch, base, validationCommand, diffContext }
     "",
     `- Branch: ${sections.BRANCH}`,
     `- Base: ${sections.BASE}`,
+    ...(sections.ISSUE_CLOSER ? [`- ${sections.ISSUE_CLOSER}`] : []),
   ].join("\n").trim() + "\n";
 
   return { sections, generatedBody };

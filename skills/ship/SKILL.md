@@ -25,7 +25,9 @@ Run the shipping checklist with minimal back-and-forth.
 6. Infer labels from branch/files and reviewers from `CODEOWNERS` unless disabled.
 7. Run QA verification first when the operator provides a verification URL, flow, or snapshot.
 8. Apply assignee and project metadata when the operator requests it.
-9. Create missing labels in GitHub if required, then stage, commit, push, open PR, apply metadata, publish tracked QA evidence, and post the QA summary comment with branch and post-merge Pages links when verification ran.
+9. If the branch follows `<prefix>/<issue-number>-slug`, include `Closes #<issue-number>` in the generated PR body.
+10. Create missing labels in GitHub if required, then stage, commit, push, open PR, apply metadata, publish tracked QA evidence, and post the QA summary comment with branch and post-merge Pages links when verification ran.
+11. Leave merge automation opt-in by label; do not force auto-merge without an explicit signal such as `automerge`.
 10. Report the exact commands executed.
 
 ## CLI

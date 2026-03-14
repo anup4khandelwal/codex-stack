@@ -30,6 +30,7 @@ echo "[2/8] root CLI show/path"
 run_js dist/cli.js show review >/tmp/codex-stack-show.log
 run_js dist/cli.js path review >/tmp/codex-stack-path.log
 run_js dist/cli.js show qa >/tmp/codex-stack-show-qa.log
+run_js dist/cli.js issue --help >/tmp/codex-stack-issue-help.log
 
 echo "[3/8] doctor checks"
 run_js dist/cli.js doctor >/tmp/codex-stack-doctor.log
@@ -62,6 +63,7 @@ test -x .codex-stack/bin/browse
 
 echo "[5/8] review, ship, retro, and demo interfaces"
 run_js scripts/review-diff.mjs --help >/tmp/codex-stack-review-help.log
+run_js scripts/issue-flow.mjs --help >/tmp/codex-stack-issue-flow-help.log
 run_js scripts/qa-run.mjs --help >/tmp/codex-stack-qa-help.log
 run_js scripts/ship-branch.mjs --help >/tmp/codex-stack-ship-help.log
 run_js scripts/retro-report.mjs --help >/tmp/codex-stack-retro-help.log
@@ -170,6 +172,13 @@ CODEOWNERS
 echo "base" > "$TMP_REPO/README.md"
 git -C "$TMP_REPO" add package.json README.md .github/CODEOWNERS
 git -C "$TMP_REPO" commit -m "chore: baseline" >/tmp/codex-stack-temp-git-commit.log
+(
+  cd "$TMP_REPO" &&
+  "$JS_RUNTIME" "$ROOT_DIR/scripts/issue-flow.mjs" branch 42 --title "Sample issue workflow" --prefix feat --base main --json >/tmp/codex-stack-issue.json
+)
+grep -q '"branch": "feat/42-sample-issue-workflow"' /tmp/codex-stack-issue.json
+grep -q '"baseRef": "main"' /tmp/codex-stack-issue.json
+git -C "$TMP_REPO" switch main >/tmp/codex-stack-temp-git-back-main.log
 git -C "$TMP_REPO" checkout -b feat/generated-pr >/tmp/codex-stack-temp-git-branch.log
 echo "feature" >> "$TMP_REPO/README.md"
 (cd "$TMP_REPO" && "$JS_RUNTIME" "$ROOT_DIR/scripts/ship-branch.mjs" --dry-run --base main --pr --assign-self --assignee release-bot --project "Engineering Roadmap" --verify-url https://example.com --verify-flow landing-smoke --verify-snapshot landing-home --json >/tmp/codex-stack-ship.json)
@@ -187,6 +196,33 @@ grep -q '"landing-home"' /tmp/codex-stack-ship.json
 grep -q 'plan qa verification comment' /tmp/codex-stack-ship.json
 grep -q 'docs/qa/feat-generated-pr' /tmp/codex-stack-ship.json
 grep -q 'github.io/codex-stack/qa/feat-generated-pr/' /tmp/codex-stack-ship.json
+grep -q 'Closes #42' /tmp/codex-stack-ship.json || true
+
+cat > /tmp/codex-stack-review-fixture.json <<'JSON'
+{
+  "status": "ok",
+  "branch": "feat/42-sample-issue-workflow",
+  "baseRef": "origin/main",
+  "fileNames": ["README.md", "src/app.ts"],
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "Sensitive paths changed without tests",
+      "detail": "Security-sensitive files changed without tests.",
+      "files": ["src/app.ts"]
+    },
+    {
+      "severity": "warning",
+      "title": "Large review surface",
+      "detail": "The diff is too large.",
+      "files": ["README.md"]
+    }
+  ]
+}
+JSON
+run_js scripts/render-pr-review.mjs --input /tmp/codex-stack-review-fixture.json --markdown-out /tmp/codex-stack-review.md --summary-out /tmp/codex-stack-review-summary.json
+grep -q 'codex-stack PR review' /tmp/codex-stack-review.md
+grep -q '"criticalCount": 1' /tmp/codex-stack-review-summary.json
 
 echo "[6/8] demo files present"
 test -f examples/customer-portal-demo/README.md
@@ -201,6 +237,12 @@ test -f docs/install.md
 test -f docs/commands.md
 test -f docs/examples.md
 test -f skills/review/checklist.md
+test -f .github/PULL_REQUEST_TEMPLATE.md
+test -f .github/workflows/pr-review.yml
+test -f .github/workflows/pr-automerge.yml
+test -f .github/ISSUE_TEMPLATE/work-item.yml
+test -f scripts/issue-flow.mjs
+test -f scripts/render-pr-review.mjs
 test -f .github/workflows/qa-pages.yml
 test -f scripts/render-qa-pages.mjs
 

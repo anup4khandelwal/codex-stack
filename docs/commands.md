@@ -6,6 +6,8 @@
 bun dist/cli.js list
 bun dist/cli.js show review
 bun dist/cli.js path ship
+bun dist/cli.js issue start --title "Add PR workflow" --label automation --prefix feat
+bun dist/cli.js issue branch 42 --title "Add PR workflow" --prefix feat
 bun dist/cli.js review
 bun dist/cli.js review --json
 bun dist/cli.js qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
@@ -47,6 +49,20 @@ bun dist/cli.js browse screenshot https://example.com /tmp/example.png
 bun scripts/review-diff.mjs
 bun scripts/review-diff.mjs --json
 bun scripts/review-diff.mjs --base origin/main
+bun scripts/render-pr-review.mjs --input review.json --markdown-out review.md --summary-out review-summary.json
+```
+
+Notes:
+
+- `pr-review.yml` uses `review-diff.mjs` plus `render-pr-review.mjs` to comment on every PR.
+- The review workflow fails when critical findings are present.
+
+## Issue workflow
+
+```bash
+bun scripts/issue-flow.mjs create --title "Add PR workflow" --label automation
+bun scripts/issue-flow.mjs branch 42 --title "Add PR workflow" --prefix feat --base main
+bun scripts/issue-flow.mjs start --title "Add PR workflow" --label automation --prefix feat
 ```
 
 ## Ship workflow
@@ -65,6 +81,7 @@ Notes:
 
 - If no PR title is supplied, `ship` derives one from the latest commit or branch name.
 - If no PR body is supplied, `ship` generates one from the diff and will merge it into a detected PR template when available.
+- If the branch name looks like `feat/123-something`, `ship` adds `Closes #123` to the generated PR body.
 - `ship` infers labels from branch and changed files, and infers reviewers from `CODEOWNERS` unless you disable that behavior.
 - When GitHub access is available, `ship` creates missing labels before attaching them to the PR.
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
@@ -72,6 +89,7 @@ Notes:
 - When `ship --pr` runs with QA verification, it also posts a PR comment with the QA summary and any available artifact references.
 - During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/` before push/PR creation.
 - `ship --pr` includes both immediate branch artifact links and post-merge GitHub Pages links for QA evidence when tracked artifacts exist.
+- Add the `automerge` label to a PR if you want `pr-automerge.yml` to enable GitHub auto-merge after checks pass.
 
 ## QA workflow
 

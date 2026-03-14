@@ -16,6 +16,7 @@
     "demo:start": "bun examples/customer-portal-demo/server.mjs",
     "demo:smoke": "bun scripts/demo-smoke.mjs",
     "review": "bun scripts/review-diff.mjs",
+    "issue": "bun scripts/issue-flow.mjs",
     "qa": "bun scripts/qa-run.mjs",
     "ship:dry": "bun scripts/ship-branch.mjs --dry-run",
     "retro": "bun scripts/retro-report.mjs --since '7 days ago'",

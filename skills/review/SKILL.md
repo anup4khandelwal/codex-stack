@@ -25,6 +25,7 @@ Find the problems that pass CI but still create outages, regressions, or broken 
    - warnings and missing coverage
 4. Output findings ordered by severity.
 5. Recommend concrete fixes and tests.
+6. When running in CI on a pull request, publish the findings in a stable PR comment instead of leaving them only in logs.
 
 ## CLI
 
