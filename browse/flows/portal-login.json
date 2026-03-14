@@ -20,7 +20,7 @@
   },
   {
     "action": "wait",
-    "url": "**/dashboard*"
+    "loadState": "load"
   },
   {
     "action": "assert-url",

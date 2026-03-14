@@ -306,6 +306,8 @@ test -f .github/workflows/qa-pages.yml
 test -f scripts/render-qa-pages.ts
 test -f skills/preview/SKILL.md
 test -f skills/upgrade/SKILL.md
+grep -q 'clean-exclude: pr-preview' .github/workflows/qa-pages.yml
+grep -q 'force: true' .github/workflows/qa-pages.yml
 
 echo "[8/8] cleanup"
 rm -rf .site

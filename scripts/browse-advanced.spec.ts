@@ -37,8 +37,8 @@ function append(entry) {
   fs.writeFileSync(LOG_PATH, JSON.stringify(rows, null, 2));
 }
 class FakeLocator {
-  constructor(page, selector) { this.page = page; this.selector = selector; }
-  first() { return this; }
+  constructor(page, selector, firstOnly = false) { this.page = page; this.selector = selector; this.firstOnly = firstOnly; }
+  first() { return new FakeLocator(this.page, this.selector, true); }
   async click() {
     append({ action: "click", selector: this.selector });
     if (this.page.dialogHandler && this.selector === "#dialog-button") {
@@ -56,7 +56,10 @@ class FakeLocator {
   async waitFor(options) { append({ action: "waitFor", selector: this.selector, state: options?.state || "visible" }); }
   async setInputFiles(files) { append({ action: "setInputFiles", selector: this.selector, files: Array.isArray(files) ? files : [files] }); }
   async innerText() { return this.selector === "body" ? "Example Domain" : this.selector; }
-  async count() { return 1; }
+  async count() {
+    if (this.selector === "[data-qa=metric-card]") return this.firstOnly ? 1 : 4;
+    return 1;
+  }
   async isEnabled() { return this.selector !== "#disabled"; }
   async isDisabled() { return this.selector === "#disabled"; }
   async isChecked() { return this.selector === "#checked"; }
@@ -123,6 +126,7 @@ export const chromium = {
   runBrowse(["assert-checked", "https://example.com/settings", "#checked", "--session", "advanced"]);
   runBrowse(["assert-editable", "https://example.com/settings", "#editable", "--session", "advanced"]);
   runBrowse(["assert-focused", "https://example.com/settings", "#focus", "--session", "advanced"]);
+  runBrowse(["assert-count", "https://example.com/dashboard", "[data-qa=metric-card]", "4", "--session", "advanced"]);
   runBrowse(["wait", "https://example.com/settings", "load:domcontentloaded", "--session", "advanced"]);
   runBrowse(["wait", "https://example.com/settings", "state:hidden:#toast", "--session", "advanced"]);
 

@@ -985,26 +985,33 @@ function parseLocatorDescriptor(selector: string): LocatorDescriptor {
   };
 }
 
-function resolveLocator(scope: PlaywrightScope, selector: string): Record<string, any> {
+function resolveLocator(scope: PlaywrightScope, selector: string, options: { first?: boolean } = {}): Record<string, any> {
+  const { first = true } = options;
   const descriptor = parseLocatorDescriptor(selector);
   assertCondition(Boolean(descriptor.value), `Selector cannot be empty: ${JSON.stringify(selector)}.`);
   if (descriptor.mode === "role") {
-    const options = descriptor.name ? { name: descriptor.name } : undefined;
-    return scope.getByRole(descriptor.value, options).first();
+    const roleOptions = descriptor.name ? { name: descriptor.name } : undefined;
+    const locator = scope.getByRole(descriptor.value, roleOptions);
+    return first ? locator.first() : locator;
   }
   if (descriptor.mode === "label") {
-    return scope.getByLabel(descriptor.value).first();
+    const locator = scope.getByLabel(descriptor.value);
+    return first ? locator.first() : locator;
   }
   if (descriptor.mode === "placeholder") {
-    return scope.getByPlaceholder(descriptor.value).first();
+    const locator = scope.getByPlaceholder(descriptor.value);
+    return first ? locator.first() : locator;
   }
   if (descriptor.mode === "text") {
-    return scope.getByText(descriptor.value).first();
+    const locator = scope.getByText(descriptor.value);
+    return first ? locator.first() : locator;
   }
   if (descriptor.mode === "testid") {
-    return scope.getByTestId(descriptor.value).first();
+    const locator = scope.getByTestId(descriptor.value);
+    return first ? locator.first() : locator;
   }
-  return scope.locator(descriptor.value).first();
+  const locator = scope.locator(descriptor.value);
+  return first ? locator.first() : locator;
 }
 
 async function resolveScope(page: PlaywrightPage, frameSpec: string): Promise<PlaywrightScope> {
@@ -1392,7 +1399,7 @@ async function runStep(page: PlaywrightPage, step: FlowStep, sessionName: string
   if (action === "assert-count") {
     const selector = String(step.selector || "");
     const expectedCount = Number(step.count ?? step.value ?? 0);
-    const count = await resolveLocator(scope, selector).count();
+    const count = await resolveLocator(scope, selector, { first: false }).count();
     assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     return { action, selector, expectedCount, count, frame: frame || undefined, status: "ok" };
   }
@@ -2101,7 +2108,7 @@ async function main(): Promise<void> {
     assertCondition(Number.isInteger(expectedCount), "Expected count must be an integer.");
     await withPage(session, url, device, async ({ page }: { page: PlaywrightPage }) => {
       const scope = await resolveScope(page, frame);
-      const count = await resolveLocator(scope, selector).count();
+      const count = await resolveLocator(scope, selector, { first: false }).count();
       assertCondition(count === expectedCount, `Expected ${expectedCount} matches for ${selector} but got ${count}.`);
     });
     recordSession(session, { lastCommand: "assert-count", lastUrl: url, output: `${selector}:${expectedCount}` });
