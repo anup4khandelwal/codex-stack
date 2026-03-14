@@ -19,6 +19,9 @@ bun src/cli.ts retro --since "7 days ago"
 bun src/cli.ts retro --since "7 days ago" --artifact-dir .codex-stack/retros
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts retro --since "7 days ago" --no-github
+bun src/cli.ts upgrade --offline
+bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 bun src/cli.ts doctor
 bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
@@ -120,6 +123,9 @@ bun scripts/retro-report.ts --since "7 days ago" --repo anup4khandelwal/codex-st
 bun scripts/retro-report.ts --since "7 days ago" --no-github
 bun scripts/weekly-digest.ts --since "7 days ago" --no-github
 bun scripts/weekly-digest.ts --since "7 days ago" --publish-dir docs/weekly-digest-publish --no-github
+bun scripts/upgrade-check.ts --offline
+bun scripts/upgrade-check.ts --json
+bun scripts/upgrade-check.ts --repo anup4khandelwal/codex-stack --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```
 
 Notes:
@@ -127,6 +133,20 @@ Notes:
 - By default, every retro run writes `latest.md`, `latest.json`, and timestamped snapshots under `.codex-stack/retros/`.
 - When GitHub data is available, `retro` adds PR throughput, merge time, first-review latency, backlog, and reviewer load metrics.
 - `weekly-digest.ts` also writes publication-ready artifacts under `docs/weekly-digest-publish/`: `summary.txt`, `slack.md`, `slack.json`, `email.md`, and `manifest.json`.
+
+## Upgrade workflow
+
+```bash
+bun scripts/upgrade-check.ts --offline
+bun scripts/upgrade-check.ts --json
+bun scripts/upgrade-check.ts --repo anup4khandelwal/codex-stack --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
+```
+
+Notes:
+
+- `upgrade-check.ts` audits Bun alignment, dependency drift, workflow action drift, and install health.
+- Use `--offline` for deterministic local or CI smoke runs that should skip network calls.
+- `.github/workflows/daily-update-check.yml` runs the same script on a daily schedule and syncs the report into a stable GitHub issue.
 
 ## Browse workflow
 

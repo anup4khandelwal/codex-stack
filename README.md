@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Seven opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, release shipping, browser automation, and engineering retrospectives.
+Eight opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, release shipping, browser automation, engineering retrospectives, and upgrade audits.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -26,6 +26,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
 | `browse` | QA engineer | Drives a real browser with persistent sessions, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
+| `upgrade` | Repo maintainer | Audits Bun, dependency drift, workflow action drift, and install health for codex-stack itself. |
 
 ## Default workflow
 
@@ -52,6 +53,7 @@ Use the repo in this order:
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
+- Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
 ## Quick start
 
@@ -75,6 +77,7 @@ bun src/cli.ts list
 - `ship`
 - `browse`
 - `retro`
+- `upgrade`
 
 If you want shell-level commands, link those wrappers into your `PATH`:
 
@@ -153,6 +156,7 @@ bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snap
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173/dashboard --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
+bun src/cli.ts upgrade --offline --json
 bun src/cli.ts browse doctor
 bun src/cli.ts browse flows
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
@@ -171,6 +175,7 @@ bun run review
 bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
 bun run ship:dry
 bun run retro
+bun run upgrade
 bun run weekly
 ```
 
@@ -214,6 +219,27 @@ This keeps QA in the shipping path instead of as a manual follow-up.
 When verification runs during `ship`, the QA report and evidence are published into `docs/qa/<branch>/` before the branch is pushed, so the PR comment can point at tracked files on GitHub.
 After merge, the `qa-pages` workflow renders those tracked artifacts into a GitHub Pages site so the report, annotation, and screenshot links remain stable even after the feature branch is deleted.
 
+## Upgrade checks
+
+Use `upgrade` when you want to audit the repo itself instead of a feature branch.
+
+Examples:
+
+```bash
+bun src/cli.ts upgrade --offline
+bun src/cli.ts upgrade --json
+bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
+```
+
+The upgrade report covers:
+
+- Bun runtime alignment against `packageManager` and `engines.bun`
+- dependency drift from npm when network access is available
+- GitHub Actions `uses:` ref drift
+- local wrapper and installed Codex skill link health
+
+`.github/workflows/daily-update-check.yml` runs that same report on a daily schedule, uploads the markdown/json artifacts, writes the markdown into the workflow summary, and syncs a stable GitHub issue titled `Daily codex-stack update check`.
+
 ## QA Pages
 
 Build the static QA site locally:
@@ -248,6 +274,7 @@ This creates links such as:
 - `~/.codex/skills/codex-stack-qa`
 - `~/.codex/skills/codex-stack-review`
 - `~/.codex/skills/codex-stack-browse`
+- `~/.codex/skills/codex-stack-upgrade`
 
 Example prompts after installation:
 
@@ -256,6 +283,7 @@ Use codex-stack-product to tighten this feature request into acceptance criteria
 Use codex-stack-review to audit the current branch against main and focus on production risk.
 Use codex-stack-qa to verify the staging dashboard flow and tell me if it is safe to ship.
 Use codex-stack-browse to capture a baseline snapshot for the new onboarding page.
+Use codex-stack-upgrade to audit whether this codex-stack install needs dependency, workflow, or skill-link refreshes.
 ```
 
 ## Repository layout

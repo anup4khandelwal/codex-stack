@@ -17,6 +17,7 @@ This repo targets Bun `1.2+`.
 - `ship`
 - `browse`
 - `retro`
+- `upgrade`
 
 Then install a browser for Playwright:
 

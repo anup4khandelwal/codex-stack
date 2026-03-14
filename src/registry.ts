@@ -49,6 +49,12 @@ export const modeRegistry: ModeDefinition[] = [
     summary: "Generate a delivery retrospective from git and PR history.",
     skillPath: path.join(rootDir, "skills", "retro", "SKILL.md"),
   },
+  {
+    name: "upgrade",
+    role: "Repo maintainer",
+    summary: "Audit install health and update drift across dependencies, skills, and workflows.",
+    skillPath: path.join(rootDir, "skills", "upgrade", "SKILL.md"),
+  },
 ];
 
 export function findMode(name: string): ModeDefinition | undefined {
