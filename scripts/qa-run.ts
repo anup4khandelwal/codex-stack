@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { inferChangedRoutes, type RouteCandidate } from "./qa-diff.ts";
+import { writeQaTrendArtifacts } from "./qa-trends.ts";
 
 type QaMode = "quick" | "full" | "regression" | string;
 type FindingSeverity = "critical" | "high" | "medium" | "low";
@@ -133,6 +134,8 @@ interface QaArtifacts {
   latestJson?: string;
   latestMarkdown?: string;
   annotation?: string;
+  trendsJson?: string;
+  trendsMarkdown?: string;
   published?: PublishedArtifacts;
 }
 
@@ -1143,6 +1146,24 @@ if (fixture?.snapshot) {
 }
 
 report = writeArtifacts(report);
+const trendArtifacts = writeQaTrendArtifacts({ dir: QA_DIR });
+report.artifacts = {
+  ...report.artifacts,
+  trendsJson: path.relative(process.cwd(), trendArtifacts.jsonPath),
+  trendsMarkdown: path.relative(process.cwd(), trendArtifacts.markdownPath),
+};
+if (report.artifacts.json) {
+  fs.writeFileSync(path.resolve(process.cwd(), report.artifacts.json), JSON.stringify(report, null, 2));
+}
+if (report.artifacts.markdown) {
+  fs.writeFileSync(path.resolve(process.cwd(), report.artifacts.markdown), buildMarkdown(report));
+}
+if (report.artifacts.latestJson) {
+  fs.writeFileSync(path.resolve(process.cwd(), report.artifacts.latestJson), JSON.stringify(report, null, 2));
+}
+if (report.artifacts.latestMarkdown) {
+  fs.writeFileSync(path.resolve(process.cwd(), report.artifacts.latestMarkdown), buildMarkdown(report));
+}
 if (args.publishDir) {
   report = publishArtifacts(report, args.publishDir);
 }

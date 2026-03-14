@@ -129,6 +129,7 @@ Notes:
 bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
 bun scripts/qa-run.ts https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
+bun scripts/qa-trends.ts --dir .codex-stack/qa --json
 ```
 
 Notes:
@@ -137,6 +138,7 @@ Notes:
 - It upgrades raw browser evidence into categorized findings, severity, health score, and recommendation.
 - `--mode diff-aware` inspects the git diff, infers changed routes for common app/page layouts, and probes those URLs from the supplied base URL.
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
+- Every `qa-run` also refreshes `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so you can compare the latest run against prior QA history.
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.

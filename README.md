@@ -49,6 +49,7 @@ Use the repo in this order:
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts
 - QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, and annotated screenshots for snapshot failures
+- Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, QA execution, and PR comment output for preview deployments
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - PR comments with QA verification summaries and artifact references after `ship --pr`
@@ -228,6 +229,7 @@ Use `qa` when you want a decision-ready report:
 - diff-aware route inference from changed files
 - annotated SVG evidence for snapshot-based failures
 - saved markdown/json report under `.codex-stack/qa/`
+- automatic trend summaries across saved QA runs
 
 ## Preview verification
 
