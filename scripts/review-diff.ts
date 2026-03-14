@@ -1,25 +1,60 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execSync } from "node:child_process";
+import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
-function run(cmd, options = {}) {
+type Severity = "info" | "warning" | "critical";
+
+interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
+  allowFailure?: boolean;
+}
+
+interface ParsedArgs {
+  json: boolean;
+  base: string;
+}
+
+interface Finding {
+  severity: Severity;
+  title: string;
+  detail: string;
+  files: string[];
+}
+
+interface AnalyzeInput {
+  diffText: string;
+  fileNames: string[];
+  branch: string;
+  baseRef: string;
+}
+
+interface ReviewResult {
+  status: "ok";
+  branch: string;
+  baseRef: string;
+  checklistPath: string;
+  checklistSummary: string[];
+  fileNames: string[];
+  findings: Finding[];
+}
+
+function run(cmd: string, options: RunOptions = {}): string {
   try {
     return execSync(cmd, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       ...options,
     }).trim();
-  } catch (error) {
+  } catch (error: unknown) {
     if (options.allowFailure) return "";
-    const stderr = error.stderr ? String(error.stderr) : "";
-    throw new Error(stderr || error.message);
+    const stderr = typeof error === "object" && error && "stderr" in error ? String((error as { stderr?: unknown }).stderr || "") : "";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(stderr || message);
   }
 }
 
-function usage() {
+function usage(): never {
   console.log(`review-diff
 
 Usage:
@@ -28,8 +63,8 @@ Usage:
   process.exit(0);
 }
 
-function parseArgs(argv) {
-  const args = { json: false, base: "" };
+function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = { json: false, base: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--json") args.json = true;
@@ -43,7 +78,7 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveBaseRef(explicitBase) {
+function resolveBaseRef(explicitBase: string): string {
   if (explicitBase) return explicitBase;
   const candidates = ["origin/main", "main", "origin/master", "master"];
   for (const candidate of candidates) {
@@ -70,23 +105,23 @@ function resolveBranchName(): string {
   return shortSha ? `detached-${shortSha}` : "";
 }
 
-function readChecklist() {
+function readChecklist(): string {
   const filePath = path.join(process.cwd(), "skills", "review", "checklist.md");
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
 }
 
-function countChangedLines(diffText) {
+function countChangedLines(diffText: string): number {
   return diffText
     .split(/\r?\n/)
     .filter((line) => (line.startsWith("+") || line.startsWith("-")) && !line.startsWith("+++") && !line.startsWith("---")).length;
 }
 
-function finding(severity, title, detail, files = []) {
+function finding(severity: Severity, title: string, detail: string, files: string[] = []): Finding {
   return { severity, title, detail, files };
 }
 
-function analyze({ diffText, fileNames, branch, baseRef }) {
-  const findings = [];
+function analyze({ diffText, fileNames, branch, baseRef }: AnalyzeInput): Finding[] {
+  const findings: Finding[] = [];
   const hasTests = fileNames.some((file) => /(test|spec)\.(ts|tsx|js|jsx|py|go|rb)$/.test(file) || /(^|\/)(tests?|__tests__)\//.test(file));
   const changedLines = countChangedLines(diffText);
   const sensitiveFiles = fileNames.filter((file) => /auth|oauth|jwt|session|permission|secret|token|payment|billing|workflow|terraform|k8s|docker/i.test(file));
@@ -190,7 +225,7 @@ function analyze({ diffText, fileNames, branch, baseRef }) {
   return findings;
 }
 
-function printText(result) {
+function printText(result: ReviewResult): void {
   console.log(`# Pre-Landing Review`);
   console.log();
   console.log(`- Branch: ${result.branch}`);
@@ -248,7 +283,7 @@ if (!diffText.trim() || !fileNames.length) {
   process.exit(0);
 }
 
-const result = {
+const result: ReviewResult = {
   status: "ok",
   branch,
   baseRef,
