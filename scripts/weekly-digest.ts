@@ -1,11 +1,103 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 
-function usage() {
+interface WeeklyDigestArgs {
+  since: string;
+  repo: string;
+  out: string;
+  jsonOut: string;
+  publishDir: string;
+  summaryOut: string;
+  slackOut: string;
+  slackJsonOut: string;
+  emailOut: string;
+  manifestOut: string;
+  noPublish: boolean;
+  noGithub: boolean;
+}
+
+interface CountEntry {
+  name: string;
+  count: number;
+}
+
+interface RecentSubject {
+  subject: string;
+  author?: string;
+}
+
+interface GithubAnalytics {
+  enabled: boolean;
+  reason: string;
+  repo: string;
+  source?: "graphql" | "rest";
+  scannedCount?: number;
+  avgTimeToMergeHours?: number;
+  avgFirstReviewLatencyHours?: number;
+  pendingReviewCount?: number;
+  avgReviewsPerPr?: number;
+  topReviewers?: CountEntry[];
+}
+
+interface RetroSummary {
+  since: string;
+  commitCount: number;
+  mergeCommits: number;
+  authorCount: number;
+  topAreas: CountEntry[];
+  topAuthors: CountEntry[];
+  recentSubjects: RecentSubject[];
+  recommendation: string;
+  github: GithubAnalytics;
+}
+
+interface PublishTargets {
+  summary: string;
+  slackMarkdown: string;
+  slackJson: string;
+  emailMarkdown: string;
+  manifest: string;
+}
+
+interface SlackPlainText {
+  type: "plain_text";
+  text: string;
+}
+
+interface SlackMrkdwn {
+  type: "mrkdwn";
+  text: string;
+}
+
+interface SlackHeaderBlock {
+  type: "header";
+  text: SlackPlainText;
+}
+
+interface SlackContextBlock {
+  type: "context";
+  elements: SlackMrkdwn[];
+}
+
+interface SlackSectionBlock {
+  type: "section";
+  text?: SlackMrkdwn;
+  fields?: SlackMrkdwn[];
+}
+
+type SlackBlock = SlackHeaderBlock | SlackContextBlock | SlackSectionBlock;
+
+interface SlackPayload {
+  text: string;
+  blocks: SlackBlock[];
+}
+
+const BUN_RUNTIME = process.execPath || "bun";
+
+function usage(): never {
   console.log(`weekly-digest
 
 Usage:
@@ -14,8 +106,8 @@ Usage:
   process.exit(0);
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): WeeklyDigestArgs {
+  const out: WeeklyDigestArgs = {
     since: "7 days ago",
     repo: "",
     out: path.resolve(process.cwd(), "docs", "weekly-digest.md"),
@@ -29,6 +121,7 @@ function parseArgs(argv) {
     noPublish: false,
     noGithub: false,
   };
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--since") {
@@ -69,45 +162,52 @@ function parseArgs(argv) {
       usage();
     }
   }
+
   return out;
 }
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function writeFile(filePath, content) {
+function writeFile(filePath: string, content: string): void {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, content);
 }
 
-function relative(targetPath) {
+function relative(targetPath: string): string {
   return path.relative(process.cwd(), targetPath) || path.basename(targetPath);
 }
 
-function bullets(items, emptyMessage, formatter) {
+function bullets<T>(items: T[] | undefined, emptyMessage: string, formatter: (item: T) => string): string {
   if (!items || !items.length) return `- ${emptyMessage}`;
   return items.map((item) => `- ${formatter(item)}`).join("\n");
 }
 
-function topNames(items, emptyMessage, formatter, limit = 3) {
+function topNames<T>(
+  items: T[] | undefined,
+  emptyMessage: string,
+  formatter: (item: T) => string,
+  limit = 3
+): string {
   if (!items || !items.length) return emptyMessage;
   return items.slice(0, limit).map(formatter).join(", ");
 }
 
-function repoLabel(retro) {
-  return retro.github?.repo || "local-repo";
+function repoLabel(retro: RetroSummary): string {
+  return retro.github.repo || "local-repo";
 }
 
-function prHealthLines(retro) {
-  if (!retro.github?.enabled) {
+function prHealthLines(retro: RetroSummary): string[] {
+  if (!retro.github.enabled) {
     return [
-      `- GitHub analytics: disabled (${retro.github?.reason || "unavailable"})`,
+      `- GitHub analytics: disabled (${retro.github.reason || "unavailable"})`,
       "- PR metrics: unavailable in this run",
     ];
   }
+
   return [
-    `- GitHub analytics: enabled via ${retro.github.source}`,
+    `- GitHub analytics: enabled via ${retro.github.source || "unknown"}`,
     `- PRs scanned: ${retro.github.scannedCount || 0}`,
     `- Avg time to merge: ${retro.github.avgTimeToMergeHours || 0} hours`,
     `- Avg first review latency: ${retro.github.avgFirstReviewLatencyHours || 0} hours`,
@@ -116,7 +216,7 @@ function prHealthLines(retro) {
   ];
 }
 
-function buildMarkdown(retro, generatedAt) {
+function buildMarkdown(retro: RetroSummary, generatedAt: string): string {
   return `# Weekly Digest
 
 - Repo: ${repoLabel(retro)}
@@ -148,11 +248,11 @@ ${prHealthLines(retro).join("\n")}
 
 ## Reviewer load
 
-${bullets(retro.github?.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
+${bullets(retro.github.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
 `;
 }
 
-function buildSummaryText(retro) {
+function buildSummaryText(retro: RetroSummary): string {
   const lines = [
     `Weekly digest for ${repoLabel(retro)} (${retro.since})`,
     `Recommendation: ${retro.recommendation}`,
@@ -162,19 +262,19 @@ function buildSummaryText(retro) {
     `Recent work: ${topNames(retro.recentSubjects, "none", (item) => item.subject, 2)}`,
   ];
 
-  if (retro.github?.enabled) {
+  if (retro.github.enabled) {
     lines.push(
       `PR health: ${retro.github.scannedCount || 0} PRs scanned, ${retro.github.avgTimeToMergeHours || 0}h avg merge time, ${retro.github.avgFirstReviewLatencyHours || 0}h first review latency, ${retro.github.pendingReviewCount || 0} pending without review.`,
       `Top reviewers: ${topNames(retro.github.topReviewers || [], "none", (item) => `${item.name} (${item.count})`)}`
     );
   } else {
-    lines.push(`PR health: GitHub analytics disabled (${retro.github?.reason || "unavailable"}).`);
+    lines.push(`PR health: GitHub analytics disabled (${retro.github.reason || "unavailable"}).`);
   }
 
   return `${lines.join("\n")}\n`;
 }
 
-function buildSlackMarkdown(retro) {
+function buildSlackMarkdown(retro: RetroSummary): string {
   const parts = [
     `*Weekly Digest · ${repoLabel(retro)}*`,
     `Window: ${retro.since}`,
@@ -184,22 +284,23 @@ function buildSlackMarkdown(retro) {
     `*Recent work*: ${topNames(retro.recentSubjects, "none", (item) => item.subject, 3)}`,
   ];
 
-  if (retro.github?.enabled) {
+  if (retro.github.enabled) {
     parts.push(
       `*PR health*: ${retro.github.scannedCount || 0} scanned, ${retro.github.avgTimeToMergeHours || 0}h merge, ${retro.github.avgFirstReviewLatencyHours || 0}h first review, backlog ${retro.github.pendingReviewCount || 0}`,
       `*Top reviewers*: ${topNames(retro.github.topReviewers || [], "none", (item) => `${item.name} (${item.count})`)}`
     );
   } else {
-    parts.push(`*PR health*: GitHub analytics disabled (${retro.github?.reason || "unavailable"})`);
+    parts.push(`*PR health*: GitHub analytics disabled (${retro.github.reason || "unavailable"})`);
   }
 
   return `${parts.join("\n")}\n`;
 }
 
-function buildSlackPayload(retro, generatedAt) {
-  const health = retro.github?.enabled
+function buildSlackPayload(retro: RetroSummary, generatedAt: string): SlackPayload {
+  const health = retro.github.enabled
     ? `${retro.github.scannedCount || 0} PRs scanned | ${retro.github.avgTimeToMergeHours || 0}h merge | ${retro.github.avgFirstReviewLatencyHours || 0}h first review | backlog ${retro.github.pendingReviewCount || 0}`
-    : `GitHub analytics disabled (${retro.github?.reason || "unavailable"})`;
+    : `GitHub analytics disabled (${retro.github.reason || "unavailable"})`;
+
   return {
     text: `Weekly digest for ${repoLabel(retro)}: ${retro.recommendation}`,
     blocks: [
@@ -246,8 +347,9 @@ function buildSlackPayload(retro, generatedAt) {
   };
 }
 
-function buildEmailMarkdown(retro, generatedAt) {
+function buildEmailMarkdown(retro: RetroSummary, generatedAt: string): string {
   const subject = `[${repoLabel(retro)}] Weekly engineering digest`;
+
   return `Subject: ${subject}
 
 # Weekly Engineering Digest
@@ -277,11 +379,11 @@ ${prHealthLines(retro).join("\n")}
 
 ## Reviewer load
 
-${bullets(retro.github?.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
+${bullets(retro.github.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
 `;
 }
 
-function resolvePublishTargets(args) {
+function resolvePublishTargets(args: WeeklyDigestArgs): PublishTargets {
   return {
     summary: args.summaryOut || path.join(args.publishDir, "summary.txt"),
     slackMarkdown: args.slackOut || path.join(args.publishDir, "slack.md"),
@@ -291,25 +393,27 @@ function resolvePublishTargets(args) {
   };
 }
 
-const args = parseArgs(process.argv.slice(2));
-const retroArgs = [
-  "scripts/retro-report.ts",
-  "--since",
-  args.since,
-  "--json",
-  "--no-artifacts",
-];
-if (args.repo) {
-  retroArgs.push("--repo", args.repo);
-}
-if (args.noGithub) {
-  retroArgs.push("--no-github");
+function loadRetroSummary(args: WeeklyDigestArgs): RetroSummary {
+  const retroArgs = ["scripts/retro-report.ts", "--since", args.since, "--json", "--no-artifacts"];
+  if (args.repo) retroArgs.push("--repo", args.repo);
+  if (args.noGithub) retroArgs.push("--no-github");
+
+  const output = execFileSync(BUN_RUNTIME, retroArgs, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+
+  return JSON.parse(output) as RetroSummary;
 }
 
-const retro = JSON.parse(execFileSync(process.execPath || "bun", retroArgs, {
-  cwd: process.cwd(),
-  encoding: "utf8",
-}));
+function publishIndex(targets: PublishTargets): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(targets).map(([key, target]) => [key, relative(target)])
+  );
+}
+
+const args = parseArgs(process.argv.slice(2));
+const retro = loadRetroSummary(args);
 const generatedAt = new Date().toISOString();
 const markdown = buildMarkdown(retro, generatedAt);
 const publishTargets = resolvePublishTargets(args);
@@ -319,36 +423,54 @@ const slackPayload = buildSlackPayload(retro, generatedAt);
 const emailMarkdown = buildEmailMarkdown(retro, generatedAt);
 
 writeFile(args.out, markdown);
-writeFile(args.jsonOut, JSON.stringify({
-  generatedAt,
-  repo: repoLabel(retro),
-  retro,
-  publish: args.noPublish ? { enabled: false } : {
-    enabled: true,
-    targets: Object.fromEntries(Object.entries(publishTargets).map(([key, target]) => [key, relative(target)])),
-  },
-}, null, 2));
+writeFile(
+  args.jsonOut,
+  JSON.stringify(
+    {
+      generatedAt,
+      repo: repoLabel(retro),
+      retro,
+      publish: args.noPublish
+        ? { enabled: false }
+        : {
+            enabled: true,
+            targets: publishIndex(publishTargets),
+          },
+    },
+    null,
+    2
+  )
+);
 
 if (!args.noPublish) {
   writeFile(publishTargets.summary, summaryText);
   writeFile(publishTargets.slackMarkdown, slackMarkdown);
   writeFile(publishTargets.slackJson, JSON.stringify(slackPayload, null, 2));
   writeFile(publishTargets.emailMarkdown, emailMarkdown);
-  writeFile(publishTargets.manifest, JSON.stringify({
-    generatedAt,
-    repo: repoLabel(retro),
-    since: retro.since,
-    recommendation: retro.recommendation,
-    outputs: Object.fromEntries(Object.entries({
-      markdown: args.out,
-      json: args.jsonOut,
-      summary: publishTargets.summary,
-      slackMarkdown: publishTargets.slackMarkdown,
-      slackJson: publishTargets.slackJson,
-      emailMarkdown: publishTargets.emailMarkdown,
-      manifest: publishTargets.manifest,
-    }).map(([key, target]) => [key, relative(target)])),
-  }, null, 2));
+  writeFile(
+    publishTargets.manifest,
+    JSON.stringify(
+      {
+        generatedAt,
+        repo: repoLabel(retro),
+        since: retro.since,
+        recommendation: retro.recommendation,
+        outputs: Object.fromEntries(
+          Object.entries({
+            markdown: args.out,
+            json: args.jsonOut,
+            summary: publishTargets.summary,
+            slackMarkdown: publishTargets.slackMarkdown,
+            slackJson: publishTargets.slackJson,
+            emailMarkdown: publishTargets.emailMarkdown,
+            manifest: publishTargets.manifest,
+          }).map(([key, target]) => [key, relative(target)])
+        ),
+      },
+      null,
+      2
+    )
+  );
 }
 
 console.log(markdown);

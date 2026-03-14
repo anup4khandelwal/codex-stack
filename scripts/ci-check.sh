@@ -74,6 +74,7 @@ run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
 run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
 run_ts scripts/preview-verify.spec.ts >/tmp/codex-stack-preview-spec.log
+run_ts scripts/weekly-digest.spec.ts >/tmp/codex-stack-weekly-spec.log
 grep -q '"overallStatus"' /tmp/codex-stack-upgrade.json
 grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
