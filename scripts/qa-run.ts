@@ -1,15 +1,187 @@
 #!/usr/bin/env bun
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 
+type QaMode = "quick" | "full" | "regression" | string;
+type FindingSeverity = "critical" | "warning" | "info";
+type ReportStatus = "critical" | "warning" | "pass";
+type SnapshotCommand = "snapshot" | "compare-snapshot";
+
+interface QaArgs {
+  url: string;
+  flows: string[];
+  snapshot: string;
+  updateSnapshot: boolean;
+  session: string;
+  mode: QaMode;
+  json: boolean;
+  fixture: string;
+  publishDir: string;
+}
+
+interface RectBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface SnapshotElement {
+  selector?: string;
+  bounds?: Partial<RectBounds>;
+}
+
+interface SnapshotDocument {
+  name?: string;
+  elements?: SnapshotElement[];
+  screenshotPath?: string;
+}
+
+interface ChangedSelectorEntry {
+  selector?: string;
+}
+
+interface SnapshotComparison {
+  missingSelectors?: string[];
+  changedSelectors?: ChangedSelectorEntry[];
+  newSelectors?: string[];
+  bodyTextChanged?: boolean;
+  titleChanged?: boolean;
+  screenshotChanged?: boolean;
+}
+
+interface SnapshotCommandResult {
+  status?: string;
+  baseline?: string;
+  snapshot?: string;
+  current?: string;
+  screenshot?: string;
+  comparison?: SnapshotComparison;
+}
+
+interface SnapshotEvidence {
+  kind: "snapshot";
+  command: SnapshotCommand;
+  result: SnapshotCommandResult;
+  ok: boolean;
+  stderr: string;
+}
+
+interface FlowEvidence {
+  name: string;
+  ok: boolean;
+  status: "pass" | "failed";
+  steps: number;
+  stderr: string;
+  raw?: unknown;
+}
+
+interface QaFinding {
+  severity: FindingSeverity;
+  title: string;
+  detail: string;
+  evidence: Record<string, string>;
+}
+
+interface QaFlowResult {
+  name: string;
+  status: "pass" | "failed";
+  steps: number;
+}
+
+interface QaSnapshotSummary {
+  name: string;
+  status: string;
+  baseline: string;
+  current: string;
+  screenshot: string;
+  annotation: string;
+}
+
+interface PublishedArtifacts {
+  dir: string;
+  json: string;
+  markdown: string;
+  annotation: string;
+  screenshot: string;
+  current: string;
+  baseline: string;
+}
+
+interface QaArtifacts {
+  json?: string;
+  markdown?: string;
+  latestJson?: string;
+  latestMarkdown?: string;
+  annotation?: string;
+  published?: PublishedArtifacts;
+}
+
+interface QaReport {
+  generatedAt: string;
+  url: string;
+  mode: QaMode;
+  session: string;
+  status: ReportStatus;
+  healthScore: number;
+  recommendation: string;
+  findings: QaFinding[];
+  flowResults: QaFlowResult[];
+  snapshotResult: QaSnapshotSummary | null;
+  artifacts: QaArtifacts;
+}
+
+interface AnnotationMarker {
+  selector: string;
+  kind: "missing" | "changed" | "new";
+  color: string;
+  label: string;
+  bounds: RectBounds;
+}
+
+interface AnnotationArtifact {
+  annotation: string;
+  screenshot: string;
+  markers: number;
+}
+
+interface BrowseResult {
+  ok: boolean;
+  status: number;
+  stdout: string;
+  stderr: string;
+  parsed: unknown;
+}
+
+interface QaFixtureSnapshot extends SnapshotCommandResult {
+  name?: string;
+  ok?: boolean;
+  command?: SnapshotCommand;
+  result?: SnapshotCommandResult;
+  stderr?: string;
+}
+
+interface QaFixtureFlow {
+  name: string;
+  ok?: boolean;
+  steps?: number;
+  stderr?: string;
+}
+
+interface QaFixture {
+  url?: string;
+  snapshot?: QaFixtureSnapshot;
+  flows?: QaFixtureFlow[];
+}
+
 const QA_DIR = path.resolve(process.cwd(), ".codex-stack", "qa");
 const QA_ANNOTATION_DIR = path.join(QA_DIR, "annotations");
-const BROWSE_CLI = path.resolve(process.cwd(), "browse", "dist", "cli.js");
+const BROWSE_CLI = path.resolve(process.cwd(), "browse", "src", "cli.ts");
+const BUN_RUNTIME = process.execPath || "bun";
 
-function usage() {
+function usage(): never {
   console.log(`qa-run
 
 Usage:
@@ -19,8 +191,8 @@ Usage:
   process.exit(0);
 }
 
-function parseArgs(argv) {
-  const out = {
+function parseArgs(argv: string[]): QaArgs {
+  const out: QaArgs = {
     url: "",
     flows: [],
     snapshot: "",
@@ -67,16 +239,16 @@ function parseArgs(argv) {
   return out;
 }
 
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function writeFile(filePath, content) {
+function writeFile(filePath: string, content: string): void {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, content);
 }
 
-function slugify(value) {
+function slugify(value: string): string {
   return String(value || "")
     .toLowerCase()
     .replace(/https?:\/\//g, "")
@@ -85,18 +257,71 @@ function slugify(value) {
     .slice(0, 80) || "qa";
 }
 
-function timestampSlug() {
+function timestampSlug(): string {
   return new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
 }
 
-function runBrowse(args) {
-  const result = spawnSync(process.execPath || "bun", [BROWSE_CLI, ...args], {
+function asObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function asChangedSelectorEntries(value: unknown): ChangedSelectorEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => asObject(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => ({ selector: asString(item.selector) }));
+}
+
+function asSnapshotComparison(value: unknown): SnapshotComparison {
+  const obj = asObject(value);
+  return {
+    missingSelectors: asStringArray(obj?.missingSelectors),
+    changedSelectors: asChangedSelectorEntries(obj?.changedSelectors),
+    newSelectors: asStringArray(obj?.newSelectors),
+    bodyTextChanged: Boolean(obj?.bodyTextChanged),
+    titleChanged: Boolean(obj?.titleChanged),
+    screenshotChanged: Boolean(obj?.screenshotChanged),
+  };
+}
+
+function asSnapshotCommandResult(value: unknown): SnapshotCommandResult {
+  const obj = asObject(value);
+  return {
+    status: asString(obj?.status),
+    baseline: asString(obj?.baseline),
+    snapshot: asString(obj?.snapshot),
+    current: asString(obj?.current),
+    screenshot: asString(obj?.screenshot),
+    comparison: obj?.comparison ? asSnapshotComparison(obj.comparison) : undefined,
+  };
+}
+
+function asFlowStepCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function runBrowse(args: string[]): BrowseResult {
+  const result = spawnSync(BUN_RUNTIME, [BROWSE_CLI, ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
   });
   const stdout = String(result.stdout || "").trim();
   const stderr = String(result.stderr || "").trim();
-  let parsed = null;
+  let parsed: unknown = null;
   if (stdout) {
     try {
       parsed = JSON.parse(stdout);
@@ -113,27 +338,31 @@ function runBrowse(args) {
   };
 }
 
-function finding(severity, title, detail, evidence = {}) {
+function finding(
+  severity: FindingSeverity,
+  title: string,
+  detail: string,
+  evidence: Record<string, string> = {},
+): QaFinding {
   return { severity, title, detail, evidence };
 }
 
-function scoreFindings(findings) {
+function scoreFindings(findings: QaFinding[]): number {
   let score = 100;
   for (const item of findings) {
     if (item.severity === "critical") score -= 40;
     else if (item.severity === "warning") score -= 15;
-    else if (item.severity === "info") score -= 0;
   }
   return Math.max(0, score);
 }
 
-function statusFromFindings(findings) {
+function statusFromFindings(findings: QaFinding[]): ReportStatus {
   if (findings.some((item) => item.severity === "critical")) return "critical";
   if (findings.some((item) => item.severity === "warning")) return "warning";
   return "pass";
 }
 
-function recommendation(status, healthScore) {
+function recommendation(status: ReportStatus, healthScore: number): string {
   if (status === "critical") {
     return "Do not ship. Fix the broken flow or restore the expected UI state before merge.";
   }
@@ -145,19 +374,28 @@ function recommendation(status, healthScore) {
   return "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.";
 }
 
-function buildMarkdown(report) {
+function buildMarkdown(report: QaReport): string {
   const findingLines = report.findings.length
-    ? report.findings.map((item) => `### ${item.severity.toUpperCase()}: ${item.title}\n\n${item.detail}\n\nEvidence: ${Object.entries(item.evidence || {}).map(([key, value]) => `${key}=${value}`).join(", ") || "none"}`).join("\n\n")
+    ? report.findings
+        .map((item) => {
+          const evidence = Object.entries(item.evidence)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(", ") || "none";
+          return `### ${item.severity.toUpperCase()}: ${item.title}\n\n${item.detail}\n\nEvidence: ${evidence}`;
+        })
+        .join("\n\n")
     : "No findings.";
   const flowLines = report.flowResults.length
     ? report.flowResults.map((item) => `- ${item.name}: ${item.status}`).join("\n")
     : "- none";
   const snapshotLine = report.snapshotResult
     ? [
-      `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
-      report.snapshotResult.screenshot ? `- Screenshot: ${report.snapshotResult.screenshot}` : "",
-      report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
-    ].filter(Boolean).join("\n")
+        `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
+        report.snapshotResult.screenshot ? `- Screenshot: ${report.snapshotResult.screenshot}` : "",
+        report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
     : "- Snapshot: none";
 
   return `# QA Report
@@ -184,24 +422,24 @@ ${snapshotLine}
 `;
 }
 
-function relative(filePath) {
+function relative(filePath: string): string {
   return path.relative(process.cwd(), filePath) || path.basename(filePath);
 }
 
-function readJson(filePath, fallback = null) {
+function readJson<T>(filePath: string, fallback: T): T {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
   } catch {
     return fallback;
   }
 }
 
-function resolveMaybeRelative(filePath) {
+function resolveMaybeRelative(filePath: string): string {
   if (!filePath) return "";
   return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
 }
 
-function escapeXml(value) {
+function escapeXml(value: string): string {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -210,14 +448,14 @@ function escapeXml(value) {
     .replace(/'/g, "&apos;");
 }
 
-function loadSnapshotDocument(refOrObject) {
+function loadSnapshotDocument(refOrObject: string | SnapshotDocument | null | undefined): SnapshotDocument | null {
   if (!refOrObject) return null;
   if (typeof refOrObject === "object") return refOrObject;
   const resolved = resolveMaybeRelative(refOrObject);
-  return resolved && fs.existsSync(resolved) ? readJson(resolved, null) : null;
+  return resolved && fs.existsSync(resolved) ? readJson<SnapshotDocument | null>(resolved, null) : null;
 }
 
-function pngDimensions(filePath) {
+function pngDimensions(filePath: string): { width: number; height: number } {
   const resolved = resolveMaybeRelative(filePath);
   if (!resolved || !fs.existsSync(resolved)) return { width: 1, height: 1 };
   const buffer = fs.readFileSync(resolved);
@@ -230,22 +468,35 @@ function pngDimensions(filePath) {
   };
 }
 
-function screenshotDataUri(filePath) {
+function screenshotDataUri(filePath: string): string {
   const resolved = resolveMaybeRelative(filePath);
   if (!resolved || !fs.existsSync(resolved)) return "";
   return `data:image/png;base64,${fs.readFileSync(resolved).toString("base64")}`;
 }
 
-function selectorBounds(snapshot, selector) {
-  const elements = Array.isArray(snapshot?.elements) ? snapshot.elements : [];
-  const match = elements.find((item) => item?.selector === selector);
-  return match?.bounds || null;
+function normalizeBounds(bounds: Partial<RectBounds> | undefined): RectBounds | null {
+  if (!bounds) return null;
+  return {
+    x: asNumber(bounds.x),
+    y: asNumber(bounds.y),
+    width: asNumber(bounds.width),
+    height: asNumber(bounds.height),
+  };
 }
 
-function annotationMarkers(comparison, baselineSnapshot, currentSnapshot) {
-  const markers = [];
-  const missingSelectors = Array.isArray(comparison?.missingSelectors) ? comparison.missingSelectors : [];
-  for (const selector of missingSelectors) {
+function selectorBounds(snapshot: SnapshotDocument | null, selector: string): RectBounds | null {
+  const elements = Array.isArray(snapshot?.elements) ? snapshot.elements : [];
+  const match = elements.find((item) => item?.selector === selector);
+  return normalizeBounds(match?.bounds);
+}
+
+function annotationMarkers(
+  comparison: SnapshotComparison | undefined,
+  baselineSnapshot: SnapshotDocument | null,
+  currentSnapshot: SnapshotDocument | null,
+): AnnotationMarker[] {
+  const markers: AnnotationMarker[] = [];
+  for (const selector of comparison?.missingSelectors || []) {
     const bounds = selectorBounds(baselineSnapshot, selector);
     if (!bounds) continue;
     markers.push({
@@ -257,9 +508,8 @@ function annotationMarkers(comparison, baselineSnapshot, currentSnapshot) {
     });
   }
 
-  const changedSelectors = Array.isArray(comparison?.changedSelectors) ? comparison.changedSelectors : [];
-  for (const item of changedSelectors) {
-    const selector = item?.selector || "";
+  for (const item of comparison?.changedSelectors || []) {
+    const selector = item.selector || "";
     const bounds = selectorBounds(currentSnapshot, selector) || selectorBounds(baselineSnapshot, selector);
     if (!selector || !bounds) continue;
     markers.push({
@@ -271,8 +521,7 @@ function annotationMarkers(comparison, baselineSnapshot, currentSnapshot) {
     });
   }
 
-  const newSelectors = Array.isArray(comparison?.newSelectors) ? comparison.newSelectors : [];
-  for (const selector of newSelectors) {
+  for (const selector of comparison?.newSelectors || []) {
     const bounds = selectorBounds(currentSnapshot, selector);
     if (!bounds) continue;
     markers.push({
@@ -287,24 +536,34 @@ function annotationMarkers(comparison, baselineSnapshot, currentSnapshot) {
   return markers;
 }
 
-function renderAnnotationSvg({ screenshotPath, markers, title }) {
+function renderAnnotationSvg({
+  screenshotPath,
+  markers,
+  title,
+}: {
+  screenshotPath: string;
+  markers: AnnotationMarker[];
+  title: string;
+}): string {
   const screenshot = resolveMaybeRelative(screenshotPath);
   if (!screenshot || !fs.existsSync(screenshot)) return "";
   const { width, height } = pngDimensions(screenshot);
   const imageHref = screenshotDataUri(screenshot);
   const topPadding = 56;
-  const markerSvg = markers.map((marker, index) => {
-    const x = Number(marker.bounds?.x || 0);
-    const y = Number(marker.bounds?.y || 0) + topPadding;
-    const w = Math.max(4, Number(marker.bounds?.width || 0));
-    const h = Math.max(4, Number(marker.bounds?.height || 0));
-    const labelY = Math.max(20, y - 6);
-    return [
-      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${marker.color}" stroke-width="3"/>`,
-      `<rect x="${x}" y="${Math.max(4, labelY - 18)}" width="${Math.min(width - x, Math.max(80, marker.label.length * 7))}" height="18" fill="${marker.color}" opacity="0.92"/>`,
-      `<text x="${x + 6}" y="${labelY - 5}" font-family="monospace" font-size="11" fill="#ffffff">${escapeXml(`${index + 1}. ${marker.label}`)}</text>`,
-    ].join("");
-  }).join("\n");
+  const markerSvg = markers
+    .map((marker, index) => {
+      const x = marker.bounds.x;
+      const y = marker.bounds.y + topPadding;
+      const w = Math.max(4, marker.bounds.width);
+      const h = Math.max(4, marker.bounds.height);
+      const labelY = Math.max(20, y - 6);
+      return [
+        `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${marker.color}" stroke-width="3"/>`,
+        `<rect x="${x}" y="${Math.max(4, labelY - 18)}" width="${Math.min(width - x, Math.max(80, marker.label.length * 7))}" height="18" fill="${marker.color}" opacity="0.92"/>`,
+        `<text x="${x + 6}" y="${labelY - 5}" font-family="monospace" font-size="11" fill="#ffffff">${escapeXml(`${index + 1}. ${marker.label}`)}</text>`,
+      ].join("");
+    })
+    .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + topPadding}" viewBox="0 0 ${width} ${height + topPadding}">
@@ -317,11 +576,11 @@ function renderAnnotationSvg({ screenshotPath, markers, title }) {
 `;
 }
 
-function createAnnotatedSnapshotArtifact(report, snapshotEvidence) {
+function createAnnotatedSnapshotArtifact(report: QaReport, snapshotEvidence: SnapshotEvidence | null): AnnotationArtifact | null {
   if (!snapshotEvidence?.ok) return null;
   if (snapshotEvidence.command !== "compare-snapshot") return null;
-  const result = snapshotEvidence.result || {};
-  const comparison = result.comparison || {};
+  const result = snapshotEvidence.result;
+  const comparison = result.comparison;
   const baselineSnapshot = loadSnapshotDocument(result.baseline);
   const currentSnapshot = loadSnapshotDocument(result.current);
   const markers = annotationMarkers(comparison, baselineSnapshot, currentSnapshot);
@@ -345,82 +604,113 @@ function createAnnotatedSnapshotArtifact(report, snapshotEvidence) {
   };
 }
 
-function collectSnapshotEvidence(args) {
+function collectSnapshotEvidence(args: QaArgs): SnapshotEvidence | null {
   if (!args.snapshot) return null;
   if (args.updateSnapshot) {
     const saved = runBrowse(["snapshot", args.url, args.snapshot, "--session", args.session]);
     return {
       kind: "snapshot",
       command: "snapshot",
-      result: saved.parsed || { status: saved.ok ? "saved" : "failed", stderr: saved.stderr },
+      result: saved.parsed ? asSnapshotCommandResult(saved.parsed) : { status: saved.ok ? "saved" : "failed" },
       ok: saved.ok,
       stderr: saved.stderr,
     };
   }
+
   const compared = runBrowse(["compare-snapshot", args.url, args.snapshot, "--session", args.session]);
   return {
     kind: "snapshot",
     command: "compare-snapshot",
-    result: compared.parsed || { status: compared.ok ? "unknown" : "failed", stderr: compared.stderr },
+    result: compared.parsed ? asSnapshotCommandResult(compared.parsed) : { status: compared.ok ? "unknown" : "failed" },
     ok: compared.ok,
     stderr: compared.stderr,
   };
 }
 
-function collectFlowEvidence(args) {
+function collectFlowEvidence(args: QaArgs): FlowEvidence[] {
   return args.flows.map((flowName) => {
     const result = runBrowse(["run-flow", args.url, flowName, "--session", args.session]);
     return {
       name: flowName,
       ok: result.ok,
       status: result.ok ? "pass" : "failed",
-      steps: Array.isArray(result.parsed) ? result.parsed.length : 0,
+      steps: asFlowStepCount(result.parsed),
       stderr: result.stderr,
       raw: result.parsed || result.stdout,
     };
   });
 }
 
-function buildReport({ args, snapshotEvidence, flowEvidence }) {
-  const findings = [];
+function buildReport({
+  args,
+  snapshotEvidence,
+  flowEvidence,
+}: {
+  args: QaArgs;
+  snapshotEvidence: SnapshotEvidence | null;
+  flowEvidence: FlowEvidence[];
+}): QaReport {
+  const findings: QaFinding[] = [];
 
   for (const flow of flowEvidence) {
     if (!flow.ok) {
-      findings.push(finding(
-        "critical",
-        `Flow failed: ${flow.name}`,
-        flow.stderr || `The ${flow.name} flow exited with a non-zero status.`,
-        { flow: flow.name }
-      ));
+      findings.push(
+        finding(
+          "critical",
+          `Flow failed: ${flow.name}`,
+          flow.stderr || `The ${flow.name} flow exited with a non-zero status.`,
+          { flow: flow.name },
+        ),
+      );
     }
   }
 
   if (snapshotEvidence) {
-    const snapshotResult = snapshotEvidence.result || {};
+    const snapshotResult = snapshotEvidence.result;
     if (!snapshotEvidence.ok) {
-      findings.push(finding(
-        "critical",
-        `Snapshot command failed: ${snapshotEvidence.command}`,
-        snapshotEvidence.stderr || "The snapshot command failed before producing evidence.",
-        { snapshot: args.snapshot }
-      ));
+      findings.push(
+        finding(
+          "critical",
+          `Snapshot command failed: ${snapshotEvidence.command}`,
+          snapshotEvidence.stderr || "The snapshot command failed before producing evidence.",
+          { snapshot: args.snapshot },
+        ),
+      );
     } else if (snapshotEvidence.command === "compare-snapshot" && snapshotResult.comparison) {
       const comparison = snapshotResult.comparison;
-      if (comparison.missingSelectors?.length) {
-        findings.push(finding(
-          "critical",
-          "Expected UI selectors are missing",
-          `The live page no longer contains ${comparison.missingSelectors.length} selectors from the baseline.`,
-          { snapshot: args.snapshot, baseline: snapshotResult.baseline, current: snapshotResult.current }
-        ));
+      if ((comparison.missingSelectors || []).length) {
+        findings.push(
+          finding(
+            "critical",
+            "Expected UI selectors are missing",
+            `The live page no longer contains ${(comparison.missingSelectors || []).length} selectors from the baseline.`,
+            {
+              snapshot: args.snapshot,
+              baseline: snapshotResult.baseline || "",
+              current: snapshotResult.current || "",
+            },
+          ),
+        );
       }
-      if (comparison.changedSelectors?.length || comparison.bodyTextChanged || comparison.titleChanged || comparison.screenshotChanged || comparison.newSelectors?.length) {
-        findings.push(finding(
-          "warning",
-          "Snapshot drift detected",
-          `The page differs from the saved baseline for ${args.snapshot}.`,
-          { snapshot: args.snapshot, screenshot: snapshotResult.screenshot, current: snapshotResult.current }
-        ));
+      if (
+        (comparison.changedSelectors || []).length ||
+        comparison.bodyTextChanged ||
+        comparison.titleChanged ||
+        comparison.screenshotChanged ||
+        (comparison.newSelectors || []).length
+      ) {
+        findings.push(
+          finding(
+            "warning",
+            "Snapshot drift detected",
+            `The page differs from the saved baseline for ${args.snapshot}.`,
+            {
+              snapshot: args.snapshot,
+              screenshot: snapshotResult.screenshot || "",
+              current: snapshotResult.current || "",
+            },
+          ),
+        );
       }
     }
   }
@@ -428,7 +718,7 @@ function buildReport({ args, snapshotEvidence, flowEvidence }) {
   const healthScore = scoreFindings(findings);
   const status = statusFromFindings(findings);
   const generatedAt = new Date().toISOString();
-  const report = {
+  return {
     generatedAt,
     url: args.url,
     mode: args.mode,
@@ -438,20 +728,21 @@ function buildReport({ args, snapshotEvidence, flowEvidence }) {
     recommendation: recommendation(status, healthScore),
     findings,
     flowResults: flowEvidence.map((item) => ({ name: item.name, status: item.status, steps: item.steps })),
-    snapshotResult: snapshotEvidence ? {
-      name: args.snapshot,
-      status: snapshotEvidence.result?.status || (snapshotEvidence.ok ? "ok" : "failed"),
-      baseline: snapshotEvidence.result?.baseline || snapshotEvidence.result?.snapshot || "",
-      current: snapshotEvidence.result?.current || "",
-      screenshot: snapshotEvidence.result?.screenshot || "",
-      annotation: "",
-    } : null,
+    snapshotResult: snapshotEvidence
+      ? {
+          name: args.snapshot,
+          status: snapshotEvidence.result.status || (snapshotEvidence.ok ? "ok" : "failed"),
+          baseline: snapshotEvidence.result.baseline || snapshotEvidence.result.snapshot || "",
+          current: snapshotEvidence.result.current || "",
+          screenshot: snapshotEvidence.result.screenshot || "",
+          annotation: "",
+        }
+      : null,
     artifacts: {},
   };
-  return report;
 }
 
-function attachSnapshotAnnotation(report, snapshotEvidence) {
+function attachSnapshotAnnotation(report: QaReport, snapshotEvidence: SnapshotEvidence | null): QaReport {
   const artifact = createAnnotatedSnapshotArtifact(report, snapshotEvidence);
   if (!artifact) return report;
 
@@ -459,7 +750,7 @@ function attachSnapshotAnnotation(report, snapshotEvidence) {
     report.snapshotResult.annotation = artifact.annotation;
   }
   for (const item of report.findings) {
-    if (item.evidence?.snapshot) {
+    if (item.evidence.snapshot) {
       item.evidence.annotation = artifact.annotation;
       item.evidence.screenshot = item.evidence.screenshot || artifact.screenshot;
     }
@@ -468,11 +759,11 @@ function attachSnapshotAnnotation(report, snapshotEvidence) {
   return report;
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function copyIfExists(sourcePath, targetPath) {
+function copyIfExists(sourcePath: string, targetPath: string): string {
   const resolvedSource = resolveMaybeRelative(sourcePath);
   if (!resolvedSource || !fs.existsSync(resolvedSource)) return "";
   ensureDir(path.dirname(targetPath));
@@ -480,7 +771,7 @@ function copyIfExists(sourcePath, targetPath) {
   return targetPath;
 }
 
-function rewriteEvidencePaths(report, pathMap) {
+function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>): void {
   if (report.snapshotResult) {
     if (pathMap[report.snapshotResult.baseline]) report.snapshotResult.baseline = pathMap[report.snapshotResult.baseline];
     if (pathMap[report.snapshotResult.current]) report.snapshotResult.current = pathMap[report.snapshotResult.current];
@@ -488,29 +779,29 @@ function rewriteEvidencePaths(report, pathMap) {
     if (pathMap[report.snapshotResult.annotation]) report.snapshotResult.annotation = pathMap[report.snapshotResult.annotation];
   }
 
-  for (const item of report.findings || []) {
-    if (!item.evidence) continue;
+  for (const item of report.findings) {
     for (const [key, value] of Object.entries(item.evidence)) {
-      if (typeof value === "string" && pathMap[value]) {
+      if (pathMap[value]) {
         item.evidence[key] = pathMap[value];
       }
     }
   }
 }
 
-function publishArtifacts(report, publishDir) {
+function publishArtifacts(report: QaReport, publishDir: string): QaReport {
   const outputDir = path.resolve(process.cwd(), publishDir);
   ensureDir(outputDir);
 
   const published = clone(report);
-  const pathMap = {};
-  const copyTargets = [
-    [report.artifacts?.json, path.join(outputDir, "report.json")],
-    [report.artifacts?.markdown, path.join(outputDir, "report.md")],
-    [report.snapshotResult?.annotation || report.artifacts?.annotation, path.join(outputDir, "annotation.svg")],
-    [report.snapshotResult?.screenshot, path.join(outputDir, "screenshot.png")],
-    [report.snapshotResult?.current, path.join(outputDir, "current.json")],
-    [report.snapshotResult?.baseline, path.join(outputDir, "baseline.json")],
+  const pathMap: Record<string, string> = {};
+  const annotationSource = report.snapshotResult?.annotation || report.artifacts.annotation || "";
+  const copyTargets: Array<[string, string]> = [
+    [report.artifacts.json || "", path.join(outputDir, "report.json")],
+    [report.artifacts.markdown || "", path.join(outputDir, "report.md")],
+    [annotationSource, path.join(outputDir, "annotation.svg")],
+    [report.snapshotResult?.screenshot || "", path.join(outputDir, "screenshot.png")],
+    [report.snapshotResult?.current || "", path.join(outputDir, "current.json")],
+    [report.snapshotResult?.baseline || "", path.join(outputDir, "baseline.json")],
   ];
 
   for (const [source, target] of copyTargets) {
@@ -525,15 +816,15 @@ function publishArtifacts(report, publishDir) {
   const publishedJsonPath = path.join(outputDir, "report.json");
   const publishedMarkdownPath = path.join(outputDir, "report.md");
   published.artifacts = {
-    ...(published.artifacts || {}),
+    ...published.artifacts,
     published: {
       dir: relative(outputDir),
       json: relative(publishedJsonPath),
       markdown: relative(publishedMarkdownPath),
-      annotation: pathMap[report.snapshotResult?.annotation || report.artifacts?.annotation] || "",
-      screenshot: pathMap[report.snapshotResult?.screenshot] || "",
-      current: pathMap[report.snapshotResult?.current] || "",
-      baseline: pathMap[report.snapshotResult?.baseline] || "",
+      annotation: pathMap[annotationSource] || "",
+      screenshot: pathMap[report.snapshotResult?.screenshot || ""] || "",
+      current: pathMap[report.snapshotResult?.current || ""] || "",
+      baseline: pathMap[report.snapshotResult?.baseline || ""] || "",
     },
   };
 
@@ -542,22 +833,23 @@ function publishArtifacts(report, publishDir) {
   return published;
 }
 
-function writeArtifacts(report) {
+function writeArtifacts(report: QaReport): QaReport {
   ensureDir(QA_DIR);
   const stamp = `${timestampSlug()}-${slugify(report.url || report.snapshotResult?.name || "fixture")}`;
   const jsonPath = path.join(QA_DIR, `${stamp}.json`);
   const markdownPath = path.join(QA_DIR, `${stamp}.md`);
   const latestJsonPath = path.join(QA_DIR, "latest.json");
   const latestMarkdownPath = path.join(QA_DIR, "latest.md");
+
   report.artifacts = {
-    ...(report.artifacts || {}),
+    ...report.artifacts,
     json: relative(jsonPath),
     markdown: relative(markdownPath),
     latestJson: relative(latestJsonPath),
     latestMarkdown: relative(latestMarkdownPath),
   };
-  const markdown = buildMarkdown(report);
 
+  const markdown = buildMarkdown(report);
   writeFile(jsonPath, JSON.stringify(report, null, 2));
   writeFile(markdownPath, markdown);
   writeFile(latestJsonPath, JSON.stringify(report, null, 2));
@@ -565,13 +857,23 @@ function writeArtifacts(report) {
   return report;
 }
 
-function loadFixture(filePath) {
-  return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8"));
+function loadFixture(filePath: string): QaFixture {
+  return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), "utf8")) as QaFixture;
+}
+
+function snapshotEvidenceFromFixture(snapshot: QaFixtureSnapshot, snapshotName: string): SnapshotEvidence {
+  return {
+    kind: "snapshot",
+    ok: snapshot.ok !== false,
+    command: snapshot.command || "compare-snapshot",
+    result: snapshot.result ? asSnapshotCommandResult(snapshot.result) : asSnapshotCommandResult(snapshot),
+    stderr: snapshot.stderr || "",
+  };
 }
 
 const args = parseArgs(process.argv.slice(2));
-let report;
-let fixture = null;
+let report: QaReport;
+let fixture: QaFixture | null = null;
 
 if (args.fixture) {
   fixture = loadFixture(args.fixture);
@@ -581,20 +883,17 @@ if (args.fixture) {
       url: fixture.url || args.url,
       snapshot: fixture.snapshot?.name || args.snapshot,
     },
-    snapshotEvidence: fixture.snapshot ? {
-      ok: fixture.snapshot.ok !== false,
-      command: fixture.snapshot.command || "compare-snapshot",
-      result: fixture.snapshot.result || fixture.snapshot,
-      stderr: fixture.snapshot.stderr || "",
-    } : null,
+    snapshotEvidence: fixture.snapshot
+      ? snapshotEvidenceFromFixture(fixture.snapshot, fixture.snapshot.name || args.snapshot)
+      : null,
     flowEvidence: Array.isArray(fixture.flows)
       ? fixture.flows.map((item) => ({
-        name: item.name,
-        ok: item.ok !== false,
-        status: item.ok === false ? "failed" : "pass",
-        steps: item.steps || 0,
-        stderr: item.stderr || "",
-      }))
+          name: item.name,
+          ok: item.ok !== false,
+          status: item.ok === false ? "failed" : "pass",
+          steps: item.steps || 0,
+          stderr: item.stderr || "",
+        }))
       : [],
   });
 } else {
@@ -604,12 +903,8 @@ if (args.fixture) {
   report = attachSnapshotAnnotation(report, snapshotEvidence);
 }
 
-if (args.fixture) {
-  report = attachSnapshotAnnotation(report, fixture.snapshot ? {
-    ok: fixture.snapshot.ok !== false,
-    command: fixture.snapshot.command || "compare-snapshot",
-    result: fixture.snapshot.result || fixture.snapshot,
-  } : null);
+if (fixture?.snapshot) {
+  report = attachSnapshotAnnotation(report, snapshotEvidenceFromFixture(fixture.snapshot, fixture.snapshot.name || args.snapshot));
 }
 
 report = writeArtifacts(report);
