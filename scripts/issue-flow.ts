@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+import fs from "node:fs";
 import process from "node:process";
 import path from "node:path";
-import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
 interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
   allowFailure?: boolean;
@@ -84,6 +85,18 @@ function run(cmd: string, options: RunOptions = {}): string {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(clean(stderr || message));
   }
+}
+
+function runArgs(program: string, args: string[]): string {
+  const result = spawnSync(program, args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(clean(result.stderr || result.stdout || `${program} exited with status ${result.status ?? 1}`));
+  }
+  return clean(result.stdout || "");
 }
 
 function uniq(items: string[]): string[] {
@@ -207,7 +220,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 function loadBody(args: ParsedArgs): string {
   if (args.bodyFile) {
-    return run(`cat ${quote(path.resolve(process.cwd(), args.bodyFile))}`);
+    return fs.readFileSync(path.resolve(process.cwd(), args.bodyFile), "utf8");
   }
   return args.body;
 }
@@ -221,17 +234,20 @@ function createIssue(args: ParsedArgs): IssueRecord {
   }
 
   const body = loadBody(args);
-  const cmd = [
-    "gh issue create",
-    `--repo ${quote(args.repo)}`,
-    `--title ${quote(args.title)}`,
+  const ghArgs = [
+    "issue",
+    "create",
+    "--repo",
+    args.repo,
+    "--title",
+    args.title,
   ];
-  if (body) cmd.push(`--body ${quote(body)}`);
-  for (const label of args.labels) cmd.push(`--label ${quote(label)}`);
-  for (const assignee of args.assignees) cmd.push(`--assignee ${quote(assignee)}`);
-  if (args.milestone) cmd.push(`--milestone ${quote(args.milestone)}`);
+  if (body) ghArgs.push("--body", body);
+  for (const label of args.labels) ghArgs.push("--label", label);
+  for (const assignee of args.assignees) ghArgs.push("--assignee", assignee);
+  if (args.milestone) ghArgs.push("--milestone", args.milestone);
 
-  const issueUrl = clean(run(cmd.join(" ")));
+  const issueUrl = clean(runArgs("gh", ghArgs));
   const issueNumber = parseUrlIssue(issueUrl);
   return {
     repo: args.repo,
@@ -246,7 +262,7 @@ function issueTitle(repo: string, issueNumber: number, fallbackTitle: string): s
   if (!repo || !issueNumber) {
     throw new Error("Issue title is required when repo lookup is unavailable.");
   }
-  const title = clean(run(`gh issue view ${quote(String(issueNumber))} --repo ${quote(repo)} --json title --jq .title`));
+  const title = clean(runArgs("gh", ["issue", "view", String(issueNumber), "--repo", repo, "--json", "title", "--jq", ".title"]));
   if (!title) {
     throw new Error(`Unable to load title for issue #${issueNumber}.`);
   }

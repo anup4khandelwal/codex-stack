@@ -66,6 +66,7 @@ test -x .codex-stack/bin/upgrade
 echo "[5/8] review, ship, retro, and demo interfaces"
 run_ts scripts/review-diff.ts --help >/tmp/codex-stack-review-help.log
 run_ts scripts/issue-flow.ts --help >/tmp/codex-stack-issue-flow-help.log
+run_ts scripts/issue-flow.spec.ts >/tmp/codex-stack-issue-flow-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
@@ -254,6 +255,7 @@ test -f .github/workflows/daily-update-check.yml
 test -f .github/workflows/preview-verify.yml
 test -f .github/ISSUE_TEMPLATE/work-item.yml
 test -f scripts/issue-flow.ts
+test -f scripts/issue-flow.spec.ts
 test -f scripts/preview-verify.ts
 test -f scripts/preview-verify.spec.ts
 test -f scripts/upgrade-check.ts
