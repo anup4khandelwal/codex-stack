@@ -37,6 +37,18 @@ CLI:
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 ```
 
+## Preview mode
+
+```text
+Use codex-stack-preview to verify the pull request preview deployment, wait for it to become ready, and tell me whether the preview is safe to merge.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home
+```
+
 ## Ship mode
 
 ```text

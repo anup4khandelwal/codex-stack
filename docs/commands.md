@@ -11,6 +11,7 @@ bun src/cli.ts issue branch 42 --title "Add PR workflow" --prefix feat
 bun src/cli.ts review
 bun src/cli.ts review --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home
 bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
@@ -111,6 +112,21 @@ Notes:
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.
+
+## Preview workflow
+
+```bash
+bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url https://preview.example.com --flow landing-smoke --snapshot landing-home --json
+```
+
+Notes:
+
+- `preview-verify.ts` resolves the preview URL from either `--url` or `--url-template`.
+- Template placeholders support `{repo}`, `{owner}`, `{repo_name}`, `{pr}`, `{branch}`, `{branch_slug}`, `{sha}`, and `{short_sha}`.
+- The script polls preview readiness before it calls `qa-run.ts`.
+- `preview-verify.yml` runs this flow on pull requests when `CODEX_STACK_PREVIEW_URL_TEMPLATE` is configured as a repo variable.
+- The workflow uploads `preview.md`, `preview.json`, `preview-comment.md`, and the published QA artifacts as a workflow artifact, then updates a stable PR comment.
 
 ## Retro workflow
 

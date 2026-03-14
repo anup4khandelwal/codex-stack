@@ -32,6 +32,12 @@ export const modeRegistry: ModeDefinition[] = [
     skillPath: path.join(rootDir, "skills", "qa", "SKILL.md"),
   },
   {
+    name: "preview",
+    role: "Preview verifier",
+    summary: "Resolve preview URLs, wait for deployment readiness, and verify merge readiness against the live preview.",
+    skillPath: path.join(rootDir, "skills", "preview", "SKILL.md"),
+  },
+  {
     name: "ship",
     role: "Release engineer",
     summary: "Validate release readiness and execute the shipping checklist.",

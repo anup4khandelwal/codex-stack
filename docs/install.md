@@ -14,6 +14,8 @@ This repo targets Bun `1.2+`.
 - `product`
 - `tech`
 - `review`
+- `qa`
+- `preview`
 - `ship`
 - `browse`
 - `retro`
