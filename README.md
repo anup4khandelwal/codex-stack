@@ -38,6 +38,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 - QA reports with findings, severity, health score, saved evidence, and annotated screenshots for snapshot failures
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional QA verification
 - PR comments with QA verification summaries and artifact references after `ship --pr`
+- Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
 
 ## Quick start
@@ -170,6 +171,7 @@ node dist/cli.js ship \
 ```
 
 This keeps QA in the shipping path instead of as a manual follow-up.
+When verification runs during `ship`, the QA report and evidence are published into `docs/qa/<branch>/` before the branch is pushed, so the PR comment can point at tracked files on GitHub.
 
 ## Install skills for Codex
 

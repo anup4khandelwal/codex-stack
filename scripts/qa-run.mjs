@@ -12,8 +12,8 @@ function usage() {
   console.log(`qa-run
 
 Usage:
-  node scripts/qa-run.mjs <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--json]
-  node scripts/qa-run.mjs --fixture <path> [--json]
+  node scripts/qa-run.mjs <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--mode <quick|full|regression>] [--publish-dir <path>] [--json]
+  node scripts/qa-run.mjs --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
 }
@@ -28,6 +28,7 @@ function parseArgs(argv) {
     mode: "full",
     json: false,
     fixture: "",
+    publishDir: "",
   };
 
   const copy = [...argv];
@@ -51,6 +52,8 @@ function parseArgs(argv) {
       out.json = true;
     } else if (arg === "--fixture") {
       out.fixture = copy.shift() || "";
+    } else if (arg === "--publish-dir") {
+      out.publishDir = copy.shift() || "";
     } else if (arg === "--help" || arg === "-h") {
       usage();
     }
@@ -464,6 +467,80 @@ function attachSnapshotAnnotation(report, snapshotEvidence) {
   return report;
 }
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function copyIfExists(sourcePath, targetPath) {
+  const resolvedSource = resolveMaybeRelative(sourcePath);
+  if (!resolvedSource || !fs.existsSync(resolvedSource)) return "";
+  ensureDir(path.dirname(targetPath));
+  fs.copyFileSync(resolvedSource, targetPath);
+  return targetPath;
+}
+
+function rewriteEvidencePaths(report, pathMap) {
+  if (report.snapshotResult) {
+    if (pathMap[report.snapshotResult.baseline]) report.snapshotResult.baseline = pathMap[report.snapshotResult.baseline];
+    if (pathMap[report.snapshotResult.current]) report.snapshotResult.current = pathMap[report.snapshotResult.current];
+    if (pathMap[report.snapshotResult.screenshot]) report.snapshotResult.screenshot = pathMap[report.snapshotResult.screenshot];
+    if (pathMap[report.snapshotResult.annotation]) report.snapshotResult.annotation = pathMap[report.snapshotResult.annotation];
+  }
+
+  for (const item of report.findings || []) {
+    if (!item.evidence) continue;
+    for (const [key, value] of Object.entries(item.evidence)) {
+      if (typeof value === "string" && pathMap[value]) {
+        item.evidence[key] = pathMap[value];
+      }
+    }
+  }
+}
+
+function publishArtifacts(report, publishDir) {
+  const outputDir = path.resolve(process.cwd(), publishDir);
+  ensureDir(outputDir);
+
+  const published = clone(report);
+  const pathMap = {};
+  const copyTargets = [
+    [report.artifacts?.json, path.join(outputDir, "report.json")],
+    [report.artifacts?.markdown, path.join(outputDir, "report.md")],
+    [report.snapshotResult?.annotation || report.artifacts?.annotation, path.join(outputDir, "annotation.svg")],
+    [report.snapshotResult?.screenshot, path.join(outputDir, "screenshot.png")],
+    [report.snapshotResult?.current, path.join(outputDir, "current.json")],
+    [report.snapshotResult?.baseline, path.join(outputDir, "baseline.json")],
+  ];
+
+  for (const [source, target] of copyTargets) {
+    if (!source) continue;
+    const copied = copyIfExists(source, target);
+    if (copied) {
+      pathMap[source] = relative(copied);
+    }
+  }
+
+  rewriteEvidencePaths(published, pathMap);
+  const publishedJsonPath = path.join(outputDir, "report.json");
+  const publishedMarkdownPath = path.join(outputDir, "report.md");
+  published.artifacts = {
+    ...(published.artifacts || {}),
+    published: {
+      dir: relative(outputDir),
+      json: relative(publishedJsonPath),
+      markdown: relative(publishedMarkdownPath),
+      annotation: pathMap[report.snapshotResult?.annotation || report.artifacts?.annotation] || "",
+      screenshot: pathMap[report.snapshotResult?.screenshot] || "",
+      current: pathMap[report.snapshotResult?.current] || "",
+      baseline: pathMap[report.snapshotResult?.baseline] || "",
+    },
+  };
+
+  writeFile(publishedJsonPath, JSON.stringify(published, null, 2));
+  writeFile(publishedMarkdownPath, buildMarkdown(published));
+  return published;
+}
+
 function writeArtifacts(report) {
   ensureDir(QA_DIR);
   const stamp = `${timestampSlug()}-${slugify(report.url || report.snapshotResult?.name || "fixture")}`;
@@ -535,6 +612,9 @@ if (args.fixture) {
 }
 
 report = writeArtifacts(report);
+if (args.publishDir) {
+  report = publishArtifacts(report, args.publishDir);
+}
 
 if (args.json) {
   console.log(JSON.stringify(report, null, 2));

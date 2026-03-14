@@ -102,6 +102,14 @@ node scripts/qa-run.mjs --fixture /tmp/codex-stack-qa-fixture.json --json >/tmp/
 grep -q '"status": "critical"' /tmp/codex-stack-qa.json
 grep -q '"healthScore": 45' /tmp/codex-stack-qa.json
 grep -q '"annotation": ".codex-stack/qa/annotations/' /tmp/codex-stack-qa.json
+rm -rf docs/qa/smoke-fixture
+node scripts/qa-run.mjs --fixture /tmp/codex-stack-qa-fixture.json --publish-dir docs/qa/smoke-fixture --json >/tmp/codex-stack-qa-published.json
+grep -q '"published"' /tmp/codex-stack-qa-published.json
+test -f docs/qa/smoke-fixture/report.md
+test -f docs/qa/smoke-fixture/report.json
+test -f docs/qa/smoke-fixture/annotation.svg
+test -f docs/qa/smoke-fixture/screenshot.png
+rm -rf docs/qa/smoke-fixture
 node scripts/demo-smoke.mjs >/tmp/codex-stack-demo.log
 test -f /tmp/codex-stack-retros/latest.md
 test -f /tmp/codex-stack-retros/latest.json
@@ -150,6 +158,7 @@ grep -q '"verifyUrl": "https://example.com"' /tmp/codex-stack-ship.json || grep 
 grep -q '"landing-smoke"' /tmp/codex-stack-ship.json
 grep -q '"landing-home"' /tmp/codex-stack-ship.json
 grep -q 'plan qa verification comment' /tmp/codex-stack-ship.json
+grep -q 'docs/qa/feat-generated-pr' /tmp/codex-stack-ship.json
 
 echo "[6/7] demo files present"
 test -f examples/customer-portal-demo/README.md

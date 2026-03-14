@@ -611,6 +611,18 @@ function defaultVerifySession(branch) {
   return `ship-${String(branch || "verify").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60)}`;
 }
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "qa";
+}
+
+function defaultVerifyPublishDir(branch) {
+  return path.join("docs", "qa", slugify(branch));
+}
+
 function shouldRunVerification(args) {
   return Boolean(args.verifyUrl || args.verifyFlows.length || args.verifySnapshot);
 }
@@ -622,11 +634,14 @@ function runQaVerification(args, branch) {
 
   const qaPath = path.resolve(process.cwd(), "scripts", "qa-run.mjs");
   const sessionName = cleanSubject(args.verifySession) || defaultVerifySession(branch);
+  const publishDir = defaultVerifyPublishDir(branch);
   const qaArgs = [
     qaPath,
     args.verifyUrl,
     "--session",
     sessionName,
+    "--publish-dir",
+    publishDir,
     "--json",
   ];
   for (const flow of args.verifyFlows) {
@@ -656,6 +671,7 @@ function runQaVerification(args, branch) {
 
   return {
     session: sessionName,
+    publishDir,
     ok: (child.status ?? 1) === 0 && Boolean(parsed),
     stdout,
     stderr,
@@ -703,9 +719,10 @@ function qaFindingSummary(findings, limit = 5) {
 
 function buildQaPrComment({ report, repo, branch }) {
   if (!report) return "";
-  const reportRef = markdownReference(repo, branch, report.artifacts?.markdown || report.artifacts?.json || "");
-  const annotationRef = markdownReference(repo, branch, report.snapshotResult?.annotation || report.artifacts?.annotation || "");
-  const screenshotRef = markdownReference(repo, branch, report.snapshotResult?.screenshot || "");
+  const published = report.artifacts?.published || {};
+  const reportRef = markdownReference(repo, branch, published.markdown || published.json || report.artifacts?.markdown || report.artifacts?.json || "");
+  const annotationRef = markdownReference(repo, branch, published.annotation || report.snapshotResult?.annotation || report.artifacts?.annotation || "");
+  const screenshotRef = markdownReference(repo, branch, published.screenshot || report.snapshotResult?.screenshot || "");
   const flowLines = Array.isArray(report.flowResults) && report.flowResults.length
     ? report.flowResults.map((item) => `- ${item.name}: ${item.status}${item.steps ? ` (${item.steps} steps)` : ""}`)
     : ["- No flows configured."];
@@ -845,6 +862,7 @@ const result = {
     status: "",
     healthScore: null,
     reportPath: "",
+    publishDir: "",
     commentPreview: "",
     commentPosted: false,
   },
@@ -907,14 +925,6 @@ if (dirty && !args.message && !args.dryRun && (args.push || args.pr)) {
   process.exit(1);
 }
 
-if (dirty && args.message) {
-  result.steps.push(`commit with message ${JSON.stringify(args.message)}`);
-  if (!args.dryRun) {
-    run("git add -A");
-    run(`git commit -m ${quote(args.message)}`);
-  }
-}
-
 const diffContext = collectDiffContext(args.base);
 const currentLogin = args.pr || args.assignSelf ? getCurrentGitHubLogin() : "";
 result.automation = buildAutomationPlan(args, result.branch, diffContext, currentLogin);
@@ -937,17 +947,20 @@ if (shouldRunVerification(args)) {
   if (args.verifyFlows.length) verificationParts.push(`flows ${args.verifyFlows.join(", ")}`);
   if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
   result.verification.session = result.verification.session || defaultVerifySession(result.branch);
+  result.verification.publishDir = defaultVerifyPublishDir(result.branch);
   result.steps.push(`verify via qa on ${args.verifyUrl}${verificationParts.length ? ` (${verificationParts.join("; ")})` : ""}`);
+  result.steps.push(`publish qa artifacts to ${result.verification.publishDir}`);
   if (!args.dryRun) {
     const verification = runQaVerification(args, result.branch);
     result.verification.session = verification.session;
+    result.verification.publishDir = verification.publishDir;
     if (!verification.ok || !verification.report) {
       console.error(verification.stderr || verification.stdout || "QA verification failed.");
       process.exit(1);
     }
     result.verification.status = verification.report.status;
     result.verification.healthScore = verification.report.healthScore;
-    result.verification.reportPath = verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
+    result.verification.reportPath = verification.report.artifacts?.published?.markdown || verification.report.artifacts?.published?.json || verification.report.artifacts?.markdown || verification.report.artifacts?.json || "";
     verificationCommentBody = buildQaPrComment({
       report: verification.report,
       repo: result.automation.repo,
@@ -962,6 +975,27 @@ if (shouldRunVerification(args)) {
       result.status = result.status === "ok" ? "warning" : result.status;
       result.warnings.push(`qa verification: ${verification.report.recommendation}`);
     }
+  }
+}
+
+const dirtyAfterVerification = run("git status --porcelain", { allowFailure: true });
+if (dirtyAfterVerification) {
+  let commitMessage = "";
+  if (args.message) {
+    commitMessage = args.message;
+  } else if (!result.dirtyBefore && shouldRunVerification(args) && !args.dryRun && (args.push || args.pr)) {
+    commitMessage = `chore: publish QA artifacts for ${result.branch}`;
+  }
+
+  if (commitMessage) {
+    result.steps.push(`commit with message ${JSON.stringify(commitMessage)}`);
+    if (!args.dryRun) {
+      run("git add -A");
+      run(`git commit -m ${quote(commitMessage)}`);
+    }
+  } else if (!args.dryRun && (args.push || args.pr)) {
+    console.error("Working tree has changes after verification. Pass --message to create a commit before push/PR.");
+    process.exit(1);
   }
 }
 

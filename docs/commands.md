@@ -70,6 +70,7 @@ Notes:
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
 - `ship` can call the QA workflow before push/PR creation with `--verify-url`, `--verify-flow`, and `--verify-snapshot`.
 - When `ship --pr` runs with QA verification, it also posts a PR comment with the QA summary and any available artifact references.
+- During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/` before push/PR creation.
 
 ## QA workflow
 
@@ -83,6 +84,7 @@ Notes:
 - `qa` writes markdown/json artifacts under `.codex-stack/qa/`.
 - It upgrades raw browser evidence into findings, severity, health score, and recommendation.
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
+- Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 
 ## Retro workflow
