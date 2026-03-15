@@ -27,6 +27,7 @@ Usage:
   codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--update-verify-snapshot] [--draft]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]
   codex-stack upgrade [--json] [--json-out <path>] [--markdown-out <path>] [--repo <owner/name>] [--offline] [--apply]
+  codex-stack show setup-browser-cookies
   codex-stack browse <args...>
 `);
   process.exit(1);

@@ -16,12 +16,18 @@ for (const workflow of [prReview, previewVerify]) {
   assert.match(workflow, /trap cleanup EXIT/);
 }
 
+assert.match(prReview, /actions\/checkout@v6\.0\.2/);
+assert.match(prReview, /actions\/github-script@v8/);
+assert.match(previewVerify, /actions\/checkout@v6\.0\.2/);
+assert.match(previewVerify, /actions\/upload-artifact@v7\.0\.0/);
+assert.match(previewVerify, /actions\/github-script@v8/);
 assert.match(previewCleanup, /pull_request:/);
 assert.match(previewCleanup, /types: \[closed\]/);
 assert.match(previewCleanup, /name: Checkout workflow source/);
 assert.match(previewCleanup, /cleanup-preview-site\.ts/);
+assert.match(previewCleanup, /actions\/checkout@v6\.0\.2/);
 assert.match(previewCleanup, /ref: gh-pages/);
-assert.ok((previewCleanup.match(/uses: actions\/checkout@v4/g) || []).length >= 2);
+assert.ok((previewCleanup.match(/uses: actions\/checkout@v6\.0\.2/g) || []).length >= 2);
 assert.match(previewCleanup, /Publish cleaned gh-pages branch/);
 
 console.log("preview-workflow-auth spec passed");

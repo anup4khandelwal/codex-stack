@@ -33,6 +33,27 @@ assert.ok(Array.isArray(report.checks?.runtime));
 assert.ok(Array.isArray(report.checks?.installHealth));
 assert.ok(report.checks?.dependencies?.some((item) => item.status === "skipped"));
 assert.ok(report.checks?.workflows?.some((item) => item.status === "skipped"));
+const ciJsonOutput = execFileSync(bun, ["scripts/upgrade-check.ts", "--offline", "--json"], {
+  cwd: rootDir,
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    CI: "true",
+  },
+});
+const ciReport = JSON.parse(ciJsonOutput) as {
+  checks?: {
+    installHealth?: Array<{ name?: string; status?: string; detail?: string }>;
+  };
+};
+assert.equal(
+  ciReport.checks?.installHealth?.find((item) => item.name === "Local wrappers")?.status,
+  "skipped",
+);
+assert.match(
+  String(ciReport.checks?.installHealth?.find((item) => item.name === "Local wrappers")?.detail || ""),
+  /skipped in CI/i,
+);
 
 const markdownOutput = execFileSync(bun, ["scripts/upgrade-check.ts", "--offline"], {
   cwd: rootDir,
