@@ -524,12 +524,23 @@ function collectInstallHealthChecks(modeNames: string[]): CheckItem[] {
   const checks: CheckItem[] = [];
   const wrapperRoot = path.join(process.cwd(), ".codex-stack", "bin");
   const expectedWrappers = ["codex-stack", "codex-stack-browse", ...modeNames];
-  const missingWrappers = expectedWrappers.filter((name) => {
-    const target = path.join(wrapperRoot, name);
-    return !fs.existsSync(target) || !fs.statSync(target).isFile();
-  });
+  const runningInCi = String(process.env.CI || "").toLowerCase() === "true";
+  const missingWrappers = runningInCi
+    ? []
+    : expectedWrappers.filter((name) => {
+        const target = path.join(wrapperRoot, name);
+        return !fs.existsSync(target) || !fs.statSync(target).isFile();
+      });
 
-  if (missingWrappers.length) {
+  if (runningInCi) {
+    checks.push({
+      category: "installHealth",
+      name: "Local wrappers",
+      status: "skipped",
+      detail: "Wrapper health is skipped in CI because local shell wrappers are machine-specific.",
+      source: path.relative(process.cwd(), wrapperRoot),
+    });
+  } else if (missingWrappers.length) {
     checks.push({
       category: "installHealth",
       name: "Local wrappers",

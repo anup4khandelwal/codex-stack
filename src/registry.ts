@@ -56,6 +56,12 @@ export const modeRegistry: ModeDefinition[] = [
     skillPath: path.join(rootDir, "skills", "browse", "SKILL.md"),
   },
   {
+    name: "setup-browser-cookies",
+    role: "Auth setup operator",
+    summary: "Bootstrap authenticated browser sessions and CI-ready session bundles from a local browser profile.",
+    skillPath: path.join(rootDir, "skills", "setup-browser-cookies", "SKILL.md"),
+  },
+  {
     name: "retro",
     role: "Engineering manager",
     summary: "Generate a delivery retrospective from git and PR history.",

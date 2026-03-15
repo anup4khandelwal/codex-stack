@@ -69,6 +69,7 @@ test -x .codex-stack/bin/preview
 test -x .codex-stack/bin/deploy
 test -x .codex-stack/bin/ship
 test -x .codex-stack/bin/browse
+test -x .codex-stack/bin/setup-browser-cookies
 test -x .codex-stack/bin/upgrade
 
 echo "[5/8] review, ship, retro, and demo interfaces"

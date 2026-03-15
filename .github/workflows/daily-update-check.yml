@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -33,7 +33,7 @@ jobs:
         run: cat daily-update-check.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload upgrade report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: daily-update-check
           path: |
@@ -41,7 +41,7 @@ jobs:
             daily-update-check.json
 
       - name: Sync daily update issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require("fs");
