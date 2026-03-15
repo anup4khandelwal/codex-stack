@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 
 const rootDir = process.cwd();
 const bun = process.execPath || "bun";
+const fleetScript = path.join(rootDir, "scripts", "fleet.ts");
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-fleet-"));
 const controlDir = path.join(fixtureRoot, "control");
 const repoDir = path.join(fixtureRoot, "repo-a");
@@ -48,12 +49,12 @@ fs.writeFileSync(path.join(policyDir, "default.json"), JSON.stringify({
 fs.writeFileSync(manifestPath, JSON.stringify({
   schemaVersion: 1,
   controlRepo: "acme/control-plane",
-  policyDir: "policies",
+  policyDir: "./policies",
   repos: [
     {
       repo: "acme/repo-a",
       branch: "main",
-      localPath: repoDir,
+      localPath: "../repo-a",
       team: "platform",
       policyPack: "default",
       enabledChecks: ["qa"],
@@ -90,14 +91,16 @@ fs.writeFileSync(path.join(repoDir, "docs", "qa", "latest", "report.json"), JSON
   },
 }, null, 2));
 
-const validateReport = JSON.parse(run(["scripts/fleet.ts", "validate", "--manifest", manifestPath, "--json"])) as {
+const validateReport = JSON.parse(run([fleetScript, "validate", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
   controlRepo?: string;
-  repos?: Array<{ repo?: string; requiredChecks?: string[] }>;
+  repos?: Array<{ repo?: string; requiredChecks?: string[]; localPath?: string; localRepoDetected?: boolean }>;
 };
 assert.equal(validateReport.controlRepo, "acme/control-plane");
 assert.deepEqual(validateReport.repos?.[0]?.requiredChecks, ["fleet-status", "preview", "qa", "review"]);
+assert.equal(validateReport.repos?.[0]?.localPath, repoDir);
+assert.equal(validateReport.repos?.[0]?.localRepoDetected, false);
 
-const dryRunReport = JSON.parse(run(["scripts/fleet.ts", "sync", "--manifest", manifestPath, "--dry-run", "--json"])) as {
+const dryRunReport = JSON.parse(run([fleetScript, "sync", "--manifest", manifestPath, "--dry-run", "--json"], fixtureRoot)) as {
   results?: Array<{ repo?: string; action?: string; drift?: string; filesChanged?: string[] }>;
 };
 assert.equal(dryRunReport.results?.[0]?.repo, "acme/repo-a");
@@ -105,7 +108,7 @@ assert.equal(dryRunReport.results?.[0]?.action, "planned");
 assert.equal(dryRunReport.results?.[0]?.drift, "missing");
 assert.ok(dryRunReport.results?.[0]?.filesChanged?.includes(".codex-stack/fleet-member.json"));
 
-const syncReport = JSON.parse(run(["scripts/fleet.ts", "sync", "--manifest", manifestPath, "--json"])) as {
+const syncReport = JSON.parse(run([fleetScript, "sync", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
   results?: Array<{ action?: string; filesChanged?: string[] }>;
 };
 assert.equal(syncReport.results?.[0]?.action, "written");
@@ -137,23 +140,45 @@ assert.equal(statusReport.status, "warning");
 assert.ok(Number(statusReport.riskScore) > 0);
 assert.equal(statusReport.latestReport?.unresolvedRegressions, 2);
 
-const collectReport = JSON.parse(run(["scripts/fleet.ts", "collect", "--manifest", manifestPath, "--json"])) as {
-  counts?: { repos?: number; warning?: number; drifted?: number };
-  repos?: Array<{ repo?: string; source?: string; status?: string; riskScore?: number }>;
+fs.writeFileSync(statusOut, JSON.stringify({
+  marker: "<!-- codex-stack:fleet-status -->",
+  generatedAt: "2026-03-15T10:00:00.000Z",
+  repo: "acme/repo-a",
+  branch: "main",
+  installed: true,
+  controlRepo: "acme/control-plane",
+  team: "platform",
+  policyPack: "default",
+  requiredChecks: ["fleet-status", "preview", "qa", "review"],
+  status: "critical",
+  riskScore: 91,
+  latestReport: {
+    generatedAt: "2026-03-15T10:00:00.000Z",
+    status: "critical",
+    unresolvedRegressions: 4,
+    visualRiskScore: 83,
+  },
+}, null, 2));
+
+const collectReport = JSON.parse(run([fleetScript, "collect", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
+  counts?: { repos?: number; critical?: number; drifted?: number };
+  repos?: Array<{ repo?: string; source?: string; status?: string; riskScore?: number; repoUrl?: string }>;
 };
 assert.equal(collectReport.counts?.repos, 1);
-assert.equal(collectReport.counts?.warning, 1);
+assert.equal(collectReport.counts?.critical, 1);
 assert.equal(collectReport.counts?.drifted, 0);
 assert.equal(collectReport.repos?.[0]?.repo, "acme/repo-a");
-assert.equal(collectReport.repos?.[0]?.source, "local");
-assert.equal(collectReport.repos?.[0]?.status, "warning");
-assert.ok(Number(collectReport.repos?.[0]?.riskScore) > 0);
+assert.equal(collectReport.repos?.[0]?.source, "local-status");
+assert.equal(collectReport.repos?.[0]?.status, "critical");
+assert.equal(collectReport.repos?.[0]?.riskScore, 91);
+assert.equal(collectReport.repos?.[0]?.repoUrl, "https://github.com/acme/repo-a");
 
-run(["scripts/fleet.ts", "dashboard", "--manifest", manifestPath, "--out", dashboardDir], rootDir);
+run([fleetScript, "dashboard", "--manifest", manifestPath, "--out", dashboardDir], fixtureRoot);
 assert.ok(fs.existsSync(path.join(dashboardDir, "index.html")));
 assert.ok(fs.existsSync(path.join(dashboardDir, "manifest.json")));
 assert.ok(fs.existsSync(path.join(dashboardDir, "summary.md")));
 assert.match(fs.readFileSync(path.join(dashboardDir, "index.html"), "utf8"), /codex-stack fleet dashboard/);
+assert.match(fs.readFileSync(path.join(dashboardDir, "index.html"), "utf8"), /https:\/\/github.com\/acme\/repo-a/);
 assert.match(fs.readFileSync(path.join(dashboardDir, "manifest.json"), "utf8"), /acme\/repo-a/);
 
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
