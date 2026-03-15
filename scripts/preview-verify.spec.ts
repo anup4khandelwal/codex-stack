@@ -30,10 +30,11 @@ async function main(): Promise<void> {
   fs.writeFileSync(pageScreenshot, png);
   fs.mkdirSync(visualDir, { recursive: true });
   fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
-  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed", imageDiff: { score: 81.1, diffRatio: 0.189 } }, null, 2));
   fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
   fs.writeFileSync(path.join(visualDir, "baseline.png"), png);
   fs.writeFileSync(path.join(visualDir, "current.png"), png);
+  fs.writeFileSync(path.join(visualDir, "diff.png"), png);
   fs.writeFileSync(sessionBundlePath, JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -92,6 +93,16 @@ async function main(): Promise<void> {
           index: path.join(visualDir, "index.html"),
           manifest: path.join(visualDir, "manifest.json"),
           annotation: path.join(visualDir, "annotation.svg"),
+          diffImage: path.join(visualDir, "diff.png"),
+          imageDiff: {
+            score: 81.1,
+            diffRatio: 0.189,
+            changedPixels: 8,
+            comparedPixels: 16,
+            dimensionsMatch: true,
+            baseline: { width: 1, height: 1 },
+            current: { width: 1, height: 1 },
+          },
         },
         comparison: {
           missingSelectors: ["h1"],
@@ -197,6 +208,7 @@ async function main(): Promise<void> {
   assert.match(markdown, /## Deploy checks/);
   assert.match(markdown, /root-desktop\.png/);
   assert.match(markdown, /Visual pack/);
+  assert.match(markdown, /visual\/manifest\.json/);
   assert.match(comment, /Expected UI selectors are missing/);
 
   console.log("preview-verify spec passed");

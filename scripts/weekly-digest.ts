@@ -42,6 +42,25 @@ interface GithubAnalytics {
   topReviewers?: CountEntry[];
 }
 
+interface VisualRegression {
+  name: string;
+  status: string;
+  targetPath: string;
+  device: string;
+  score: number;
+  diffRatio: number;
+}
+
+interface VisualAnalytics {
+  available: boolean;
+  manifestCount: number;
+  snapshotCount: number;
+  failingSnapshotCount: number;
+  avgImageDiffScore: number;
+  avgImageDiffRatio: number;
+  topRegressions: VisualRegression[];
+}
+
 interface RetroSummary {
   since: string;
   commitCount: number;
@@ -52,6 +71,7 @@ interface RetroSummary {
   recentSubjects: RecentSubject[];
   recommendation: string;
   github: GithubAnalytics;
+  visual: VisualAnalytics;
 }
 
 interface PublishTargets {
@@ -249,6 +269,18 @@ ${prHealthLines(retro).join("\n")}
 ## Reviewer load
 
 ${bullets(retro.github.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
+
+## Visual QA
+
+${retro.visual.available ? [
+  `- Visual manifests scanned: ${retro.visual.manifestCount}`,
+  `- Snapshots scored: ${retro.visual.snapshotCount}`,
+  `- Regressions found: ${retro.visual.failingSnapshotCount}`,
+  `- Avg image diff score: ${retro.visual.avgImageDiffScore}`,
+  `- Avg image diff ratio: ${retro.visual.avgImageDiffRatio}`,
+].join("\n") : "- No published visual packs found."}
+
+${bullets(retro.visual.topRegressions || [], "No ranked visual regressions.", (item) => `${item.name} @ ${item.targetPath} (${item.device}) • ${item.status} • score ${item.score} • ratio ${item.diffRatio}`)}
 `;
 }
 
@@ -269,6 +301,15 @@ function buildSummaryText(retro: RetroSummary): string {
     );
   } else {
     lines.push(`PR health: GitHub analytics disabled (${retro.github.reason || "unavailable"}).`);
+  }
+
+  if (retro.visual.available) {
+    lines.push(
+      `Visual QA: ${retro.visual.failingSnapshotCount} regressions across ${retro.visual.snapshotCount} scored snapshots, avg score ${retro.visual.avgImageDiffScore}.`,
+      `Top visual regressions: ${topNames(retro.visual.topRegressions || [], "none", (item) => `${item.name} (${item.score})`)}`
+    );
+  } else {
+    lines.push("Visual QA: no published visual packs found.");
   }
 
   return `${lines.join("\n")}\n`;
@@ -293,6 +334,15 @@ function buildSlackMarkdown(retro: RetroSummary): string {
     parts.push(`*PR health*: GitHub analytics disabled (${retro.github.reason || "unavailable"})`);
   }
 
+  if (retro.visual.available) {
+    parts.push(
+      `*Visual QA*: ${retro.visual.failingSnapshotCount} regressions, avg score ${retro.visual.avgImageDiffScore}`,
+      `*Top visual regressions*: ${topNames(retro.visual.topRegressions || [], "none", (item) => `${item.name} (${item.score})`)}`
+    );
+  } else {
+    parts.push("*Visual QA*: no published visual packs found");
+  }
+
   return `${parts.join("\n")}\n`;
 }
 
@@ -300,6 +350,9 @@ function buildSlackPayload(retro: RetroSummary, generatedAt: string): SlackPaylo
   const health = retro.github.enabled
     ? `${retro.github.scannedCount || 0} PRs scanned | ${retro.github.avgTimeToMergeHours || 0}h merge | ${retro.github.avgFirstReviewLatencyHours || 0}h first review | backlog ${retro.github.pendingReviewCount || 0}`
     : `GitHub analytics disabled (${retro.github.reason || "unavailable"})`;
+  const visual = retro.visual.available
+    ? `${retro.visual.failingSnapshotCount} regressions | avg score ${retro.visual.avgImageDiffScore} | top ${topNames(retro.visual.topRegressions || [], "none", (item) => `${item.name} (${item.score})`, 2)}`
+    : "No published visual packs found";
 
   return {
     text: `Weekly digest for ${repoLabel(retro)}: ${retro.recommendation}`,
@@ -343,6 +396,13 @@ function buildSlackPayload(retro: RetroSummary, generatedAt: string): SlackPaylo
           text: `*PR health*\n${health}`,
         },
       },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Visual QA*\n${visual}`,
+        },
+      },
     ],
   };
 }
@@ -380,6 +440,17 @@ ${prHealthLines(retro).join("\n")}
 ## Reviewer load
 
 ${bullets(retro.github.topReviewers || [], "No reviewer data available.", (item) => `${item.name}: ${item.count} reviews`)}
+
+## Visual QA
+
+${retro.visual.available ? [
+  `- Visual manifests scanned: ${retro.visual.manifestCount}`,
+  `- Snapshots scored: ${retro.visual.snapshotCount}`,
+  `- Regressions found: ${retro.visual.failingSnapshotCount}`,
+  `- Avg image diff score: ${retro.visual.avgImageDiffScore}`,
+].join("\n") : "- No published visual packs found."}
+
+${bullets(retro.visual.topRegressions || [], "No ranked visual regressions.", (item) => `${item.name} @ ${item.targetPath} (${item.device}) • ${item.status} • score ${item.score} • ratio ${item.diffRatio}`)}
 `;
 }
 

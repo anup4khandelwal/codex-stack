@@ -98,6 +98,7 @@ run_ts scripts/cleanup-preview-site.spec.ts >/tmp/codex-stack-preview-cleanup-sp
 run_ts scripts/preview-workflow-auth.spec.ts >/tmp/codex-stack-preview-workflow-auth-spec.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log
 run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
+run_ts scripts/retro-report.spec.ts >/tmp/codex-stack-retro-spec.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
 run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
 run_ts scripts/preview-verify.spec.ts >/tmp/codex-stack-preview-spec.log

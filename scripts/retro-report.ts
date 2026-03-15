@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { collectVisualAnalytics, type VisualAnalytics } from "./visual-pack-summary.ts";
 
 interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
   allowFailure?: boolean;
@@ -74,6 +75,7 @@ interface RetroSummary {
   recentSubjects: RecentSubject[];
   recommendation: string;
   github: GithubAnalytics;
+  visual: VisualAnalytics;
   artifacts: RetroArtifacts | Record<string, never>;
 }
 
@@ -428,6 +430,9 @@ function fetchGithubAnalytics({ repo, since, limit }: { repo: string; since: str
 }
 
 function recommendation(summary: RetroSummary): string {
+  if (summary.visual.available && summary.visual.failingSnapshotCount >= 3 && summary.visual.avgImageDiffScore < 90) {
+    return `Visual QA surfaced ${summary.visual.failingSnapshotCount} regressions with an average image score of ${summary.visual.avgImageDiffScore}. Tighten preview review before shipping more UI work.`;
+  }
   if (summary.github.enabled && (summary.github.pendingReviewCount || 0) >= 3) {
     return `${summary.github.pendingReviewCount || 0} open PRs have been waiting at least 24 hours for a first review. Rebalance reviewer load before opening new work.`;
   }
@@ -482,6 +487,24 @@ function toMarkdown(summary: RetroSummary): string {
 - Status: unavailable (${summary.github.reason})
 `;
 
+  const visualSection = summary.visual.available
+    ? `## Visual QA evidence
+
+- Visual manifests scanned: ${summary.visual.manifestCount}
+- Snapshots scored: ${summary.visual.snapshotCount}
+- Regressions found: ${summary.visual.failingSnapshotCount}
+- Avg image diff score: ${summary.visual.avgImageDiffScore}
+- Avg image diff ratio: ${summary.visual.avgImageDiffRatio}
+
+### Top visual regressions
+
+${summary.visual.topRegressions.length ? summary.visual.topRegressions.map((item) => `- ${item.name} @ ${item.targetPath} (${item.device}) • status=${item.status} • score=${item.score} • ratio=${item.diffRatio}`).join("\n") : "- none"}
+`
+    : `## Visual QA evidence
+
+- Status: no published visual packs found
+`;
+
   return `# Retro Report
 
 - Since: ${summary.since}
@@ -507,7 +530,9 @@ ${areaLines}
 
 ${subjectLines}
 
-${githubSection}`;
+${githubSection}
+
+${visualSection}`;
 }
 
 function writeArtifacts(summary: RetroSummary, markdown: string, artifactDir: string): RetroArtifacts {
@@ -542,6 +567,7 @@ const repo = args.repo || inferGithubRepo();
 const github = args.noGithub
   ? { enabled: false, reason: "disabled", repo }
   : fetchGithubAnalytics({ repo, since: args.since, limit: args.githubLimit });
+const visual = collectVisualAnalytics();
 
 const summary: RetroSummary = {
   since: args.since,
@@ -553,6 +579,7 @@ const summary: RetroSummary = {
   recentSubjects: commits.slice(0, 10).map((commit) => ({ subject: commit.subject, author: commit.author })),
   recommendation: "",
   github,
+  visual,
   artifacts: {},
 };
 summary.recommendation = recommendation(summary);

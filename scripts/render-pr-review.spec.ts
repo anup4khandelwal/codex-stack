@@ -15,6 +15,35 @@ async function main(): Promise<void> {
   const previewPath = path.join(fixtureRoot, "preview.json");
   const markdownOut = path.join(fixtureRoot, "review.md");
   const summaryOut = path.join(fixtureRoot, "summary.json");
+  const visualRoot = path.join(fixtureRoot, "preview-artifacts", "visual");
+  fs.mkdirSync(path.join(visualRoot, "screenshots"), { recursive: true });
+  fs.mkdirSync(path.join(visualRoot, "snapshots", "dashboard-root-desktop"), { recursive: true });
+  fs.writeFileSync(path.join(visualRoot, "manifest.json"), JSON.stringify({
+    screenshots: [
+      {
+        path: "/",
+        device: "desktop",
+        status: "warning",
+        httpStatus: 200,
+        screenshot: "screenshots/root-desktop.png",
+        consoleWarnings: 1,
+        consoleErrors: 0,
+      },
+    ],
+    snapshots: [
+      {
+        name: "dashboard",
+        targetPath: "/",
+        device: "desktop",
+        status: "changed",
+        index: "snapshots/dashboard-root-desktop/index.html",
+        manifest: "snapshots/dashboard-root-desktop/manifest.json",
+        diffImage: "snapshots/dashboard-root-desktop/diff.png",
+        imageDiffScore: 68.2,
+        imageDiffRatio: 0.318,
+      },
+    ],
+  }, null, 2));
 
   fs.writeFileSync(reviewPath, JSON.stringify({
     status: "ok",
@@ -58,7 +87,7 @@ async function main(): Promise<void> {
           screenshot: "preview-artifacts/screenshot.png",
           visualPack: {
             index: "preview-artifacts/visual/index.html",
-            manifest: "preview-artifacts/visual/manifest.json",
+            manifest: path.join(visualRoot, "manifest.json"),
           },
         },
       },
@@ -73,7 +102,7 @@ async function main(): Promise<void> {
       screenshotManifest: "preview-artifacts/screenshots.json",
       visualPack: {
         index: "preview-artifacts/visual/index.html",
-        manifest: "preview-artifacts/visual/manifest.json",
+        manifest: path.join(visualRoot, "manifest.json"),
       },
       pathResults: [
         {
@@ -130,9 +159,11 @@ async function main(): Promise<void> {
   assert.match(stdout, /Preview URL: https:\/\/preview-23\.example\.com/);
   assert.match(stdout, /Workflow run: https:\/\/github\.com\/anup4khandelwal\/codex-stack\/actions\/runs\/123456/);
   assert.match(stdout, /Hosted visual pack: https:\/\/anup4khandelwal\.github\.io\/codex-stack\/pr-preview\/pr-23\/__codex\/visual\/index\.html/);
+  assert.match(stdout, /`changed` `score 68\.2` `ratio 0\.318` dashboard @ \//);
   assert.match(stdout, /CRITICAL\/VISUAL/);
   assert.match(stdout, /annotation\.svg/);
   assert.match(stdout, /### Deploy checks/);
+  assert.match(stdout, /!\[dashboard desktop\]\(https:\/\/anup4khandelwal\.github\.io\/codex-stack\/pr-preview\/pr-23\/__codex\/visual\/snapshots\/dashboard-root-desktop\/diff\.png\)/);
   assert.match(stdout, /consoleWarnings=1/);
   assert.match(stdout, /screenshots\.json/);
   assert.ok(fs.existsSync(markdownOut));

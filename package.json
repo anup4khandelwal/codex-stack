@@ -36,10 +36,12 @@
     "browse:screenshot": "bun browse/src/cli.ts screenshot"
   },
   "dependencies": {
-    "playwright": "^1.53.2"
+    "playwright": "^1.53.2",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@types/pngjs": "^6.0.5",
     "typescript": "^5.9.3"
   },
   "engines": {
