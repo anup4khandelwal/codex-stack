@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "controlRepo": "anup4khandelwal/codex-stack",
+  "policyDir": "policies",
+  "syncBranch": "chore/codex-stack-fleet-sync",
+  "statusArtifactName": "codex-stack-fleet-status",
+  "repos": [
+    {
+      "repo": "anup4khandelwal/autopilot-multi-agent-loop",
+      "branch": "main",
+      "team": "reviewops",
+      "policyPack": "default"
+    },
+    {
+      "repo": "anup4khandelwal/awesome-codex-skills",
+      "branch": "main",
+      "team": "ai-platform",
+      "policyPack": "review-only"
+    },
+    {
+      "repo": "anup4khandelwal/anup4khandelwal",
+      "branch": "main",
+      "team": "profile",
+      "policyPack": "review-only"
+    }
+  ]
+}

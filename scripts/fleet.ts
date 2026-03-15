@@ -993,7 +993,7 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
     drift: plan.drift,
     status: statusReport?.status || computed.status,
     riskScore: statusReport?.riskScore ?? computed.riskScore,
-    requiredChecks: asArray<string>(member?.requiredChecks || []),
+    requiredChecks: asArray<string>(member?.requiredChecks || plan.memberConfig.requiredChecks || []),
     latestReport,
     source: statusReport ? "artifact" : member ? "repo-files" : "missing",
   };

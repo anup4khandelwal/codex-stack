@@ -245,6 +245,14 @@ bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 ```
 
+Checked-in real control plane for this workspace:
+
+```bash
+bun src/cli.ts fleet validate --manifest .codex-stack/fleet.anup4khandelwal.json
+bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --dry-run --json
+bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs
+```
+
 The control repo owns:
 
 - a fleet manifest listing managed repos
@@ -259,6 +267,12 @@ The control repo owns:
 - `.github/workflows/codex-stack-fleet-status.yml`
 
 That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend.
+
+Current checked-in targets:
+
+- `anup4khandelwal/autopilot-multi-agent-loop` via `default`
+- `anup4khandelwal/awesome-codex-skills` via `review-only`
+- `anup4khandelwal/anup4khandelwal` via `review-only`
 
 ## Browser QA model
 
