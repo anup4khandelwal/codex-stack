@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
+const SCRIPT_DIR = __dirname;
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -57,17 +59,17 @@ function pickLatestReport(reportPaths) {
 
 function parseArgs(argv) {
   const out = {
-    out: path.resolve(process.cwd(), '.codex-stack', 'fleet-status', 'status.json'),
-    markdownOut: path.resolve(process.cwd(), '.codex-stack', 'fleet-status', 'summary.md'),
+    out: path.resolve(REPO_ROOT, '.codex-stack', 'fleet-status', 'status.json'),
+    markdownOut: path.resolve(REPO_ROOT, '.codex-stack', 'fleet-status', 'summary.md'),
     json: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--out') {
-      out.out = path.resolve(process.cwd(), argv[i + 1] || out.out);
+      out.out = path.resolve(REPO_ROOT, argv[i + 1] || out.out);
       i += 1;
     } else if (arg === '--markdown-out') {
-      out.markdownOut = path.resolve(process.cwd(), argv[i + 1] || out.markdownOut);
+      out.markdownOut = path.resolve(REPO_ROOT, argv[i + 1] || out.markdownOut);
       i += 1;
     } else if (arg === '--json') {
       out.json = true;
@@ -78,11 +80,11 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const memberPath = path.resolve(process.cwd(), '.codex-stack', 'fleet-member.json');
-  const repo = clean(process.env.GITHUB_REPOSITORY || path.basename(process.cwd()));
-  const branch = clean(process.env.GITHUB_REF_NAME || '');
+  const memberPath = path.resolve(REPO_ROOT, '.codex-stack', 'fleet-member.json');
   const member = fs.existsSync(memberPath) ? readJson(memberPath) : null;
-  const latest = pickLatestReport(findJsonFiles(path.resolve(process.cwd(), 'docs', 'qa')));
+  const repo = clean(member && member.repo || process.env.GITHUB_REPOSITORY || path.basename(REPO_ROOT));
+  const branch = clean(process.env.GITHUB_REF_NAME || '');
+  const latest = pickLatestReport(findJsonFiles(path.resolve(REPO_ROOT, 'docs', 'qa')));
   const latestData = latest ? latest.data : null;
 
   const unresolved = asNumber(latestData && latestData.decisionSummary && latestData.decisionSummary.unresolvedCount) || 0;

@@ -154,6 +154,7 @@ interface SyncPlan {
   team: string;
   policyPack: string;
   localPath: string;
+  localRepoDetected: boolean;
   drift: DriftState;
   files: SyncFilePlan[];
   memberConfig: FleetMemberConfig;
@@ -165,11 +166,12 @@ interface SyncPlan {
 interface SyncResult {
   repo: string;
   drift: DriftState;
-  action: "planned" | "written" | "opened-pr" | "skipped";
+  action: "planned" | "written" | "opened-pr" | "skipped" | "invalid";
   branch: string;
   localPath: string;
   prUrl: string;
   filesChanged: string[];
+  notes?: string[];
 }
 
 interface FleetStatusReport {
@@ -336,6 +338,17 @@ function resolveAgainstManifestDir(manifestDir: string, targetPath: string): str
 
 function resolveFromManifest(context: FleetContext, targetPath: string): string {
   return resolveAgainstManifestDir(context.manifestDir, targetPath);
+}
+
+function isGitRepoRoot(repoPath: string): boolean {
+  const candidate = clean(repoPath);
+  if (!candidate || !fs.existsSync(candidate)) return false;
+  const result = spawnSync("git", ["-C", candidate, "rev-parse", "--show-toplevel"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return (result.status ?? 1) === 0;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -664,10 +677,11 @@ function planSync(context: FleetContext, target: FleetTarget): SyncPlan {
   const member = compileMemberConfig(context, target);
   const generated = generateFiles(member);
   const localPath = resolveFromManifest(context, clean(target.localPath || ""));
+  const localRepoDetected = isGitRepoRoot(localPath);
   const existing: Record<string, string> = {};
   const branch = member.branch || DEFAULT_BRANCH;
 
-  if (localPath) {
+  if (localPath && localRepoDetected) {
     existing[FLEET_MEMBER_PATH] = readLocalFile(localPath, FLEET_MEMBER_PATH);
     existing[FLEET_STATUS_SCRIPT_PATH] = readLocalFile(localPath, FLEET_STATUS_SCRIPT_PATH);
     existing[FLEET_STATUS_WORKFLOW_PATH] = readLocalFile(localPath, FLEET_STATUS_WORKFLOW_PATH);
@@ -684,6 +698,7 @@ function planSync(context: FleetContext, target: FleetTarget): SyncPlan {
     team: member.team,
     policyPack: member.policyPack,
     localPath,
+    localRepoDetected,
     drift: drift.drift,
     files: drift.files,
     memberConfig: member,
@@ -724,6 +739,18 @@ function syncLocalRepo(plan: SyncPlan): SyncResult {
       localPath: "",
       prUrl: "",
       filesChanged: [],
+    };
+  }
+  if (!plan.localRepoDetected) {
+    return {
+      repo: plan.repo,
+      drift: plan.drift,
+      action: "invalid",
+      branch: plan.branch,
+      localPath: plan.localPath,
+      prUrl: "",
+      filesChanged: [],
+      notes: ["Configured localPath is not a Git repo root."],
     };
   }
   const filesChanged = writeGeneratedFiles(plan.localPath, plan);
@@ -928,26 +955,27 @@ function downloadLatestArtifactStatus(repo: string, branch: string, artifactName
 
 function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleetRepo {
   const plan = planSync(context, target);
-  if (plan.localPath) {
-    const member = readLocalMemberConfig(plan.localPath) || plan.memberConfig;
+  if (plan.localPath && plan.localRepoDetected) {
+    const member = readLocalMemberConfig(plan.localPath);
     const localStatus = readLocalFleetStatus(plan.localPath);
     const latestReport = localStatus?.latestReport || latestQaReportFromRepoRoot(plan.localPath);
-    const computed = computeCollectedStatus(Boolean(member), plan.drift, latestReport);
+    const installed = Boolean(member || localStatus);
+    const computed = computeCollectedStatus(installed, plan.drift, latestReport);
     const status = localStatus?.status || computed.status;
     const riskScore = localStatus?.riskScore ?? computed.riskScore;
     return {
       repo: plan.repo,
       repoUrl: repoUrl(plan.repo),
       branch: plan.branch,
-      team: member.team,
-      policyPack: member.policyPack,
-      installed: Boolean(member),
+      team: member?.team || plan.team,
+      policyPack: member?.policyPack || plan.policyPack,
+      installed,
       drift: plan.drift,
       status,
       riskScore,
-      requiredChecks: member.requiredChecks,
+      requiredChecks: member?.requiredChecks || plan.memberConfig.requiredChecks,
       latestReport,
-      source: localStatus ? "local-status" : latestReport ? "local" : "repo-files",
+      source: localStatus ? "local-status" : latestReport ? "local" : installed ? "repo-files" : "missing",
     };
   }
 
@@ -1090,15 +1118,16 @@ function buildValidationReport(context: FleetContext): { marker: string; generat
   const repos = asArray<FleetTarget>(context.manifest.repos).map((target) => {
     const member = compileMemberConfig(context, target);
     const localPath = resolveFromManifest(context, clean(target.localPath || ""));
+    const localRepoDetected = isGitRepoRoot(localPath);
     return {
       repo: member.repo,
       policyPack: member.policyPack,
       branch: member.branch,
-      valid: true,
+      valid: !localPath || localRepoDetected,
       previewUrlTemplate: member.previewUrlTemplate,
       requiredChecks: member.requiredChecks,
       localPath,
-      localRepoDetected: Boolean(localPath && fs.existsSync(path.join(localPath, ".git"))),
+      localRepoDetected,
     };
   });
   return {
@@ -1112,7 +1141,7 @@ function buildValidationReport(context: FleetContext): { marker: string; generat
 function renderSyncMarkdown(results: SyncResult[]): string {
   const lines = ["# codex-stack fleet sync", ""];
   for (const result of results) {
-    lines.push(`- ${result.repo}: ${result.action} (${result.drift})${result.prUrl ? ` • ${result.prUrl}` : ""}`);
+    lines.push(`- ${result.repo}: ${result.action} (${result.drift})${result.prUrl ? ` • ${result.prUrl}` : ""}${result.notes?.length ? ` • ${result.notes.join("; ")}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -1126,7 +1155,7 @@ function handleValidate(args: ParsedArgs, context: FleetContext): void {
     `- Control repo: ${report.controlRepo}`,
     `- Repos: ${report.repos.length}`,
     "",
-    ...report.repos.map((repo) => `- ${repo.repo} (${repo.branch}) • pack=${repo.policyPack} • checks=${repo.requiredChecks.join(", ") || "none"}`),
+    ...report.repos.map((repo) => `- ${repo.repo} (${repo.branch}) • pack=${repo.policyPack} • checks=${repo.requiredChecks.join(", ") || "none"}${repo.localPath ? ` • local=${repo.localPath} • localRepo=${repo.localRepoDetected ? "yes" : "no"}` : ""}${repo.valid ? "" : " • INVALID"}`),
   ].join("\n") + "\n";
   if (args.jsonOut) writeFile(args.jsonOut, jsonText);
   if (args.markdownOut) writeFile(args.markdownOut, markdown);
@@ -1141,11 +1170,12 @@ function handleSync(args: ParsedArgs, context: FleetContext): void {
       results.push({
         repo: plan.repo,
         drift: plan.drift,
-        action: "planned",
+        action: plan.localPath && !plan.localRepoDetected && !args.openPrs ? "invalid" : "planned",
         branch: plan.branch,
         localPath: plan.localPath,
         prUrl: "",
         filesChanged: plan.files.filter((item) => item.changed).map((item) => item.path),
+        notes: plan.localPath && !plan.localRepoDetected && !args.openPrs ? ["Configured localPath is not a Git repo root."] : [],
       });
       continue;
     }
