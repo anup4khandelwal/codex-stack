@@ -315,6 +315,18 @@ function runArgs(program: string, args: string[], cwd = process.cwd()): string {
   return clean(result.stdout || "");
 }
 
+function runArgsRaw(program: string, args: string[], cwd = process.cwd()): string {
+  const result = spawnSync(program, args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(clean(result.stderr || result.stdout || `${program} exited with status ${result.status ?? 1}`));
+  }
+  return result.stdout || "";
+}
+
 function inferControlRepo(): string {
   if (process.env.GITHUB_REPOSITORY) return clean(process.env.GITHUB_REPOSITORY);
   const remote = run("git remote get-url origin", { allowFailure: true });
@@ -617,13 +629,12 @@ function readLocalFile(root: string, relativePath: string): string {
 
 function readRemoteFile(repo: string, relativePath: string, ref: string): string {
   const endpoint = `repos/${repo}/contents/${relativePath}?ref=${encodeURIComponent(ref)}`;
-  const result = spawnSync("gh", ["api", "-H", "Accept: application/vnd.github.raw", endpoint], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if ((result.status ?? 1) !== 0) return "";
-  return clean(result.stdout || "");
+  try {
+    const ghBin = clean(process.env.CODEX_STACK_TEST_GH_BIN || "") || "gh";
+    return runArgsRaw(ghBin, ["api", "-H", "Accept: application/vnd.github.raw", endpoint], process.cwd());
+  } catch {
+    return "";
+  }
 }
 
 function detectDrift(existing: Record<string, string>, generated: GeneratedFiles, member: FleetMemberConfig): { drift: DriftState; reasons: string[]; files: SyncFilePlan[] } {
@@ -1228,4 +1239,11 @@ function main(): void {
   usage();
 }
 
-main();
+export const __testing = {
+  readRemoteFile,
+  detectDrift,
+};
+
+if (import.meta.main) {
+  main();
+}

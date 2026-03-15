@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
+import { __testing } from "./fleet";
 
 const rootDir = process.cwd();
 const bun = process.execPath || "bun";
@@ -20,6 +21,14 @@ function run(args: string[], cwd = rootDir): string {
   return execFileSync(bun, args, {
     cwd,
     encoding: "utf8",
+  });
+}
+
+function runWithEnv(args: string[], cwd: string, env: NodeJS.ProcessEnv): string {
+  return execFileSync(bun, args, {
+    cwd,
+    encoding: "utf8",
+    env,
   });
 }
 
@@ -220,5 +229,66 @@ assert.match(fs.readFileSync(path.join(dashboardDir, "index.html"), "utf8"), /co
 assert.match(fs.readFileSync(path.join(dashboardDir, "index.html"), "utf8"), /https:\/\/github.com\/acme\/repo-a/);
 assert.match(fs.readFileSync(path.join(dashboardDir, "manifest.json"), "utf8"), /acme\/repo-a/);
 
+const remoteFixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-fleet-remote-"));
+const ghBinDir = path.join(remoteFixtureRoot, "bin");
+fs.mkdirSync(ghBinDir, { recursive: true });
+const expectedMember = fs.readFileSync(path.join(repoDir, ".codex-stack", "fleet-member.json"), "utf8");
+const expectedWorkflow = fs.readFileSync(path.join(repoDir, ".github", "workflows", "codex-stack-fleet-status.yml"), "utf8");
+const expectedStatusScript = fs.readFileSync(path.join(repoDir, ".github", "codex-stack", "fleet-status.js"), "utf8");
+const ghScript = `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const endpoint = args[args.length - 1] || "";
+const member = ${JSON.stringify(expectedMember)};
+const workflow = ${JSON.stringify(expectedWorkflow)};
+const statusScript = ${JSON.stringify(expectedStatusScript)};
+
+if (args[0] === "api") {
+  if (endpoint.includes(".codex-stack/fleet-member.json")) {
+    process.stdout.write(member);
+    process.exit(0);
+  }
+  if (endpoint.includes(".github/codex-stack/fleet-status.js")) {
+    process.stdout.write(statusScript);
+    process.exit(0);
+  }
+  if (endpoint.includes(".github/workflows/codex-stack-fleet-status.yml")) {
+    process.stdout.write(workflow);
+    process.exit(0);
+  }
+}
+
+process.stderr.write(\`Unsupported gh call: \${args.join(" ")}\\n\`);
+process.exit(1);
+`;
+const ghPath = path.join(ghBinDir, "gh");
+fs.writeFileSync(ghPath, ghScript);
+fs.chmodSync(ghPath, 0o755);
+const previousGhBin = process.env.CODEX_STACK_TEST_GH_BIN;
+process.env.CODEX_STACK_TEST_GH_BIN = ghPath;
+const remoteMember = __testing.readRemoteFile("acme/remote-repo", ".codex-stack/fleet-member.json", "main");
+const remoteStatusScript = __testing.readRemoteFile("acme/remote-repo", ".github/codex-stack/fleet-status.js", "main");
+const remoteWorkflow = __testing.readRemoteFile("acme/remote-repo", ".github/workflows/codex-stack-fleet-status.yml", "main");
+if (previousGhBin === undefined) delete process.env.CODEX_STACK_TEST_GH_BIN;
+else process.env.CODEX_STACK_TEST_GH_BIN = previousGhBin;
+assert.equal(remoteMember, expectedMember);
+assert.equal(remoteStatusScript, expectedStatusScript);
+assert.equal(remoteWorkflow, expectedWorkflow);
+const remoteDrift = __testing.detectDrift(
+  {
+    ".codex-stack/fleet-member.json": remoteMember,
+    ".github/codex-stack/fleet-status.js": remoteStatusScript,
+    ".github/workflows/codex-stack-fleet-status.yml": remoteWorkflow,
+  },
+  {
+    memberConfigJson: expectedMember,
+    statusScriptJs: expectedStatusScript,
+    workflowYaml: expectedWorkflow,
+  },
+  JSON.parse(expectedMember) as unknown as Parameters<typeof __testing.detectDrift>[2],
+);
+assert.equal(remoteDrift.drift, "healthy");
+assert.deepEqual(remoteDrift.files.filter((item) => item.changed), []);
+
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
+fs.rmSync(remoteFixtureRoot, { recursive: true, force: true });
 console.log("fleet spec passed");
