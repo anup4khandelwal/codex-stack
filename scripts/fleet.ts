@@ -4,6 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_STATUS_ARTIFACT = "codex-stack-fleet-status";
 const DEFAULT_BRANCH = "main";
@@ -200,6 +203,7 @@ interface FleetStatusReport {
 
 interface CollectedFleetRepo {
   repo: string;
+  repoUrl: string;
   branch: string;
   team: string;
   policyPack: string;
@@ -209,7 +213,7 @@ interface CollectedFleetRepo {
   riskScore: number;
   requiredChecks: string[];
   latestReport: FleetStatusReport["latestReport"];
-  source: "local" | "artifact" | "repo-files" | "missing";
+  source: "local-status" | "local" | "artifact" | "repo-files" | "missing";
 }
 
 interface FleetCollectReport {
@@ -320,6 +324,20 @@ function inferControlRef(): string {
   return clean(run("git rev-parse HEAD", { allowFailure: true })) || "local";
 }
 
+function repoUrl(repo: string): string {
+  return repo ? `https://github.com/${repo}` : "";
+}
+
+function resolveAgainstManifestDir(manifestDir: string, targetPath: string): string {
+  const raw = clean(targetPath);
+  if (!raw) return "";
+  return path.isAbsolute(raw) ? raw : path.resolve(manifestDir, raw);
+}
+
+function resolveFromManifest(context: FleetContext, targetPath: string): string {
+  return resolveAgainstManifestDir(context.manifestDir, targetPath);
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   const command = clean(argv[0]) as ParsedArgs["command"];
   if (!command || !(command === "validate" || command === "sync" || command === "collect" || command === "dashboard")) usage();
@@ -428,7 +446,7 @@ function loadFleetContext(manifestPath: string): FleetContext {
     controlRef: inferControlRef(),
     statusArtifactName: clean(manifest.statusArtifactName || "") || DEFAULT_STATUS_ARTIFACT,
     syncBranch: clean(manifest.syncBranch || "") || DEFAULT_SYNC_BRANCH,
-    policyDir: path.resolve(path.dirname(manifestPath), clean(manifest.policyDir || "") || DEFAULT_POLICY_DIR),
+    policyDir: resolveAgainstManifestDir(path.dirname(manifestPath), clean(manifest.policyDir || "") || DEFAULT_POLICY_DIR),
   };
   if (!context.controlRepo) throw new Error("Unable to infer control repo. Set controlRepo in the manifest.");
   return context;
@@ -530,7 +548,7 @@ function compileMemberConfig(context: FleetContext, target: FleetTarget): FleetM
 }
 
 function loadStatusScriptTemplate(): string {
-  const templatePath = path.resolve(process.cwd(), "templates", "fleet", "fleet-status.js");
+  const templatePath = path.resolve(SCRIPT_DIR, "..", "templates", "fleet", "fleet-status.js");
   return fs.readFileSync(templatePath, "utf8");
 }
 
@@ -645,7 +663,7 @@ function detectDrift(existing: Record<string, string>, generated: GeneratedFiles
 function planSync(context: FleetContext, target: FleetTarget): SyncPlan {
   const member = compileMemberConfig(context, target);
   const generated = generateFiles(member);
-  const localPath = clean(target.localPath || "");
+  const localPath = resolveFromManifest(context, clean(target.localPath || ""));
   const existing: Record<string, string> = {};
   const branch = member.branch || DEFAULT_BRANCH;
 
@@ -832,6 +850,16 @@ function latestQaReportFromRepoRoot(repoRoot: string): FleetStatusReport["latest
   };
 }
 
+function readLocalFleetStatus(repoRoot: string): FleetStatusReport | null {
+  const statusPath = path.join(repoRoot, FLEET_STATUS_JSON);
+  if (!fs.existsSync(statusPath)) return null;
+  try {
+    return readJsonFile<FleetStatusReport>(statusPath);
+  } catch {
+    return null;
+  }
+}
+
 function computeCollectedStatus(installed: boolean, drift: DriftState, latestReport: FleetStatusReport["latestReport"]): { status: RepoHealth; riskScore: number } {
   if (!installed) {
     return { status: "missing", riskScore: 85 };
@@ -902,20 +930,24 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
   const plan = planSync(context, target);
   if (plan.localPath) {
     const member = readLocalMemberConfig(plan.localPath) || plan.memberConfig;
-    const latestReport = latestQaReportFromRepoRoot(plan.localPath);
+    const localStatus = readLocalFleetStatus(plan.localPath);
+    const latestReport = localStatus?.latestReport || latestQaReportFromRepoRoot(plan.localPath);
     const computed = computeCollectedStatus(Boolean(member), plan.drift, latestReport);
+    const status = localStatus?.status || computed.status;
+    const riskScore = localStatus?.riskScore ?? computed.riskScore;
     return {
       repo: plan.repo,
+      repoUrl: repoUrl(plan.repo),
       branch: plan.branch,
       team: member.team,
       policyPack: member.policyPack,
       installed: Boolean(member),
       drift: plan.drift,
-      status: computed.status,
-      riskScore: computed.riskScore,
+      status,
+      riskScore,
       requiredChecks: member.requiredChecks,
       latestReport,
-      source: latestReport ? "local" : "repo-files",
+      source: localStatus ? "local-status" : latestReport ? "local" : "repo-files",
     };
   }
 
@@ -925,6 +957,7 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
   const computed = computeCollectedStatus(Boolean(member), plan.drift, latestReport);
   return {
     repo: plan.repo,
+    repoUrl: repoUrl(plan.repo),
     branch: plan.branch,
     team: member?.team || plan.team,
     policyPack: member?.policyPack || plan.policyPack,
@@ -994,7 +1027,7 @@ function renderFleetDashboard(report: FleetCollectReport, outDir: string): void 
   ensureDir(outDir);
   const repoRows = report.repos.map((repo) => `
       <tr>
-        <td><strong>${escapeHtml(repo.repo)}</strong><div class="muted">${escapeHtml(repo.team || "unassigned")}</div></td>
+        <td><strong><a href="${escapeHtml(repo.repoUrl)}">${escapeHtml(repo.repo)}</a></strong><div class="muted">${escapeHtml(repo.team || "unassigned")} • source=${escapeHtml(repo.source)}</div></td>
         <td>${escapeHtml(repo.status.toUpperCase())}</td>
         <td>${escapeHtml(repo.drift.toUpperCase())}</td>
         <td>${escapeHtml(repo.riskScore)}</td>
@@ -1035,7 +1068,7 @@ function renderFleetDashboard(report: FleetCollectReport, outDir: string): void 
   </div>
   <section class="top-risks">
     <h2>Top risks</h2>
-    <ul>${report.topRisks.map((repo) => `<li><strong>${escapeHtml(repo.repo)}</strong> — ${escapeHtml(repo.status.toUpperCase())} (${escapeHtml(repo.riskScore)}/100), drift=${escapeHtml(repo.drift)}, unresolved=${escapeHtml(repo.latestReport?.unresolvedRegressions ?? 0)}</li>`).join("")}</ul>
+    <ul>${report.topRisks.map((repo) => `<li><strong><a href="${escapeHtml(repo.repoUrl)}">${escapeHtml(repo.repo)}</a></strong> — ${escapeHtml(repo.status.toUpperCase())} (${escapeHtml(repo.riskScore)}/100), drift=${escapeHtml(repo.drift)}, unresolved=${escapeHtml(repo.latestReport?.unresolvedRegressions ?? 0)}</li>`).join("")}</ul>
   </section>
   <section>
     <h2>Repo status</h2>
@@ -1053,9 +1086,10 @@ function renderFleetDashboard(report: FleetCollectReport, outDir: string): void 
   writeFile(path.join(outDir, "summary.md"), renderFleetMarkdown(report));
 }
 
-function buildValidationReport(context: FleetContext): { marker: string; generatedAt: string; controlRepo: string; repos: Array<{ repo: string; policyPack: string; branch: string; valid: boolean; previewUrlTemplate: string; requiredChecks: string[] }> } {
+function buildValidationReport(context: FleetContext): { marker: string; generatedAt: string; controlRepo: string; repos: Array<{ repo: string; policyPack: string; branch: string; valid: boolean; previewUrlTemplate: string; requiredChecks: string[]; localPath: string; localRepoDetected: boolean }> } {
   const repos = asArray<FleetTarget>(context.manifest.repos).map((target) => {
     const member = compileMemberConfig(context, target);
+    const localPath = resolveFromManifest(context, clean(target.localPath || ""));
     return {
       repo: member.repo,
       policyPack: member.policyPack,
@@ -1063,6 +1097,8 @@ function buildValidationReport(context: FleetContext): { marker: string; generat
       valid: true,
       previewUrlTemplate: member.previewUrlTemplate,
       requiredChecks: member.requiredChecks,
+      localPath,
+      localRepoDetected: Boolean(localPath && fs.existsSync(path.join(localPath, ".git"))),
     };
   });
   return {
