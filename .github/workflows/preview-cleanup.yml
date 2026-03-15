@@ -13,6 +13,11 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Checkout gh-pages
         uses: actions/checkout@v4
         with:

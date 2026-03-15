@@ -18,8 +18,10 @@ for (const workflow of [prReview, previewVerify]) {
 
 assert.match(previewCleanup, /pull_request:/);
 assert.match(previewCleanup, /types: \[closed\]/);
+assert.match(previewCleanup, /name: Checkout workflow source/);
 assert.match(previewCleanup, /cleanup-preview-site\.ts/);
 assert.match(previewCleanup, /ref: gh-pages/);
+assert.ok((previewCleanup.match(/uses: actions\/checkout@v4/g) || []).length >= 2);
 assert.match(previewCleanup, /Publish cleaned gh-pages branch/);
 
 console.log("preview-workflow-auth spec passed");
