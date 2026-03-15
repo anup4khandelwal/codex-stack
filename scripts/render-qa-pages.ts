@@ -57,9 +57,12 @@ interface CollectedReport {
   jsonPath: string;
   annotationPath: string;
   screenshotPath: string;
+  visualIndexPath: string;
+  visualManifestPath: string;
   stableUrl: string;
   stableAnnotationUrl: string;
   stableScreenshotUrl: string;
+  stableVisualUrl: string;
 }
 
 interface LayoutProps {
@@ -452,6 +455,7 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
         </div>
         <div class="links">
           <a href="${escapeHtml(`qa/${report.slug}/`)}">Open report</a>
+          ${report.visualIndexPath ? `<a href="${escapeHtml(report.visualIndexPath)}">Visual pack</a>` : ""}
           ${report.mdPath ? `<a href="${escapeHtml(report.mdPath)}">Markdown</a>` : ""}
           ${report.jsonPath ? `<a href="${escapeHtml(report.jsonPath)}">JSON</a>` : ""}
           ${report.annotationPath ? `<a href="${escapeHtml(report.annotationPath)}">Annotation</a>` : ""}
@@ -472,6 +476,8 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
 function renderReport(report: CollectedReport, baseUrl: string): string {
   const snapshot = report.data.snapshotResult || {};
   const detailLinks: string[] = [];
+  if (report.visualIndexPath) detailLinks.push(`<a href="visual/index.html">Visual pack</a>`);
+  if (report.visualManifestPath) detailLinks.push(`<a href="visual/manifest.json">Visual manifest</a>`);
   if (report.mdPath) detailLinks.push(`<a href="report.md">Markdown</a>`);
   if (report.jsonPath) detailLinks.push(`<a href="report.json">JSON</a>`);
   if (report.annotationPath) detailLinks.push(`<a href="annotation.svg">Annotation</a>`);
@@ -549,13 +555,17 @@ function collectReports(sourceDir: string, baseUrl: string): CollectedReport[] {
         jsonPath: fs.existsSync(reportJson) ? `qa/${entry.name}/report.json` : "",
         annotationPath: fs.existsSync(path.join(reportDir, "annotation.svg")) ? `qa/${entry.name}/annotation.svg` : "",
         screenshotPath: fs.existsSync(path.join(reportDir, "screenshot.png")) ? `qa/${entry.name}/screenshot.png` : "",
+        visualIndexPath: fs.existsSync(path.join(reportDir, "visual", "index.html")) ? `qa/${entry.name}/visual/index.html` : "",
+        visualManifestPath: fs.existsSync(path.join(reportDir, "visual", "manifest.json")) ? `qa/${entry.name}/visual/manifest.json` : "",
         stableUrl: "",
         stableAnnotationUrl: "",
         stableScreenshotUrl: "",
+        stableVisualUrl: "",
       };
       report.stableUrl = reportLink(baseUrl, report);
       report.stableAnnotationUrl = report.annotationPath ? assetLink(baseUrl, report, "annotation.svg") : "";
       report.stableScreenshotUrl = report.screenshotPath ? assetLink(baseUrl, report, "screenshot.png") : "";
+      report.stableVisualUrl = report.visualIndexPath ? assetLink(baseUrl, report, "visual/index.html") : "";
       return report;
     })
     .filter((report): report is CollectedReport => Boolean(report))
@@ -604,6 +614,7 @@ function main(): void {
       stableUrl: report.stableUrl,
       stableAnnotationUrl: report.stableAnnotationUrl,
       stableScreenshotUrl: report.stableScreenshotUrl,
+      stableVisualUrl: report.stableVisualUrl,
     })),
   };
   fs.writeFileSync(path.join(args.out, "manifest.json"), JSON.stringify(manifest, null, 2));

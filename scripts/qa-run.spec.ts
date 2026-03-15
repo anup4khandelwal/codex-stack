@@ -17,6 +17,7 @@ async function main(): Promise<void> {
 const baselinePath = path.join(fixtureRoot, "baseline.json");
 const currentPath = path.join(fixtureRoot, "current.json");
 const screenshotPath = path.join(fixtureRoot, "screenshot.png");
+const visualDir = path.join(fixtureRoot, "visual");
 const bundlePath = path.join(fixtureRoot, "session-bundle.json");
 const importMarker = path.join(fixtureRoot, "imported-session.json");
 
@@ -80,6 +81,10 @@ const importMarker = path.join(fixtureRoot, "imported-session.json");
       2,
     ),
   );
+  fs.mkdirSync(visualDir, { recursive: true });
+  fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
 
   fs.writeFileSync(
     path.join(browseDir, "cli.ts"),
@@ -102,6 +107,12 @@ if (command === "compare-snapshot") {
     baseline: ${JSON.stringify(baselinePath)},
     current: ${JSON.stringify(currentPath)},
     screenshot: ${JSON.stringify(screenshotPath)},
+    visualPack: {
+      dir: ${JSON.stringify(visualDir)},
+      index: ${JSON.stringify(path.join(visualDir, "index.html"))},
+      manifest: ${JSON.stringify(path.join(visualDir, "manifest.json"))},
+      annotation: ${JSON.stringify(path.join(visualDir, "annotation.svg"))}
+    },
     comparison: {
       missingSelectors: ["h1"],
       changedSelectors: [],
@@ -141,9 +152,9 @@ process.exit(1);
     status?: string;
     healthScore?: number;
     flowResults?: Array<{ name?: string; status?: string; steps?: number }>;
-    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string };
+    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string; visualPack?: { index?: string; manifest?: string } | null };
     findings?: Array<{ severity?: string; category?: string; title?: string; evidence?: { annotation?: string } }>;
-    artifacts?: { annotation?: string };
+    artifacts?: { annotation?: string; visualPack?: { index?: string; manifest?: string } | null };
   };
 
   assert.equal(report.status, "critical");
@@ -155,10 +166,13 @@ process.exit(1);
   assert.equal(report.snapshotResult?.status, "changed");
   assert.ok(String(report.snapshotResult?.annotation).includes(".codex-stack/qa/annotations/"));
   assert.ok(String(report.snapshotResult?.screenshot).includes("screenshot.png"));
+  assert.ok(String(report.snapshotResult?.visualPack?.index).includes("visual/index.html"));
+  assert.ok(String(report.snapshotResult?.visualPack?.manifest).includes("visual/manifest.json"));
   assert.ok(report.findings?.some((item) => item.severity === "critical" && item.category === "visual" && item.title === "Expected UI selectors are missing"));
   assert.ok(report.findings?.some((item) => item.severity === "medium" && item.category === "visual" && item.title === "Snapshot drift detected"));
   assert.ok(report.findings?.some((item) => item.evidence?.annotation));
   assert.ok(report.artifacts?.annotation);
+  assert.ok(report.artifacts?.visualPack?.index);
   assert.ok(fs.existsSync(path.join(fixtureRoot, String(report.artifacts?.annotation))));
   const imported = JSON.parse(fs.readFileSync(importMarker, "utf8")) as { sourcePath?: string; sessionFlag?: string; sessionName?: string };
   assert.equal(imported.sourcePath, bundlePath);

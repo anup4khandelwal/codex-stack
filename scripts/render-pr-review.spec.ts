@@ -56,6 +56,10 @@ async function main(): Promise<void> {
           markdown: "preview-artifacts/report.md",
           annotation: "preview-artifacts/annotation.svg",
           screenshot: "preview-artifacts/screenshot.png",
+          visualPack: {
+            index: "preview-artifacts/visual/index.html",
+            manifest: "preview-artifacts/visual/manifest.json",
+          },
         },
       },
       snapshotResult: {
@@ -67,6 +71,10 @@ async function main(): Promise<void> {
     },
     deploy: {
       screenshotManifest: "preview-artifacts/screenshots.json",
+      visualPack: {
+        index: "preview-artifacts/visual/index.html",
+        manifest: "preview-artifacts/visual/manifest.json",
+      },
       pathResults: [
         {
           path: "/",
@@ -104,6 +112,8 @@ async function main(): Promise<void> {
       reviewPath,
       "--preview-input",
       previewPath,
+      "--preview-pages-root",
+      "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-23/__codex/",
       "--markdown-out",
       markdownOut,
       "--summary-out",
@@ -119,6 +129,7 @@ async function main(): Promise<void> {
   assert.match(stdout, /## Preview QA/);
   assert.match(stdout, /Preview URL: https:\/\/preview-23\.example\.com/);
   assert.match(stdout, /Workflow run: https:\/\/github\.com\/anup4khandelwal\/codex-stack\/actions\/runs\/123456/);
+  assert.match(stdout, /Hosted visual pack: https:\/\/anup4khandelwal\.github\.io\/codex-stack\/pr-preview\/pr-23\/__codex\/visual\/index\.html/);
   assert.match(stdout, /CRITICAL\/VISUAL/);
   assert.match(stdout, /annotation\.svg/);
   assert.match(stdout, /### Deploy checks/);
@@ -146,6 +157,8 @@ async function main(): Promise<void> {
       reviewPath,
       "--preview-input",
       previewPath,
+      "--preview-pages-root",
+      "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-23/__codex/",
       "--fail-on-critical",
     ],
     {

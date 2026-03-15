@@ -127,6 +127,17 @@ interface SnapshotComparison {
   screenshotChanged: boolean;
 }
 
+interface SnapshotVisualPack {
+  dir: string;
+  index: string;
+  manifest: string;
+  annotation: string;
+  baselineJson: string;
+  currentJson: string;
+  baselineScreenshot: string;
+  currentScreenshot: string;
+}
+
 interface PlaywrightResponse {
   status(): number;
   ok(): boolean;
@@ -324,6 +335,261 @@ function textHash(text: unknown): string {
 function fileHash(filePath: string): string {
   if (!fs.existsSync(filePath)) return "";
   return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeXml(value: unknown): string {
+  return escapeHtml(value);
+}
+
+function relativePath(filePath: string): string {
+  return path.relative(process.cwd(), filePath).replace(/\\/g, "/");
+}
+
+function pngDimensions(filePath: string): { width: number; height: number } {
+  const buffer = fs.readFileSync(filePath);
+  if (buffer.length < 24 || buffer.toString("ascii", 1, 4) !== "PNG") {
+    throw new Error(`Unsupported PNG artifact: ${filePath}`);
+  }
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  };
+}
+
+function screenshotDataUri(filePath: string): string {
+  return `data:image/png;base64,${fs.readFileSync(filePath).toString("base64")}`;
+}
+
+function normalizeSnapshotBounds(bounds: Partial<SnapshotBounds> | undefined): SnapshotBounds | null {
+  if (!bounds) return null;
+  return {
+    x: Number(bounds.x || 0),
+    y: Number(bounds.y || 0),
+    width: Number(bounds.width || 0),
+    height: Number(bounds.height || 0),
+  };
+}
+
+function selectorBounds(snapshot: Partial<SnapshotPayload> | null, selector: string): SnapshotBounds | null {
+  const elements = Array.isArray(snapshot?.elements) ? snapshot.elements : [];
+  const match = elements.find((item) => item?.selector === selector);
+  return normalizeSnapshotBounds(match?.bounds);
+}
+
+function snapshotAnnotationMarkers(
+  comparison: SnapshotComparison,
+  baselineSnapshot: Partial<SnapshotPayload> | null,
+  currentSnapshot: Partial<SnapshotPayload> | null,
+): Array<{ selector: string; label: string; color: string; bounds: SnapshotBounds }> {
+  const markers: Array<{ selector: string; label: string; color: string; bounds: SnapshotBounds }> = [];
+
+  for (const selector of comparison.missingSelectors) {
+    const bounds = selectorBounds(baselineSnapshot, selector);
+    if (!bounds) continue;
+    markers.push({ selector, label: `Missing: ${selector}`, color: "#d73a49", bounds });
+  }
+
+  for (const item of comparison.changedSelectors) {
+    const selector = item.selector;
+    const bounds = selectorBounds(currentSnapshot, selector) || selectorBounds(baselineSnapshot, selector);
+    if (!selector || !bounds) continue;
+    markers.push({ selector, label: `Changed: ${selector}`, color: "#fb8500", bounds });
+  }
+
+  for (const selector of comparison.newSelectors) {
+    const bounds = selectorBounds(currentSnapshot, selector);
+    if (!bounds) continue;
+    markers.push({ selector, label: `New: ${selector}`, color: "#2563eb", bounds });
+  }
+
+  return markers;
+}
+
+function renderSnapshotAnnotationSvg({
+  screenshotPath,
+  markers,
+  title,
+}: {
+  screenshotPath: string;
+  markers: Array<{ selector: string; label: string; color: string; bounds: SnapshotBounds }>;
+  title: string;
+}): string {
+  if (!fs.existsSync(screenshotPath)) return "";
+  const { width, height } = pngDimensions(screenshotPath);
+  const imageHref = screenshotDataUri(screenshotPath);
+  const topPadding = 56;
+  const markerSvg = markers.map((marker, index) => {
+    const x = marker.bounds.x;
+    const y = marker.bounds.y + topPadding;
+    const w = Math.max(4, marker.bounds.width);
+    const h = Math.max(4, marker.bounds.height);
+    const labelY = Math.max(20, y - 6);
+    return [
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${marker.color}" stroke-width="3"/>`,
+      `<rect x="${x}" y="${Math.max(4, labelY - 18)}" width="${Math.min(width - x, Math.max(80, marker.label.length * 7))}" height="18" fill="${marker.color}" opacity="0.92"/>`,
+      `<text x="${x + 6}" y="${labelY - 5}" font-family="monospace" font-size="11" fill="#ffffff">${escapeXml(`${index + 1}. ${marker.label}`)}</text>`,
+    ].join("");
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + topPadding}" viewBox="0 0 ${width} ${height + topPadding}">
+  <rect width="${width}" height="${height + topPadding}" fill="#0f172a"/>
+  <text x="16" y="24" font-family="monospace" font-size="14" fill="#ffffff">${escapeXml(title)}</text>
+  <text x="16" y="44" font-family="monospace" font-size="11" fill="#cbd5e1">${escapeXml(markers.length ? `${markers.length} annotated issue(s)` : "No element-level annotations available")}</text>
+  <image href="${imageHref}" x="0" y="${topPadding}" width="${width}" height="${height}"/>
+  ${markerSvg}
+</svg>
+`;
+}
+
+function copyIfExists(sourcePath: string, targetPath: string): string {
+  if (!sourcePath || !fs.existsSync(sourcePath)) return "";
+  ensureDir(path.dirname(targetPath));
+  fs.copyFileSync(sourcePath, targetPath);
+  return targetPath;
+}
+
+function renderSnapshotVisualPackHtml(manifest: Record<string, unknown>): string {
+  const summary = manifest.summary as Record<string, unknown>;
+  const assets = manifest.assets as Record<string, string>;
+  const markers = Array.isArray(manifest.markers) ? manifest.markers as Array<Record<string, unknown>> : [];
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(manifest.title || manifest.name || "Snapshot visual pack")}</title>
+  <style>
+    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1, h2 { margin: 0 0 12px; }
+    .meta, .summary { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 18px 0 24px; }
+    .card { background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 16px; padding: 16px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    img, object { width: 100%; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.18); background: #020617; }
+    ul { padding-left: 20px; }
+    a { color: #93c5fd; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(59, 130, 246, 0.18); margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(manifest.title || manifest.name || "Snapshot visual pack")}</h1>
+    <div class="meta">
+      <div class="card"><strong>Status</strong><div>${escapeHtml(manifest.status || "unknown")}</div></div>
+      <div class="card"><strong>Snapshot</strong><div>${escapeHtml(manifest.name || "snapshot")}</div></div>
+      <div class="card"><strong>Generated</strong><div>${escapeHtml(manifest.generatedAt || "n/a")}</div></div>
+    </div>
+    <div class="summary">
+      <div class="card"><strong>Missing selectors</strong><div>${escapeHtml(summary?.missingSelectors ?? 0)}</div></div>
+      <div class="card"><strong>Changed selectors</strong><div>${escapeHtml(summary?.changedSelectors ?? 0)}</div></div>
+      <div class="card"><strong>New selectors</strong><div>${escapeHtml(summary?.newSelectors ?? 0)}</div></div>
+      <div class="card"><strong>Body/title drift</strong><div>${escapeHtml(`${Boolean(summary?.bodyTextChanged) || Boolean(summary?.titleChanged)}`)}</div></div>
+    </div>
+    <section class="grid">
+      <article class="card">
+        <h2>Baseline</h2>
+        ${assets?.baselineScreenshot ? `<img src="${escapeHtml(assets.baselineScreenshot)}" alt="Baseline screenshot">` : "<p>Missing baseline screenshot.</p>"}
+        <p><a href="${escapeHtml(assets.baselineJson || "")}">Baseline JSON</a></p>
+      </article>
+      <article class="card">
+        <h2>Current</h2>
+        ${assets?.currentScreenshot ? `<img src="${escapeHtml(assets.currentScreenshot)}" alt="Current screenshot">` : "<p>Missing current screenshot.</p>"}
+        <p><a href="${escapeHtml(assets.currentJson || "")}">Current JSON</a></p>
+      </article>
+      <article class="card">
+        <h2>Annotation</h2>
+        ${assets?.annotation ? `<object data="${escapeHtml(assets.annotation)}" type="image/svg+xml" aria-label="Annotated snapshot"></object>` : "<p>No annotation available.</p>"}
+      </article>
+    </section>
+    <section class="card" style="margin-top: 20px;">
+      <h2>Annotated selectors</h2>
+      <ul>
+        ${markers.length ? markers.map((item) => `<li>${escapeHtml(item.label || item.selector || "marker")}</li>`).join("") : "<li>No selector-level markers recorded.</li>"}
+      </ul>
+      <p><a href="manifest.json">Manifest JSON</a></p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+export function createSnapshotVisualPack({
+  name,
+  stamp,
+  baselineJsonPath,
+  currentJsonPath,
+  baselineScreenshotPath,
+  currentScreenshotPath,
+  comparison,
+}: {
+  name: string;
+  stamp: string;
+  baselineJsonPath: string;
+  currentJsonPath: string;
+  baselineScreenshotPath: string;
+  currentScreenshotPath: string;
+  comparison: SnapshotComparison;
+}): SnapshotVisualPack {
+  const outputDir = path.join(ARTIFACT_DIR, `${name}-${stamp}-visual`);
+  ensureDir(outputDir);
+  const baselineJson = copyIfExists(baselineJsonPath, path.join(outputDir, "baseline.json"));
+  const currentJson = copyIfExists(currentJsonPath, path.join(outputDir, "current.json"));
+  const baselineScreenshot = copyIfExists(baselineScreenshotPath, path.join(outputDir, "baseline.png"));
+  const currentScreenshot = copyIfExists(currentScreenshotPath, path.join(outputDir, "current.png"));
+  const baselineSnapshot = readJson<SnapshotPayload | null>(baselineJsonPath, null);
+  const currentSnapshot = readJson<SnapshotPayload | null>(currentJsonPath, null);
+  const markers = snapshotAnnotationMarkers(comparison, baselineSnapshot, currentSnapshot);
+  const annotationPath = path.join(outputDir, "annotation.svg");
+  const annotationSvg = currentScreenshot
+    ? renderSnapshotAnnotationSvg({
+        screenshotPath: currentScreenshot,
+        markers,
+        title: `Snapshot visual pack • ${name}`,
+      })
+    : "";
+  if (annotationSvg) {
+    fs.writeFileSync(annotationPath, annotationSvg);
+  }
+  const manifestPath = path.join(outputDir, "manifest.json");
+  const indexPath = path.join(outputDir, "index.html");
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    name,
+    title: `Snapshot visual pack • ${name}`,
+    status: comparison.status,
+    summary: comparison.summary,
+    markers: markers.map((item) => ({ selector: item.selector, label: item.label })),
+    assets: {
+      baselineJson: path.basename(baselineJson),
+      currentJson: path.basename(currentJson),
+      baselineScreenshot: path.basename(baselineScreenshot),
+      currentScreenshot: path.basename(currentScreenshot),
+      annotation: annotationSvg ? path.basename(annotationPath) : "",
+    },
+  };
+  writeJson(manifestPath, manifest);
+  fs.writeFileSync(indexPath, renderSnapshotVisualPackHtml(manifest));
+  return {
+    dir: relativePath(outputDir),
+    index: relativePath(indexPath),
+    manifest: relativePath(manifestPath),
+    annotation: annotationSvg ? relativePath(annotationPath) : "",
+    baselineJson: relativePath(baselineJson),
+    currentJson: relativePath(currentJson),
+    baselineScreenshot: relativePath(baselineScreenshot),
+    currentScreenshot: relativePath(currentScreenshot),
+  };
 }
 
 function assertFlowName(name: string): void {
@@ -655,7 +921,7 @@ async function captureSnapshotPayload(page: PlaywrightPage): Promise<SnapshotPay
   };
 }
 
-function compareSnapshotData(
+export function compareSnapshotData(
   baseline: Partial<SnapshotPayload> | null,
   current: Partial<SnapshotPayload>,
   { baselineScreenshotHash = "", currentScreenshotHash = "" }: { baselineScreenshotHash?: string; currentScreenshotHash?: string } = {},
@@ -1750,6 +2016,15 @@ async function main(): Promise<void> {
       baselineScreenshotHash: baselineSnapshot.screenshotHash || fileHash(snapshotScreenshotPath(snapshotName)),
       currentScreenshotHash: currentSnapshot.screenshotHash,
     });
+    const visualPack = createSnapshotVisualPack({
+      name: snapshotName,
+      stamp,
+      baselineJsonPath: baselineJson,
+      currentJsonPath: artifactJson,
+      baselineScreenshotPath: snapshotScreenshotPath(snapshotName),
+      currentScreenshotPath: artifactScreenshot,
+      comparison,
+    });
     recordSession(session, {
       lastCommand: "compare-snapshot",
       lastUrl: url,
@@ -1762,6 +2037,7 @@ async function main(): Promise<void> {
       current: path.relative(process.cwd(), artifactJson),
       screenshot: path.relative(process.cwd(), artifactScreenshot),
       comparison,
+      visualPack,
     });
     return;
   }
@@ -2193,10 +2469,12 @@ async function main(): Promise<void> {
   usage();
 }
 
-main().catch((error: unknown) => {
-  console.error(cleanError(error));
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    console.error(cleanError(error));
+    process.exit(1);
+  });
+}
 
 function cleanError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

@@ -16,6 +16,7 @@ const readinessFixturePath = path.join(fixtureRoot, "readiness-fixture.json");
 const baselinePath = path.join(fixtureRoot, "baseline.json");
 const currentPath = path.join(fixtureRoot, "current.json");
 const screenshotPath = path.join(fixtureRoot, "screenshot.png");
+const visualDir = path.join(fixtureRoot, "visual-pack");
 const pageScreenshot = path.join(fixtureRoot, "page.png");
 const sessionBundlePath = path.join(fixtureRoot, "session-bundle.json");
 const markdownOut = path.join(fixtureRoot, "preview.md");
@@ -27,6 +28,12 @@ async function main(): Promise<void> {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=", "base64");
   fs.writeFileSync(screenshotPath, png);
   fs.writeFileSync(pageScreenshot, png);
+  fs.mkdirSync(visualDir, { recursive: true });
+  fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+  fs.writeFileSync(path.join(visualDir, "baseline.png"), png);
+  fs.writeFileSync(path.join(visualDir, "current.png"), png);
   fs.writeFileSync(sessionBundlePath, JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -80,6 +87,12 @@ async function main(): Promise<void> {
         baseline: baselinePath,
         current: currentPath,
         screenshot: screenshotPath,
+        visualPack: {
+          dir: visualDir,
+          index: path.join(visualDir, "index.html"),
+          manifest: path.join(visualDir, "manifest.json"),
+          annotation: path.join(visualDir, "annotation.svg"),
+        },
         comparison: {
           missingSelectors: ["h1"],
           changedSelectors: [],
@@ -149,8 +162,9 @@ async function main(): Promise<void> {
     recommendation?: string;
     readiness?: { status?: string; attempts?: number };
     context?: { branchSlug?: string; shortSha?: string };
-    deploy?: { screenshotManifest?: string; pathResults?: Array<{ status?: string; screenshot?: string }> };
+    deploy?: { screenshotManifest?: string; visualPack?: { index?: string; manifest?: string }; pathResults?: Array<{ status?: string; screenshot?: string }> };
     qa?: { snapshotResult?: { status?: string; annotation?: string }; findings?: Array<{ title?: string }> };
+    visualPack?: { index?: string; manifest?: string };
   };
 
   assert.equal(report.url, "https://preview-42.example.com");
@@ -162,6 +176,8 @@ async function main(): Promise<void> {
   assert.equal(report.context?.branchSlug, "feat-42-preview-ready");
   assert.equal(report.context?.shortSha, "abcdef1");
   assert.ok(report.deploy?.screenshotManifest);
+  assert.ok(String(report.deploy?.visualPack?.index).includes("visual/index.html"));
+  assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
   assert.ok(report.deploy?.pathResults?.some((entry) => entry.status === "warning" && String(entry.screenshot).includes("root-desktop")));
   assert.equal(report.qa?.snapshotResult?.status, "changed");
   assert.ok(report.qa?.findings?.some((entry) => String(entry.title).includes("Expected UI selectors")));
@@ -180,6 +196,7 @@ async function main(): Promise<void> {
   assert.match(markdown, /Workflow run: https:\/\/github.com\/anup4khandelwal\/codex-stack\/actions\/runs\/123456/);
   assert.match(markdown, /## Deploy checks/);
   assert.match(markdown, /root-desktop\.png/);
+  assert.match(markdown, /Visual pack/);
   assert.match(comment, /Expected UI selectors are missing/);
 
   console.log("preview-verify spec passed");

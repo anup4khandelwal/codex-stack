@@ -16,6 +16,7 @@ const readinessFixturePath = path.join(fixtureRoot, "readiness-fixture.json");
 const baselinePath = path.join(fixtureRoot, "baseline.json");
 const currentPath = path.join(fixtureRoot, "current.json");
 const screenshotPath = path.join(fixtureRoot, "snapshot-screenshot.png");
+const visualDir = path.join(fixtureRoot, "visual-pack");
 const pageScreenshotA = path.join(fixtureRoot, "page-a.png");
 const pageScreenshotB = path.join(fixtureRoot, "page-b.png");
 const sessionBundlePath = path.join(fixtureRoot, "session-bundle.json");
@@ -29,6 +30,12 @@ async function main(): Promise<void> {
   fs.writeFileSync(screenshotPath, png);
   fs.writeFileSync(pageScreenshotA, png);
   fs.writeFileSync(pageScreenshotB, png);
+  fs.mkdirSync(visualDir, { recursive: true });
+  fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+  fs.writeFileSync(path.join(visualDir, "baseline.png"), png);
+  fs.writeFileSync(path.join(visualDir, "current.png"), png);
   fs.writeFileSync(sessionBundlePath, JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -94,6 +101,12 @@ async function main(): Promise<void> {
         baseline: baselinePath,
         current: currentPath,
         screenshot: screenshotPath,
+        visualPack: {
+          dir: visualDir,
+          index: path.join(visualDir, "index.html"),
+          manifest: path.join(visualDir, "manifest.json"),
+          annotation: path.join(visualDir, "annotation.svg"),
+        },
         comparison: {
           missingSelectors: ["h1"],
           changedSelectors: [],
@@ -176,6 +189,7 @@ async function main(): Promise<void> {
     checks?: { paths?: string[]; devices?: string[]; strictHttp?: boolean };
     pathResults?: Array<{ path?: string; device?: string; status?: string; httpStatus?: number | null; screenshot?: string; console?: { errors?: string[]; warnings?: string[] } }>;
     qa?: { status?: string; flowResults?: Array<{ name?: string }>; snapshotResults?: Array<{ name?: string; status?: string; annotation?: string }>; findings?: Array<{ title?: string }> };
+    visualPack?: { index?: string; manifest?: string };
     screenshotManifest?: string;
   };
 
@@ -196,6 +210,8 @@ async function main(): Promise<void> {
   assert.ok(report.qa?.snapshotResults?.some((entry) => entry.name === "portal-dashboard" && entry.status === "changed"));
   assert.ok(report.qa?.findings?.some((entry) => String(entry.title).includes("Expected UI selectors")));
   assert.ok(report.screenshotManifest);
+  assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
+  assert.ok(String(report.visualPack?.manifest).includes("visual/manifest.json"));
 
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(jsonOut));
@@ -204,6 +220,10 @@ async function main(): Promise<void> {
   assert.ok(fs.existsSync(path.join(publishDir, "report.json")));
   assert.ok(fs.existsSync(path.join(publishDir, "comment.md")));
   assert.ok(fs.existsSync(path.join(publishDir, "screenshots.json")));
+  assert.ok(fs.existsSync(path.join(publishDir, "visual", "index.html")));
+  assert.ok(fs.existsSync(path.join(publishDir, "visual", "manifest.json")));
+  const visualSnapshotDirs = fs.readdirSync(path.join(publishDir, "visual", "snapshots"));
+  assert.ok(visualSnapshotDirs.some((entry) => fs.existsSync(path.join(publishDir, "visual", "snapshots", entry, "index.html"))));
   assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "root-desktop.png")));
   assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "dashboard-mobile.png")));
 
@@ -214,6 +234,7 @@ async function main(): Promise<void> {
   assert.match(markdown, /root-desktop\.png/);
   assert.match(markdown, /dashboard-mobile\.png/);
   assert.match(markdown, /portal-dashboard/);
+  assert.match(markdown, /Visual pack/);
   assert.match(comment, /Deploy URL: https:\/\/preview-77\.example\.com/);
 
   console.log("deploy-verify spec passed");

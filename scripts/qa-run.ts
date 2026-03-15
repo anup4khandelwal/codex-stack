@@ -58,6 +58,17 @@ interface SnapshotComparison {
   screenshotChanged?: boolean;
 }
 
+interface VisualPackRef {
+  dir: string;
+  index: string;
+  manifest: string;
+  annotation?: string;
+  baselineJson?: string;
+  currentJson?: string;
+  baselineScreenshot?: string;
+  currentScreenshot?: string;
+}
+
 interface SnapshotCommandResult {
   status?: string;
   baseline?: string;
@@ -65,6 +76,7 @@ interface SnapshotCommandResult {
   current?: string;
   screenshot?: string;
   comparison?: SnapshotComparison;
+  visualPack?: VisualPackRef;
 }
 
 interface SnapshotEvidence {
@@ -118,6 +130,7 @@ interface QaSnapshotSummary {
   current: string;
   screenshot: string;
   annotation: string;
+  visualPack?: VisualPackRef | null;
 }
 
 interface PublishedArtifacts {
@@ -128,6 +141,7 @@ interface PublishedArtifacts {
   screenshot: string;
   current: string;
   baseline: string;
+  visualPack?: VisualPackRef | null;
 }
 
 interface QaArtifacts {
@@ -136,6 +150,7 @@ interface QaArtifacts {
   latestJson?: string;
   latestMarkdown?: string;
   annotation?: string;
+  visualPack?: VisualPackRef | null;
   trendsJson?: string;
   trendsMarkdown?: string;
   published?: PublishedArtifacts;
@@ -362,6 +377,25 @@ function asSnapshotComparison(value: unknown): SnapshotComparison {
   };
 }
 
+function asVisualPackRef(value: unknown): VisualPackRef | undefined {
+  const obj = asObject(value);
+  if (!obj) return undefined;
+  const dir = asString(obj.dir);
+  const index = asString(obj.index);
+  const manifest = asString(obj.manifest);
+  if (!dir && !index && !manifest) return undefined;
+  return {
+    dir,
+    index,
+    manifest,
+    annotation: asString(obj.annotation),
+    baselineJson: asString(obj.baselineJson),
+    currentJson: asString(obj.currentJson),
+    baselineScreenshot: asString(obj.baselineScreenshot),
+    currentScreenshot: asString(obj.currentScreenshot),
+  };
+}
+
 function asSnapshotCommandResult(value: unknown): SnapshotCommandResult {
   const obj = asObject(value);
   return {
@@ -371,6 +405,7 @@ function asSnapshotCommandResult(value: unknown): SnapshotCommandResult {
     current: asString(obj?.current),
     screenshot: asString(obj?.screenshot),
     comparison: obj?.comparison ? asSnapshotComparison(obj.comparison) : undefined,
+    visualPack: obj?.visualPack ? asVisualPackRef(obj.visualPack) : undefined,
   };
 }
 
@@ -521,6 +556,8 @@ function buildMarkdown(report: QaReport): string {
         `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
         report.snapshotResult.screenshot ? `- Screenshot: ${report.snapshotResult.screenshot}` : "",
         report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
+        report.snapshotResult.visualPack?.index ? `- Visual pack: ${report.snapshotResult.visualPack.index}` : "",
+        report.snapshotResult.visualPack?.manifest ? `- Visual manifest: ${report.snapshotResult.visualPack.manifest}` : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -1001,9 +1038,10 @@ function buildReport({
           current: snapshotEvidence.result.current || "",
           screenshot: snapshotEvidence.result.screenshot || "",
           annotation: "",
+          visualPack: snapshotEvidence.result.visualPack || null,
         }
       : null,
-    artifacts: {},
+    artifacts: snapshotEvidence?.result.visualPack ? { visualPack: snapshotEvidence.result.visualPack } : {},
   };
 }
 
@@ -1018,6 +1056,9 @@ function attachSnapshotAnnotation(report: QaReport, snapshotEvidence: SnapshotEv
     if (item.evidence.snapshot) {
       item.evidence.annotation = artifact.annotation;
       item.evidence.screenshot = item.evidence.screenshot || artifact.screenshot;
+      if (report.snapshotResult?.visualPack?.index) {
+        item.evidence.visualPack = report.snapshotResult.visualPack.index;
+      }
     }
   }
   report.artifacts.annotation = artifact.annotation;
@@ -1036,12 +1077,45 @@ function copyIfExists(sourcePath: string, targetPath: string): string {
   return targetPath;
 }
 
+function copyTree(sourceDir: string, targetDir: string): void {
+  const resolvedSource = resolveMaybeRelative(sourceDir);
+  if (!resolvedSource || !fs.existsSync(resolvedSource)) return;
+  ensureDir(targetDir);
+  for (const entry of fs.readdirSync(resolvedSource, { withFileTypes: true })) {
+    const sourcePath = path.join(resolvedSource, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) copyTree(sourcePath, targetPath);
+    else fs.copyFileSync(sourcePath, targetPath);
+  }
+}
+
 function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>): void {
   if (report.snapshotResult) {
     if (pathMap[report.snapshotResult.baseline]) report.snapshotResult.baseline = pathMap[report.snapshotResult.baseline];
     if (pathMap[report.snapshotResult.current]) report.snapshotResult.current = pathMap[report.snapshotResult.current];
     if (pathMap[report.snapshotResult.screenshot]) report.snapshotResult.screenshot = pathMap[report.snapshotResult.screenshot];
     if (pathMap[report.snapshotResult.annotation]) report.snapshotResult.annotation = pathMap[report.snapshotResult.annotation];
+    if (report.snapshotResult.visualPack) {
+      if (pathMap[report.snapshotResult.visualPack.dir]) report.snapshotResult.visualPack.dir = pathMap[report.snapshotResult.visualPack.dir];
+      if (pathMap[report.snapshotResult.visualPack.index]) report.snapshotResult.visualPack.index = pathMap[report.snapshotResult.visualPack.index];
+      if (pathMap[report.snapshotResult.visualPack.manifest]) report.snapshotResult.visualPack.manifest = pathMap[report.snapshotResult.visualPack.manifest];
+      if (report.snapshotResult.visualPack.annotation && pathMap[report.snapshotResult.visualPack.annotation]) report.snapshotResult.visualPack.annotation = pathMap[report.snapshotResult.visualPack.annotation];
+      if (report.snapshotResult.visualPack.baselineJson && pathMap[report.snapshotResult.visualPack.baselineJson]) report.snapshotResult.visualPack.baselineJson = pathMap[report.snapshotResult.visualPack.baselineJson];
+      if (report.snapshotResult.visualPack.currentJson && pathMap[report.snapshotResult.visualPack.currentJson]) report.snapshotResult.visualPack.currentJson = pathMap[report.snapshotResult.visualPack.currentJson];
+      if (report.snapshotResult.visualPack.baselineScreenshot && pathMap[report.snapshotResult.visualPack.baselineScreenshot]) report.snapshotResult.visualPack.baselineScreenshot = pathMap[report.snapshotResult.visualPack.baselineScreenshot];
+      if (report.snapshotResult.visualPack.currentScreenshot && pathMap[report.snapshotResult.visualPack.currentScreenshot]) report.snapshotResult.visualPack.currentScreenshot = pathMap[report.snapshotResult.visualPack.currentScreenshot];
+    }
+  }
+
+  if (report.artifacts.visualPack) {
+    if (pathMap[report.artifacts.visualPack.dir]) report.artifacts.visualPack.dir = pathMap[report.artifacts.visualPack.dir];
+    if (pathMap[report.artifacts.visualPack.index]) report.artifacts.visualPack.index = pathMap[report.artifacts.visualPack.index];
+    if (pathMap[report.artifacts.visualPack.manifest]) report.artifacts.visualPack.manifest = pathMap[report.artifacts.visualPack.manifest];
+    if (report.artifacts.visualPack.annotation && pathMap[report.artifacts.visualPack.annotation]) report.artifacts.visualPack.annotation = pathMap[report.artifacts.visualPack.annotation];
+    if (report.artifacts.visualPack.baselineJson && pathMap[report.artifacts.visualPack.baselineJson]) report.artifacts.visualPack.baselineJson = pathMap[report.artifacts.visualPack.baselineJson];
+    if (report.artifacts.visualPack.currentJson && pathMap[report.artifacts.visualPack.currentJson]) report.artifacts.visualPack.currentJson = pathMap[report.artifacts.visualPack.currentJson];
+    if (report.artifacts.visualPack.baselineScreenshot && pathMap[report.artifacts.visualPack.baselineScreenshot]) report.artifacts.visualPack.baselineScreenshot = pathMap[report.artifacts.visualPack.baselineScreenshot];
+    if (report.artifacts.visualPack.currentScreenshot && pathMap[report.artifacts.visualPack.currentScreenshot]) report.artifacts.visualPack.currentScreenshot = pathMap[report.artifacts.visualPack.currentScreenshot];
   }
 
   for (const item of report.findings) {
@@ -1077,6 +1151,31 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
     }
   }
 
+  const sourceVisualPack = report.snapshotResult?.visualPack || report.artifacts.visualPack || null;
+  let publishedVisualPack: VisualPackRef | null = null;
+  if (sourceVisualPack?.dir) {
+    const visualDir = path.join(outputDir, "visual");
+    copyTree(sourceVisualPack.dir, visualDir);
+    publishedVisualPack = {
+      dir: relative(visualDir),
+      index: fs.existsSync(path.join(visualDir, "index.html")) ? relative(path.join(visualDir, "index.html")) : "",
+      manifest: fs.existsSync(path.join(visualDir, "manifest.json")) ? relative(path.join(visualDir, "manifest.json")) : "",
+      annotation: fs.existsSync(path.join(visualDir, "annotation.svg")) ? relative(path.join(visualDir, "annotation.svg")) : "",
+      baselineJson: fs.existsSync(path.join(visualDir, "baseline.json")) ? relative(path.join(visualDir, "baseline.json")) : "",
+      currentJson: fs.existsSync(path.join(visualDir, "current.json")) ? relative(path.join(visualDir, "current.json")) : "",
+      baselineScreenshot: fs.existsSync(path.join(visualDir, "baseline.png")) ? relative(path.join(visualDir, "baseline.png")) : "",
+      currentScreenshot: fs.existsSync(path.join(visualDir, "current.png")) ? relative(path.join(visualDir, "current.png")) : "",
+    };
+    pathMap[sourceVisualPack.dir] = publishedVisualPack.dir;
+    pathMap[sourceVisualPack.index] = publishedVisualPack.index;
+    pathMap[sourceVisualPack.manifest] = publishedVisualPack.manifest;
+    if (sourceVisualPack.annotation && publishedVisualPack.annotation) pathMap[sourceVisualPack.annotation] = publishedVisualPack.annotation;
+    if (sourceVisualPack.baselineJson && publishedVisualPack.baselineJson) pathMap[sourceVisualPack.baselineJson] = publishedVisualPack.baselineJson;
+    if (sourceVisualPack.currentJson && publishedVisualPack.currentJson) pathMap[sourceVisualPack.currentJson] = publishedVisualPack.currentJson;
+    if (sourceVisualPack.baselineScreenshot && publishedVisualPack.baselineScreenshot) pathMap[sourceVisualPack.baselineScreenshot] = publishedVisualPack.baselineScreenshot;
+    if (sourceVisualPack.currentScreenshot && publishedVisualPack.currentScreenshot) pathMap[sourceVisualPack.currentScreenshot] = publishedVisualPack.currentScreenshot;
+  }
+
   rewriteEvidencePaths(published, pathMap);
   const publishedJsonPath = path.join(outputDir, "report.json");
   const publishedMarkdownPath = path.join(outputDir, "report.md");
@@ -1090,6 +1189,7 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
       screenshot: pathMap[report.snapshotResult?.screenshot || ""] || "",
       current: pathMap[report.snapshotResult?.current || ""] || "",
       baseline: pathMap[report.snapshotResult?.baseline || ""] || "",
+      visualPack: publishedVisualPack,
     },
   };
 
