@@ -88,6 +88,7 @@ run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/browse-browser-profile.spec.ts >/tmp/codex-stack-browse-browser-profile-spec.log
+run_ts scripts/browse-snapshot-visual-pack.spec.ts >/tmp/codex-stack-browse-snapshot-pack-spec.log
 run_ts scripts/preview-verify.ts --help >/tmp/codex-stack-preview-help.log
 run_ts scripts/deploy-verify.ts --help >/tmp/codex-stack-deploy-help.log
 run_ts scripts/build-preview-site.ts --help >/tmp/codex-stack-build-preview-help.log
@@ -106,7 +107,10 @@ grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
 run_ts scripts/weekly-digest.ts --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --publish-dir /tmp/codex-stack-weekly-publish --no-github >/tmp/codex-stack-weekly.log
 mkdir -p .codex-stack/browse/snapshots .codex-stack/browse/artifacts
+mkdir -p .codex-stack/browse/artifacts/example-visual
 run_eval "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=','base64'))" > .codex-stack/browse/artifacts/example-1.png
+run_eval "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=','base64'))" > .codex-stack/browse/artifacts/example-visual/baseline.png
+run_eval "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=','base64'))" > .codex-stack/browse/artifacts/example-visual/current.png
 cat > .codex-stack/browse/snapshots/example.json <<'JSON'
 {
   "name": "example",
@@ -124,6 +128,17 @@ cat > .codex-stack/browse/artifacts/example-1.json <<'JSON'
   "elements": []
 }
 JSON
+cat > .codex-stack/browse/artifacts/example-visual/index.html <<'HTML'
+<html><body>visual pack</body></html>
+HTML
+cat > .codex-stack/browse/artifacts/example-visual/manifest.json <<'JSON'
+{
+  "status": "changed"
+}
+JSON
+cat > .codex-stack/browse/artifacts/example-visual/annotation.svg <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg"></svg>
+SVG
 cat > /tmp/codex-stack-qa-fixture.json <<'JSON'
 {
   "url": "https://example.com/demo",
@@ -134,6 +149,14 @@ cat > /tmp/codex-stack-qa-fixture.json <<'JSON'
       "baseline": ".codex-stack/browse/snapshots/example.json",
       "current": ".codex-stack/browse/artifacts/example-1.json",
       "screenshot": ".codex-stack/browse/artifacts/example-1.png",
+      "visualPack": {
+        "dir": ".codex-stack/browse/artifacts/example-visual",
+        "index": ".codex-stack/browse/artifacts/example-visual/index.html",
+        "manifest": ".codex-stack/browse/artifacts/example-visual/manifest.json",
+        "annotation": ".codex-stack/browse/artifacts/example-visual/annotation.svg",
+        "baselineScreenshot": ".codex-stack/browse/artifacts/example-visual/baseline.png",
+        "currentScreenshot": ".codex-stack/browse/artifacts/example-visual/current.png"
+      },
       "comparison": {
         "missingSelectors": ["h1"],
         "changedSelectors": [],
@@ -164,6 +187,8 @@ test -f docs/qa/smoke-fixture/report.md
 test -f docs/qa/smoke-fixture/report.json
 test -f docs/qa/smoke-fixture/annotation.svg
 test -f docs/qa/smoke-fixture/screenshot.png
+test -f docs/qa/smoke-fixture/visual/index.html
+test -f docs/qa/smoke-fixture/visual/manifest.json
 run_ts scripts/render-qa-pages.ts --out .site >/tmp/codex-stack-qa-pages.log
 test -f .site/index.html
 test -f .site/qa/index.html
@@ -171,6 +196,7 @@ test -f .site/qa/smoke-fixture/index.html
 test -f .site/manifest.json
 test -f .site/.nojekyll
 grep -q 'codex-stack QA Reports' .site/index.html
+grep -q 'Visual pack' .site/index.html
 grep -q 'smoke-fixture' .site/manifest.json
 grep -q 'github.io' .site/manifest.json
 bun run build >/tmp/codex-stack-preview-build.log

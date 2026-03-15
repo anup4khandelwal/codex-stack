@@ -49,6 +49,7 @@ interface PreviewReport {
   readiness: ReadinessResult;
   qa: PreviewQaCompat;
   artifactRoot: string;
+  visualPack?: DeployReport["visualPack"];
   runUrl: string;
   recommendation: string;
   deploy: DeployReport;
@@ -185,6 +186,8 @@ function renderMarkdown(report: PreviewReport): string {
     "",
     `- Artifact root: \`${relative(report.artifactRoot)}\``,
     report.deploy.screenshotManifest ? `- Screenshot manifest: \`${report.deploy.screenshotManifest}\`` : "",
+    report.visualPack?.index ? `- Visual pack: \`${report.visualPack.index}\`` : "",
+    report.visualPack?.manifest ? `- Visual manifest: \`${report.visualPack.manifest}\`` : "",
     published.markdown ? `- QA report: \`${published.markdown}\`` : "",
     published.json ? `- QA json: \`${published.json}\`` : "",
     published.annotation ? `- Annotation: \`${published.annotation}\`` : "",
@@ -221,6 +224,7 @@ async function main(): Promise<void> {
     readiness: deploy.readiness,
     qa: buildCompatQa(deploy),
     artifactRoot: deploy.artifactRoot,
+    visualPack: deploy.visualPack,
     runUrl: deploy.runUrl,
     recommendation: deploy.recommendation,
     deploy,

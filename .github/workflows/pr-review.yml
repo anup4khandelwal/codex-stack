@@ -79,6 +79,7 @@ jobs:
           owner="${GITHUB_REPOSITORY%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           preview_url="https://${owner}.github.io/${repo}/pr-preview/pr-${PR_NUMBER}/"
+          echo "CODEX_STACK_PREVIEW_PAGES_ROOT=${preview_url}__codex/" >> "$GITHUB_ENV"
           args=(
             "--repo" "${GITHUB_REPOSITORY}"
             "--branch" "${GITHUB_HEAD_REF}"
@@ -136,8 +137,31 @@ jobs:
           )
           if [ -f preview.json ]; then
             args+=("--preview-input" "preview.json")
+            if [ -n "${CODEX_STACK_PREVIEW_PAGES_ROOT:-}" ]; then
+              args+=("--preview-pages-root" "${CODEX_STACK_PREVIEW_PAGES_ROOT}")
+            fi
           fi
           bun scripts/render-pr-review.ts "${args[@]}"
+
+      - name: Attach PR review evidence to preview site
+        if: github.event.pull_request.head.repo.full_name == github.repository && hashFiles('preview.json') != ''
+        run: |
+          set -euo pipefail
+          mkdir -p .preview-site/__codex
+          cp -R preview-artifacts/. .preview-site/__codex/
+          cp preview.md preview.json preview-comment.md review.md review.json review-summary.json .preview-site/__codex/
+
+      - name: Republish PR preview with review evidence
+        if: github.event.pull_request.head.repo.full_name == github.repository && hashFiles('preview.json') != ''
+        uses: JamesIves/github-pages-deploy-action@v4.8.0
+        with:
+          branch: gh-pages
+          folder: .preview-site
+          target-folder: pr-preview/pr-${{ github.event.pull_request.number }}
+          clean: true
+          force: false
+          single-commit: true
+          attempt-limit: 3
 
       - name: Add step summary
         run: cat review.md >> "$GITHUB_STEP_SUMMARY"

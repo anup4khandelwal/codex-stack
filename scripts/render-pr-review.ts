@@ -42,6 +42,10 @@ interface PreviewQaReport {
       json?: string;
       annotation?: string;
       screenshot?: string;
+      visualPack?: {
+        index?: string;
+        manifest?: string;
+      } | null;
     };
   };
 }
@@ -59,6 +63,10 @@ interface PreviewReport {
   qa?: PreviewQaReport;
   deploy?: {
     screenshotManifest?: string;
+    visualPack?: {
+      index?: string;
+      manifest?: string;
+    } | null;
     pathResults?: Array<{
       path?: string;
       device?: string;
@@ -70,17 +78,21 @@ interface PreviewReport {
         warnings?: string[];
       };
     }>;
-    qa?: {
-      snapshotResults?: Array<{
-        name?: string;
-        targetPath?: string;
-        device?: string;
-        status?: string;
-        report?: string;
-        annotation?: string;
-        screenshot?: string;
-      }>;
-    };
+      qa?: {
+        snapshotResults?: Array<{
+          name?: string;
+          targetPath?: string;
+          device?: string;
+          status?: string;
+          report?: string;
+          annotation?: string;
+          screenshot?: string;
+          visualPack?: {
+            index?: string;
+            manifest?: string;
+          } | null;
+        }>;
+      };
   };
 }
 
@@ -101,6 +113,7 @@ interface ReviewSummary {
 interface ParsedArgs {
   input: string;
   previewInput: string;
+  previewPagesRoot: string;
   markdownOut: string;
   summaryOut: string;
   failOnCritical: boolean;
@@ -111,7 +124,7 @@ function usage(): never {
   console.log(`render-pr-review
 
 Usage:
-  bun scripts/render-pr-review.ts --input <review.json> [--preview-input <preview.json>] [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
+  bun scripts/render-pr-review.ts --input <review.json> [--preview-input <preview.json>] [--preview-pages-root <url>] [--markdown-out <path>] [--summary-out <path>] [--fail-on-critical] [--json]
 `);
   process.exit(0);
 }
@@ -120,6 +133,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
     input: "",
     previewInput: "",
+    previewPagesRoot: "",
     markdownOut: "",
     summaryOut: "",
     failOnCritical: false,
@@ -132,6 +146,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       i += 1;
     } else if (arg === "--preview-input") {
       out.previewInput = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--preview-pages-root") {
+      out.previewPagesRoot = argv[i + 1] || "";
       i += 1;
     } else if (arg === "--markdown-out") {
       out.markdownOut = argv[i + 1] || "";
@@ -167,6 +184,15 @@ function readPreviewJson(filePath: string): PreviewReport {
 
 function countBySeverity(findings: ReviewFinding[], severity: string): number {
   return findings.filter((item) => item.severity === severity).length;
+}
+
+function withTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+function absoluteLink(root: string, relativePath: string): string {
+  if (!root || !relativePath) return "";
+  return new URL(relativePath.replace(/^\/+/, ""), withTrailingSlash(root)).toString();
 }
 
 function findingLines(findings: ReviewFinding[]): string[] {
@@ -216,11 +242,14 @@ function deploySnapshotLines(preview: PreviewReport | null): string[] {
   });
 }
 
-function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary): string {
+function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary, previewPagesRoot: string): string {
   if (!preview) return "";
   const findings = Array.isArray(preview.qa?.findings) ? preview.qa?.findings : [];
   const published = preview.qa?.artifacts?.published || {};
   const snapshot = preview.qa?.snapshotResult;
+  const hostedVisualPack = absoluteLink(previewPagesRoot, "visual/index.html");
+  const hostedVisualManifest = absoluteLink(previewPagesRoot, "visual/manifest.json");
+  const hostedScreenshotManifest = absoluteLink(previewPagesRoot, "screenshots.json");
   return `
 ## Preview QA
 
@@ -232,10 +261,14 @@ function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSumm
 - Recommendation: ${preview.recommendation || preview.qa?.recommendation || "n/a"}
 ${preview.url ? `- Preview URL: ${preview.url}` : ""}
 ${preview.runUrl ? `- Workflow run: ${preview.runUrl}` : ""}
+${hostedVisualPack ? `- Hosted visual pack: ${hostedVisualPack}` : ""}
+${hostedVisualManifest ? `- Hosted visual manifest: ${hostedVisualManifest}` : ""}
 ${published.markdown ? `- QA report: \`${published.markdown}\`` : ""}
 ${published.annotation ? `- Annotation: \`${published.annotation}\`` : ""}
 ${published.screenshot ? `- Screenshot: \`${published.screenshot}\`` : ""}
 ${preview.deploy?.screenshotManifest ? `- Screenshot manifest: \`${preview.deploy.screenshotManifest}\`` : ""}
+${hostedScreenshotManifest ? `- Hosted screenshot manifest: ${hostedScreenshotManifest}` : ""}
+${preview.deploy?.visualPack?.index ? `- Local visual pack: \`${preview.deploy.visualPack.index}\`` : ""}
 ${snapshot?.status ? `- Snapshot: ${snapshot.status}${snapshot.name ? ` (${snapshot.name})` : ""}` : ""}
 
 ### Preview findings
@@ -252,7 +285,7 @@ ${deploySnapshotLines(preview).join("\n")}
 `;
 }
 
-function renderMarkdown(review: ReviewReport, summary: ReviewSummary, preview: PreviewReport | null): string {
+function renderMarkdown(review: ReviewReport, summary: ReviewSummary, preview: PreviewReport | null, previewPagesRoot: string): string {
   return `<!-- codex-stack:pr-review -->
 # codex-stack PR review
 
@@ -267,7 +300,7 @@ function renderMarkdown(review: ReviewReport, summary: ReviewSummary, preview: P
 ## Findings
 
 ${findingLines(review.findings ?? []).join("\n")}
-${renderPreviewSection(preview, summary)}`;
+${renderPreviewSection(preview, summary, previewPagesRoot)}`;
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -287,7 +320,7 @@ summary.previewIncluded = Boolean(preview);
 summary.previewStatus = preview?.status || "";
 summary.previewBlocking = ["critical", "error"].includes(String(preview?.status || "").toLowerCase());
 summary.blocking = summary.criticalCount > 0 || summary.previewBlocking;
-const markdown = renderMarkdown(review, summary, preview);
+const markdown = renderMarkdown(review, summary, preview, args.previewPagesRoot);
 
 if (args.markdownOut) {
   const target = path.resolve(process.cwd(), args.markdownOut);

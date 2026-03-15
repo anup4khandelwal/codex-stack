@@ -99,11 +99,23 @@ interface QaFlowResult {
   steps?: number;
 }
 
+interface VisualPackRef {
+  dir?: string;
+  index?: string;
+  manifest?: string;
+  annotation?: string;
+  baselineJson?: string;
+  currentJson?: string;
+  baselineScreenshot?: string;
+  currentScreenshot?: string;
+}
+
 interface QaPublishedArtifacts {
   markdown?: string;
   json?: string;
   annotation?: string;
   screenshot?: string;
+  visualPack?: VisualPackRef | null;
 }
 
 interface QaArtifacts {
@@ -111,6 +123,7 @@ interface QaArtifacts {
   json?: string;
   annotation?: string;
   screenshot?: string;
+  visualPack?: VisualPackRef | null;
   published?: QaPublishedArtifacts;
 }
 
@@ -119,6 +132,7 @@ interface QaSnapshotReport {
   status?: string;
   annotation?: string;
   screenshot?: string;
+  visualPack?: VisualPackRef | null;
 }
 
 interface QaRunReport {
@@ -139,6 +153,7 @@ export interface DeploySnapshotResult {
   report: string;
   annotation: string;
   screenshot: string;
+  visualPack?: VisualPackRef | null;
 }
 
 export interface DeployQaSummary {
@@ -157,6 +172,12 @@ interface ScreenshotManifestEntry {
   url: string;
   status: DeployStatus;
   screenshot: string;
+}
+
+interface DeployVisualPack {
+  dir: string;
+  index: string;
+  manifest: string;
 }
 
 export interface DeployReport {
@@ -179,6 +200,7 @@ export interface DeployReport {
   qa: DeployQaSummary;
   artifactRoot: string;
   screenshotManifest: string;
+  visualPack?: DeployVisualPack | null;
   runUrl: string;
   recommendation: string;
 }
@@ -575,6 +597,105 @@ function copyFileIfPresent(source: string, destination: string): string {
   ensureDir(path.dirname(destination));
   fs.copyFileSync(resolved, destination);
   return relative(destination);
+}
+
+function copyTree(sourceDir: string, targetDir: string): void {
+  const resolved = path.isAbsolute(sourceDir) ? sourceDir : path.resolve(process.cwd(), sourceDir);
+  if (!fs.existsSync(resolved)) return;
+  ensureDir(targetDir);
+  for (const entry of fs.readdirSync(resolved, { withFileTypes: true })) {
+    const sourcePath = path.join(resolved, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) copyTree(sourcePath, targetPath);
+    else fs.copyFileSync(sourcePath, targetPath);
+  }
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function relFrom(root: string, targetPath: string): string {
+  return path.relative(root, targetPath).replace(/\\/g, "/");
+}
+
+function renderDeployVisualIndex(manifest: {
+  title: string;
+  generatedAt: string;
+  status: DeployStatus;
+  previewUrl: string;
+  screenshotManifest: string;
+  screenshots: Array<Record<string, unknown>>;
+  snapshots: Array<Record<string, unknown>>;
+}): string {
+  const screenshotCards = manifest.screenshots.length
+    ? manifest.screenshots.map((item) => `
+      <article class="card">
+        <h2>${escapeHtml(`${item.path || "/"} @ ${item.device || "desktop"}`)}</h2>
+        <p>Status: <strong>${escapeHtml(item.status || "unknown")}</strong> • HTTP: ${escapeHtml(item.httpStatus ?? "n/a")}</p>
+        ${(item.consoleErrors || 0) || (item.consoleWarnings || 0) ? `<p>Console: ${escapeHtml(`${item.consoleErrors || 0} errors, ${item.consoleWarnings || 0} warnings`)}</p>` : ""}
+        ${item.screenshot ? `<img src="${escapeHtml(String(item.screenshot))}" alt="${escapeHtml(`${item.path || "/"} ${item.device || "desktop"}`)}">` : "<p>No screenshot recorded.</p>"}
+      </article>
+    `).join("\n")
+    : "<p>No deploy screenshots recorded.</p>";
+
+  const snapshotCards = manifest.snapshots.length
+    ? manifest.snapshots.map((item) => `
+      <article class="card">
+        <h2>${escapeHtml(String(item.name || "snapshot"))}</h2>
+        <p>Status: <strong>${escapeHtml(item.status || "unknown")}</strong> • ${escapeHtml(`${item.targetPath || "/"} @ ${item.device || "desktop"}`)}</p>
+        ${item.index ? `<p><a href="${escapeHtml(String(item.index))}">Open visual pack</a></p>` : ""}
+        ${item.manifest ? `<p><a href="${escapeHtml(String(item.manifest))}">Manifest JSON</a></p>` : ""}
+        ${item.annotation ? `<object data="${escapeHtml(String(item.annotation))}" type="image/svg+xml" aria-label="Snapshot annotation"></object>` : item.screenshot ? `<img src="${escapeHtml(String(item.screenshot))}" alt="${escapeHtml(String(item.name || "snapshot"))}">` : "<p>No visual evidence recorded.</p>"}
+      </article>
+    `).join("\n")
+    : "<p>No snapshot visual packs recorded.</p>";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(manifest.title)}</title>
+  <style>
+    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #08111f; color: #e5edf8; }
+    main { max-width: 1240px; margin: 0 auto; padding: 28px 20px 56px; }
+    h1, h2 { margin: 0 0 12px; }
+    p, li { line-height: 1.55; }
+    a { color: #93c5fd; }
+    .meta, .grid { display: grid; gap: 16px; }
+    .meta { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 20px 0 28px; }
+    .grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card { background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 18px; padding: 18px; }
+    img, object { width: 100%; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.18); background: #020617; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(manifest.title)}</h1>
+    <div class="meta">
+      <div class="card"><strong>Status</strong><div>${escapeHtml(manifest.status)}</div></div>
+      <div class="card"><strong>Generated</strong><div>${escapeHtml(manifest.generatedAt)}</div></div>
+      <div class="card"><strong>Preview URL</strong><div>${manifest.previewUrl ? `<a href="${escapeHtml(manifest.previewUrl)}">${escapeHtml(manifest.previewUrl)}</a>` : "n/a"}</div></div>
+      <div class="card"><strong>Screenshot manifest</strong><div>${manifest.screenshotManifest ? `<a href="${escapeHtml(manifest.screenshotManifest)}">Open JSON</a>` : "n/a"}</div></div>
+    </div>
+    <section>
+      <h2>Page/device checks</h2>
+      <div class="grid">${screenshotCards}</div>
+    </section>
+    <section style="margin-top: 28px;">
+      <h2>Snapshot regressions</h2>
+      <div class="grid">${snapshotCards}</div>
+    </section>
+  </main>
+</body>
+</html>`;
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -989,6 +1110,7 @@ function aggregateQa({
       report: cleanSubject(entry.report.artifacts?.published?.markdown || entry.report.artifacts?.markdown || ""),
       annotation: cleanSubject(entry.report.snapshotResult?.annotation || entry.report.artifacts?.published?.annotation || entry.report.artifacts?.annotation || ""),
       screenshot: cleanSubject(entry.report.snapshotResult?.screenshot || entry.report.artifacts?.published?.screenshot || entry.report.artifacts?.screenshot || ""),
+      visualPack: entry.report.snapshotResult?.visualPack || entry.report.artifacts?.published?.visualPack || entry.report.artifacts?.visualPack || null,
     }));
   const healthScore = reports.reduce((lowest, entry) => {
     const next = typeof entry.report.healthScore === "number" ? entry.report.healthScore : 100;
@@ -1121,6 +1243,8 @@ export function renderDeployMarkdown(report: DeployReport): string {
     "",
     `- Artifact root: \`${relative(report.artifactRoot)}\``,
     report.screenshotManifest ? `- Screenshot manifest: \`${report.screenshotManifest}\`` : "",
+    report.visualPack?.index ? `- Visual pack: \`${report.visualPack.index}\`` : "",
+    report.visualPack?.manifest ? `- Visual manifest: \`${report.visualPack.manifest}\`` : "",
     primaryQaArtifacts.markdown ? `- QA report: \`${primaryQaArtifacts.markdown}\`` : "",
     primaryQaArtifacts.json ? `- QA json: \`${primaryQaArtifacts.json}\`` : "",
     primaryQaArtifacts.annotation ? `- QA annotation: \`${primaryQaArtifacts.annotation}\`` : "",
@@ -1160,6 +1284,82 @@ function writeScreenshotManifest(targetPath: string, results: DeployPathResult[]
     }));
   writeFile(targetPath, JSON.stringify(manifest, null, 2));
   return relative(targetPath);
+}
+
+function writeVisualPack({
+  publishDir,
+  resolvedUrl,
+  pathResults,
+  snapshotResults,
+  screenshotManifest,
+  status,
+}: {
+  publishDir: string;
+  resolvedUrl: string;
+  pathResults: DeployPathResult[];
+  snapshotResults: DeploySnapshotResult[];
+  screenshotManifest: string;
+  status: DeployStatus;
+}): DeployVisualPack {
+  const visualDir = path.join(publishDir, "visual");
+  const screenshotDir = path.join(visualDir, "screenshots");
+  const snapshotRoot = path.join(visualDir, "snapshots");
+  ensureDir(screenshotDir);
+  ensureDir(snapshotRoot);
+
+  const screenshotEntries = pathResults.map((entry) => {
+    const destination = entry.screenshot ? path.join(screenshotDir, path.basename(entry.screenshot)) : "";
+    const copiedScreenshot = entry.screenshot ? copyFileIfPresent(entry.screenshot, destination) : "";
+    return {
+      path: entry.path,
+      device: entry.device,
+      url: entry.url,
+      status: entry.status,
+      httpStatus: entry.httpStatus,
+      consoleErrors: entry.console.errors.length,
+      consoleWarnings: entry.console.warnings.length,
+      screenshot: copiedScreenshot ? relFrom(visualDir, path.resolve(process.cwd(), copiedScreenshot)) : "",
+    };
+  });
+
+  const snapshotEntries = snapshotResults.map((entry) => {
+    const slug = slugify(`${entry.name}-${entry.targetPath}-${entry.device}`);
+    const targetDir = path.join(snapshotRoot, slug);
+    if (entry.visualPack?.dir) {
+      copyTree(entry.visualPack.dir, targetDir);
+    }
+    const copiedAnnotation = entry.annotation ? copyFileIfPresent(entry.annotation, path.join(targetDir, "annotation.svg")) : "";
+    const copiedScreenshot = entry.screenshot ? copyFileIfPresent(entry.screenshot, path.join(targetDir, "screenshot.png")) : "";
+    const indexPath = path.join(targetDir, "index.html");
+    const manifestPath = path.join(targetDir, "manifest.json");
+    return {
+      name: entry.name,
+      targetPath: entry.targetPath,
+      device: entry.device,
+      status: entry.status,
+      index: fs.existsSync(indexPath) ? relFrom(visualDir, indexPath) : "",
+      manifest: fs.existsSync(manifestPath) ? relFrom(visualDir, manifestPath) : "",
+      annotation: copiedAnnotation ? relFrom(visualDir, path.resolve(process.cwd(), copiedAnnotation)) : (fs.existsSync(path.join(targetDir, "annotation.svg")) ? relFrom(visualDir, path.join(targetDir, "annotation.svg")) : ""),
+      screenshot: copiedScreenshot ? relFrom(visualDir, path.resolve(process.cwd(), copiedScreenshot)) : (fs.existsSync(path.join(targetDir, "current.png")) ? relFrom(visualDir, path.join(targetDir, "current.png")) : ""),
+    };
+  });
+
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    title: "codex-stack visual review pack",
+    status,
+    previewUrl: resolvedUrl,
+    screenshotManifest: screenshotManifest ? relFrom(visualDir, path.resolve(process.cwd(), screenshotManifest)) : "",
+    screenshots: screenshotEntries,
+    snapshots: snapshotEntries,
+  };
+  writeFile(path.join(visualDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  writeFile(path.join(visualDir, "index.html"), renderDeployVisualIndex(manifest));
+  return {
+    dir: relative(visualDir),
+    index: relative(path.join(visualDir, "index.html")),
+    manifest: relative(path.join(visualDir, "manifest.json")),
+  };
 }
 
 export async function runDeployVerification(args: DeployArgs): Promise<DeployReport> {
@@ -1229,11 +1429,20 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     qa,
     artifactRoot: publishDir,
     screenshotManifest: "",
+    visualPack: null,
     runUrl: actionsRunUrl(context),
     recommendation: "",
   };
 
   report.screenshotManifest = writeScreenshotManifest(path.join(publishDir, "screenshots.json"), pathResults);
+  report.visualPack = writeVisualPack({
+    publishDir,
+    resolvedUrl: resolved.url,
+    pathResults,
+    snapshotResults: report.qa.snapshotResults,
+    screenshotManifest: report.screenshotManifest,
+    status: report.status,
+  });
   report.recommendation = recommendation(report);
 
   const markdown = renderDeployMarkdown(report);

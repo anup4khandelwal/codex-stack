@@ -48,11 +48,11 @@ Use the repo in this order:
 - Persistent named browser sessions
 - Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
-- Page snapshots and snapshot comparison artifacts
-- QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, and annotated screenshots for snapshot failures
+- Page snapshots and snapshot comparison artifacts with self-contained visual packs
+- QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, annotated screenshots, and published visual packs for snapshot failures
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
-- Deploy verification with page and device matrices, screenshot manifests, console capture, and tracked evidence
+- Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional deploy verification
 - PR comments with deploy verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
@@ -152,7 +152,8 @@ What happens next:
 
 - `pr-review.yml` runs `codex-stack` review on the PR diff
 - for same-repo PRs, the review workflow publishes a GitHub Pages preview at `https://<owner>.github.io/<repo>/pr-preview/pr-<number>/` and verifies that live preview before merging
-- the workflow posts or updates a PR comment with structural findings plus any preview deploy evidence
+- the same workflow republishes review evidence under `https://<owner>.github.io/<repo>/pr-preview/pr-<number>/__codex/`
+- the workflow posts or updates a PR comment with structural findings plus hosted preview visual evidence
 - the job fails if critical findings are detected in either structural review or preview verification
 - if the PR has the `automerge` label, `pr-automerge.yml` enables GitHub auto-merge
 
@@ -343,6 +344,8 @@ On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` report
 - branch artifact links that work immediately on the PR branch
 - stable Pages links that activate after the branch is merged to `main`
 
+When a published QA report includes snapshot evidence, the Pages site now surfaces `visual/index.html` as the primary review-evidence entrypoint alongside the raw markdown, JSON, annotation, and screenshot files.
+
 The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:
 
 - `CODEX_STACK_PREVIEW_PATHS=/login,/dashboard`
@@ -354,6 +357,8 @@ The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/
 Optional authenticated preview secret:
 
 - `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64=<base64 of browse export-session output>`
+
+For same-repo PRs, `pr-review.yml` republishes the preview subtree with hosted review evidence under `pr-preview/pr-<number>/__codex/`, including the deploy visual pack at `__codex/visual/index.html`.
 
 When a PR closes, `.github/workflows/preview-cleanup.yml` removes only `gh-pages/pr-preview/pr-<number>/` and keeps the root QA site plus other active PR previews intact.
 
