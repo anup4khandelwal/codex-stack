@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { createHash } from "node:crypto";
+import { PNG } from "pngjs";
 import {
   importBrowserCookies,
   browserProfileSpec,
@@ -136,6 +137,18 @@ interface SnapshotVisualPack {
   currentJson: string;
   baselineScreenshot: string;
   currentScreenshot: string;
+  diffImage: string;
+  imageDiff: ImageDiffMetrics | null;
+}
+
+interface ImageDiffMetrics {
+  comparedPixels: number;
+  changedPixels: number;
+  diffRatio: number;
+  score: number;
+  dimensionsMatch: boolean;
+  baseline: { width: number; height: number };
+  current: { width: number; height: number };
 }
 
 interface PlaywrightResponse {
@@ -458,10 +471,81 @@ function copyIfExists(sourcePath: string, targetPath: string): string {
   return targetPath;
 }
 
+function roundMetric(value: number): number {
+  return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : 0;
+}
+
+function computeImageDiff({
+  baselinePath,
+  currentPath,
+  diffPath,
+}: {
+  baselinePath: string;
+  currentPath: string;
+  diffPath: string;
+}): ImageDiffMetrics | null {
+  if (!baselinePath || !currentPath || !fs.existsSync(baselinePath) || !fs.existsSync(currentPath)) return null;
+  let baseline: PNG;
+  let current: PNG;
+  try {
+    baseline = PNG.sync.read(fs.readFileSync(baselinePath));
+    current = PNG.sync.read(fs.readFileSync(currentPath));
+  } catch {
+    return null;
+  }
+  const width = Math.max(baseline.width, current.width);
+  const height = Math.max(baseline.height, current.height);
+  const diff = new PNG({ width, height });
+  let changedPixels = 0;
+  const comparedPixels = width * height;
+
+  const pixelAt = (image: PNG, x: number, y: number): [number, number, number, number] => {
+    if (x >= image.width || y >= image.height) return [255, 0, 255, 255];
+    const idx = ((image.width * y) + x) << 2;
+    return [image.data[idx], image.data[idx + 1], image.data[idx + 2], image.data[idx + 3]];
+  };
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const [br, bg, bb, ba] = pixelAt(baseline, x, y);
+      const [cr, cg, cb, ca] = pixelAt(current, x, y);
+      const targetIdx = ((width * y) + x) << 2;
+      const delta = Math.abs(br - cr) + Math.abs(bg - cg) + Math.abs(bb - cb) + Math.abs(ba - ca);
+      if (delta > 0) {
+        changedPixels += 1;
+        diff.data[targetIdx] = 220;
+        diff.data[targetIdx + 1] = Math.min(255, 30 + delta);
+        diff.data[targetIdx + 2] = 70;
+        diff.data[targetIdx + 3] = 255;
+      } else {
+        const gray = Math.round((cr + cg + cb) / 3);
+        diff.data[targetIdx] = gray;
+        diff.data[targetIdx + 1] = gray;
+        diff.data[targetIdx + 2] = gray;
+        diff.data[targetIdx + 3] = 90;
+      }
+    }
+  }
+
+  ensureDir(path.dirname(diffPath));
+  fs.writeFileSync(diffPath, PNG.sync.write(diff));
+  const diffRatio = comparedPixels ? changedPixels / comparedPixels : 0;
+  return {
+    comparedPixels,
+    changedPixels,
+    diffRatio: roundMetric(diffRatio),
+    score: roundMetric(Math.max(0, 100 - (diffRatio * 100))),
+    dimensionsMatch: baseline.width === current.width && baseline.height === current.height,
+    baseline: { width: baseline.width, height: baseline.height },
+    current: { width: current.width, height: current.height },
+  };
+}
+
 function renderSnapshotVisualPackHtml(manifest: Record<string, unknown>): string {
   const summary = manifest.summary as Record<string, unknown>;
   const assets = manifest.assets as Record<string, string>;
   const markers = Array.isArray(manifest.markers) ? manifest.markers as Array<Record<string, unknown>> : [];
+  const imageDiff = (manifest.imageDiff || {}) as Record<string, unknown>;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -495,6 +579,8 @@ function renderSnapshotVisualPackHtml(manifest: Record<string, unknown>): string
       <div class="card"><strong>Changed selectors</strong><div>${escapeHtml(summary?.changedSelectors ?? 0)}</div></div>
       <div class="card"><strong>New selectors</strong><div>${escapeHtml(summary?.newSelectors ?? 0)}</div></div>
       <div class="card"><strong>Body/title drift</strong><div>${escapeHtml(`${Boolean(summary?.bodyTextChanged) || Boolean(summary?.titleChanged)}`)}</div></div>
+      <div class="card"><strong>Image diff score</strong><div>${escapeHtml(imageDiff?.score ?? "n/a")}</div></div>
+      <div class="card"><strong>Image diff ratio</strong><div>${escapeHtml(imageDiff?.diffRatio ?? "n/a")}</div></div>
     </div>
     <section class="grid">
       <article class="card">
@@ -510,6 +596,11 @@ function renderSnapshotVisualPackHtml(manifest: Record<string, unknown>): string
       <article class="card">
         <h2>Annotation</h2>
         ${assets?.annotation ? `<object data="${escapeHtml(assets.annotation)}" type="image/svg+xml" aria-label="Annotated snapshot"></object>` : "<p>No annotation available.</p>"}
+      </article>
+      <article class="card">
+        <h2>Diff heatmap</h2>
+        ${assets?.diffImage ? `<img src="${escapeHtml(assets.diffImage)}" alt="Diff heatmap">` : "<p>No diff image available.</p>"}
+        <p>${imageDiff?.dimensionsMatch === false ? "Images had different dimensions; missing regions are highlighted." : "Images matched dimensions."}</p>
       </article>
     </section>
     <section class="card" style="margin-top: 20px;">
@@ -547,6 +638,7 @@ export function createSnapshotVisualPack({
   const currentJson = copyIfExists(currentJsonPath, path.join(outputDir, "current.json"));
   const baselineScreenshot = copyIfExists(baselineScreenshotPath, path.join(outputDir, "baseline.png"));
   const currentScreenshot = copyIfExists(currentScreenshotPath, path.join(outputDir, "current.png"));
+  const diffImagePath = path.join(outputDir, "diff.png");
   const baselineSnapshot = readJson<SnapshotPayload | null>(baselineJsonPath, null);
   const currentSnapshot = readJson<SnapshotPayload | null>(currentJsonPath, null);
   const markers = snapshotAnnotationMarkers(comparison, baselineSnapshot, currentSnapshot);
@@ -561,6 +653,13 @@ export function createSnapshotVisualPack({
   if (annotationSvg) {
     fs.writeFileSync(annotationPath, annotationSvg);
   }
+  const imageDiff = baselineScreenshot && currentScreenshot
+    ? computeImageDiff({
+        baselinePath: baselineScreenshot,
+        currentPath: currentScreenshot,
+        diffPath: diffImagePath,
+      })
+    : null;
   const manifestPath = path.join(outputDir, "manifest.json");
   const indexPath = path.join(outputDir, "index.html");
   const manifest = {
@@ -569,6 +668,7 @@ export function createSnapshotVisualPack({
     title: `Snapshot visual pack • ${name}`,
     status: comparison.status,
     summary: comparison.summary,
+    imageDiff,
     markers: markers.map((item) => ({ selector: item.selector, label: item.label })),
     assets: {
       baselineJson: path.basename(baselineJson),
@@ -576,6 +676,7 @@ export function createSnapshotVisualPack({
       baselineScreenshot: path.basename(baselineScreenshot),
       currentScreenshot: path.basename(currentScreenshot),
       annotation: annotationSvg ? path.basename(annotationPath) : "",
+      diffImage: imageDiff ? path.basename(diffImagePath) : "",
     },
   };
   writeJson(manifestPath, manifest);
@@ -589,6 +690,8 @@ export function createSnapshotVisualPack({
     currentJson: relativePath(currentJson),
     baselineScreenshot: relativePath(baselineScreenshot),
     currentScreenshot: relativePath(currentScreenshot),
+    diffImage: imageDiff ? relativePath(diffImagePath) : "",
+    imageDiff,
   };
 }
 

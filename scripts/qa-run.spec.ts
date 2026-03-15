@@ -83,8 +83,9 @@ const importMarker = path.join(fixtureRoot, "imported-session.json");
   );
   fs.mkdirSync(visualDir, { recursive: true });
   fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
-  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed", imageDiff: { score: 72.4, diffRatio: 0.276, changedPixels: 12 } }, null, 2));
   fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+  fs.writeFileSync(path.join(visualDir, "diff.png"), fs.readFileSync(screenshotPath));
 
   fs.writeFileSync(
     path.join(browseDir, "cli.ts"),
@@ -111,7 +112,9 @@ if (command === "compare-snapshot") {
       dir: ${JSON.stringify(visualDir)},
       index: ${JSON.stringify(path.join(visualDir, "index.html"))},
       manifest: ${JSON.stringify(path.join(visualDir, "manifest.json"))},
-      annotation: ${JSON.stringify(path.join(visualDir, "annotation.svg"))}
+      annotation: ${JSON.stringify(path.join(visualDir, "annotation.svg"))},
+      diffImage: ${JSON.stringify(path.join(visualDir, "diff.png"))},
+      imageDiff: { score: 72.4, diffRatio: 0.276, changedPixels: 12, comparedPixels: 16, dimensionsMatch: true, baseline: { width: 1, height: 1 }, current: { width: 1, height: 1 } }
     },
     comparison: {
       missingSelectors: ["h1"],
@@ -152,7 +155,7 @@ process.exit(1);
     status?: string;
     healthScore?: number;
     flowResults?: Array<{ name?: string; status?: string; steps?: number }>;
-    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string; visualPack?: { index?: string; manifest?: string } | null };
+    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string; visualPack?: { index?: string; manifest?: string; diffImage?: string; imageDiff?: { score?: number } } | null };
     findings?: Array<{ severity?: string; category?: string; title?: string; evidence?: { annotation?: string } }>;
     artifacts?: { annotation?: string; visualPack?: { index?: string; manifest?: string } | null };
   };
@@ -168,6 +171,8 @@ process.exit(1);
   assert.ok(String(report.snapshotResult?.screenshot).includes("screenshot.png"));
   assert.ok(String(report.snapshotResult?.visualPack?.index).includes("visual/index.html"));
   assert.ok(String(report.snapshotResult?.visualPack?.manifest).includes("visual/manifest.json"));
+  assert.ok(String(report.snapshotResult?.visualPack?.diffImage).includes("visual/diff.png"));
+  assert.equal(report.snapshotResult?.visualPack?.imageDiff?.score, 72.4);
   assert.ok(report.findings?.some((item) => item.severity === "critical" && item.category === "visual" && item.title === "Expected UI selectors are missing"));
   assert.ok(report.findings?.some((item) => item.severity === "medium" && item.category === "visual" && item.title === "Snapshot drift detected"));
   assert.ok(report.findings?.some((item) => item.evidence?.annotation));

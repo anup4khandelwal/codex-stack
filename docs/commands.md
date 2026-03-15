@@ -216,6 +216,7 @@ Notes:
 
 - By default, every retro run writes `latest.md`, `latest.json`, and timestamped snapshots under `.codex-stack/retros/`.
 - When GitHub data is available, `retro` adds PR throughput, merge time, first-review latency, backlog, and reviewer load metrics.
+- `retro` now also scans published visual-pack manifests under `docs/qa/`, `.codex-stack/qa/`, and `.codex-stack/browse/artifacts/` to rank the highest-regression screenshots.
 - `weekly-digest.ts` also writes publication-ready artifacts under `docs/weekly-digest-publish/`: `summary.txt`, `slack.md`, `slack.json`, `email.md`, and `manifest.json`.
 
 ## Upgrade workflow
@@ -260,7 +261,7 @@ Notes:
 - Local flows live under `.codex-stack/browse/flows/` and override same-named repo flows.
 - Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
 - `import-browser-cookies` is the local macOS path for Chrome, Arc, Brave, and Edge profiles when you need to bootstrap an authenticated session without replaying login flows manually.
-- `compare-snapshot` creates a portable visual pack with baseline/current screenshots, annotation SVG, manifest JSON, and an HTML index page.
+- `compare-snapshot` creates a portable visual pack with baseline/current screenshots, diff heatmap, image-diff score, annotation SVG, manifest JSON, and an HTML index page.
 - `upload`, `dialog`, and the expanded assertion set are available both as direct commands and as flow actions.
 - `wait` supports `load:<state>` plus `state:<visible|hidden|attached|detached>:<selector>` for richer synchronization.
 - Selector arguments accept semantic prefixes as well as CSS: `role:<role>[:<name>]`, `label:<text>`, `placeholder:<text>`, `text:<text>`, and `testid:<value>`.

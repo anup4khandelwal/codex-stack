@@ -29,6 +29,18 @@ console.log(JSON.stringify({
   topAuthors: [{ name: "anup", count: 7 }, { name: "codex", count: 5 }],
   recentSubjects: [{ subject: "feat: improve preview flow" }, { subject: "fix: tighten issue-flow quoting" }],
   recommendation: "Keep shipping. Review latency is under control.",
+  visual: {
+    available: true,
+    manifestCount: 2,
+    snapshotCount: 3,
+    failingSnapshotCount: 2,
+    avgImageDiffScore: 81.4,
+    avgImageDiffRatio: 0.186,
+    topRegressions: [
+      { name: "dashboard", status: "changed", targetPath: "/dashboard", device: "desktop", score: 71.4, diffRatio: 0.286 },
+      { name: "login", status: "changed", targetPath: "/login", device: "mobile", score: 83.2, diffRatio: 0.168 }
+    ]
+  },
   github: {
     enabled: true,
     reason: "",
@@ -67,15 +79,18 @@ console.log(JSON.stringify({
   assert.match(markdown, /Weekly Digest/);
   assert.match(markdown, /Repo: anup4khandelwal\/codex-stack/);
   assert.match(markdown, /Recommendation: Keep shipping/);
+  assert.match(markdown, /## Visual QA/);
+  assert.match(markdown, /Avg image diff score: 81\.4/);
 
   const report = JSON.parse(fs.readFileSync(jsonOut, "utf8")) as {
     repo?: string;
-    retro?: { commitCount?: number; recommendation?: string };
+    retro?: { commitCount?: number; recommendation?: string; visual?: { snapshotCount?: number } };
     publish?: { enabled?: boolean; targets?: Record<string, string> };
   };
   assert.equal(report.repo, "anup4khandelwal/codex-stack");
   assert.equal(report.retro?.commitCount, 12);
   assert.equal(report.retro?.recommendation, "Keep shipping. Review latency is under control.");
+  assert.equal(report.retro?.visual?.snapshotCount, 3);
   assert.equal(report.publish?.enabled, true);
   assert.ok(String(report.publish?.targets?.summary).endsWith(path.join("publish", "summary.txt")));
   assert.ok(String(report.publish?.targets?.slackJson).endsWith(path.join("publish", "slack.json")));
@@ -93,9 +108,12 @@ console.log(JSON.stringify({
 
   assert.match(summary, /Weekly digest for anup4khandelwal\/codex-stack/);
   assert.match(summary, /PR health: 5 PRs scanned/);
+  assert.match(summary, /Visual QA: 2 regressions across 3 scored snapshots, avg score 81\.4\./);
   assert.match(String(slackJson.text), /Weekly digest for anup4khandelwal\/codex-stack/);
   assert.equal(slackJson.blocks?.[0]?.type, "header");
+  assert.equal(slackJson.blocks?.[4]?.type, "section");
   assert.match(email, /Weekly Engineering Digest/);
+  assert.match(email, /## Visual QA/);
   assert.equal(manifest.repo, "anup4khandelwal/codex-stack");
   assert.ok(String(manifest.outputs?.markdown).endsWith("digest.md"));
   assert.ok(String(manifest.outputs?.manifest).endsWith(path.join("publish", "manifest.json")));

@@ -96,6 +96,31 @@ interface PreviewReport {
   };
 }
 
+interface LocalVisualManifest {
+  screenshots?: Array<{
+    path?: string;
+    device?: string;
+    status?: string;
+    httpStatus?: number | null;
+    screenshot?: string;
+    consoleErrors?: number;
+    consoleWarnings?: number;
+  }>;
+  snapshots?: Array<{
+    name?: string;
+    targetPath?: string;
+    device?: string;
+    status?: string;
+    index?: string;
+    manifest?: string;
+    annotation?: string;
+    screenshot?: string;
+    diffImage?: string;
+    imageDiffScore?: number | null;
+    imageDiffRatio?: number | null;
+  }>;
+}
+
 interface ReviewSummary {
   status: string;
   branch: string;
@@ -195,6 +220,18 @@ function absoluteLink(root: string, relativePath: string): string {
   return new URL(relativePath.replace(/^\/+/, ""), withTrailingSlash(root)).toString();
 }
 
+function readLocalVisualManifest(preview: PreviewReport | null): LocalVisualManifest | null {
+  const manifestPath = preview?.deploy?.visualPack?.manifest;
+  if (!manifestPath) return null;
+  const resolved = path.resolve(process.cwd(), manifestPath);
+  if (!fs.existsSync(resolved)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(resolved, "utf8")) as LocalVisualManifest;
+  } catch {
+    return null;
+  }
+}
+
 function findingLines(findings: ReviewFinding[]): string[] {
   if (!findings.length) return ["- No findings."];
   return findings.map((item) => {
@@ -242,6 +279,66 @@ function deploySnapshotLines(preview: PreviewReport | null): string[] {
   });
 }
 
+function visualBadgeLines(preview: PreviewReport | null, previewPagesRoot: string): string[] {
+  const manifest = readLocalVisualManifest(preview);
+  if (!manifest) return ["- No hosted visual summary available."];
+  const visualPagesRoot = absoluteLink(previewPagesRoot, "visual/");
+
+  const snapshotLines = (manifest.snapshots || [])
+    .filter((item) => typeof item.imageDiffScore === "number" || item.status)
+    .sort((left, right) => (Number(left.imageDiffScore ?? -1) - Number(right.imageDiffScore ?? -1)))
+    .slice(0, 3)
+    .map((item) => {
+      const hosted = item.index ? absoluteLink(visualPagesRoot, item.index) : "";
+      const badgeBits = [
+        `\`${item.status || "unknown"}\``,
+        typeof item.imageDiffScore === "number" ? `\`score ${item.imageDiffScore}\`` : "",
+        typeof item.imageDiffRatio === "number" ? `\`ratio ${item.imageDiffRatio}\`` : "",
+      ].filter(Boolean).join(" ");
+      return `- ${badgeBits} ${item.name || "snapshot"} @ ${item.targetPath || "/"} (${item.device || "desktop"})${hosted ? ` → ${hosted}` : ""}`;
+    });
+
+  const screenshotLines = (manifest.screenshots || [])
+    .filter((item) => item.status && item.status !== "pass" && item.screenshot)
+    .slice(0, 2)
+    .map((item) => {
+      const hostedScreenshot = absoluteLink(visualPagesRoot, item.screenshot || "");
+      return `- \`${item.status}\` ${item.path || "/"} @ ${item.device || "desktop"}${hostedScreenshot ? ` → ${hostedScreenshot}` : ""}`;
+    });
+
+  return [...snapshotLines, ...screenshotLines].slice(0, 5).length
+    ? [...snapshotLines, ...screenshotLines].slice(0, 5)
+    : ["- No failing visual checks were captured."];
+}
+
+function visualImageEmbeds(preview: PreviewReport | null, previewPagesRoot: string): string[] {
+  const manifest = readLocalVisualManifest(preview);
+  if (!manifest) return [];
+  const visualPagesRoot = absoluteLink(previewPagesRoot, "visual/");
+  const images: string[] = [];
+
+  for (const item of (manifest.snapshots || [])) {
+    const target = item.diffImage || item.screenshot || item.annotation || "";
+    if (!target) continue;
+    const hosted = absoluteLink(visualPagesRoot, target);
+    if (!hosted) continue;
+    images.push(`![${item.name || "snapshot"} ${item.device || "desktop"}](${hosted})`);
+    if (images.length >= 2) break;
+  }
+
+  if (images.length < 2) {
+    for (const item of (manifest.screenshots || [])) {
+      if (item.status === "pass" || !item.screenshot) continue;
+      const hosted = absoluteLink(visualPagesRoot, item.screenshot);
+      if (!hosted) continue;
+      images.push(`![${item.path || "/"} ${item.device || "desktop"}](${hosted})`);
+      if (images.length >= 2) break;
+    }
+  }
+
+  return images;
+}
+
 function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary, previewPagesRoot: string): string {
   if (!preview) return "";
   const findings = Array.isArray(preview.qa?.findings) ? preview.qa?.findings : [];
@@ -282,6 +379,12 @@ ${deployCheckLines(preview).join("\n")}
 ### Deploy snapshots
 
 ${deploySnapshotLines(preview).join("\n")}
+
+### Visual summary
+
+${visualBadgeLines(preview, previewPagesRoot).join("\n")}
+
+${visualImageEmbeds(preview, previewPagesRoot).join("\n\n")}
 `;
 }
 

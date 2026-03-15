@@ -48,17 +48,17 @@ Use the repo in this order:
 - Persistent named browser sessions
 - Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
-- Page snapshots and snapshot comparison artifacts with self-contained visual packs
+- Page snapshots and snapshot comparison artifacts with self-contained visual packs, diff heatmaps, and image-diff scores
 - QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, annotated screenshots, and published visual packs for snapshot failures
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
-- Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs
+- Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs with ranked regressions
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional deploy verification
 - PR comments with deploy verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
-- Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email
+- Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
 ## Quick start
@@ -345,6 +345,7 @@ On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` report
 - stable Pages links that activate after the branch is merged to `main`
 
 When a published QA report includes snapshot evidence, the Pages site now surfaces `visual/index.html` as the primary review-evidence entrypoint alongside the raw markdown, JSON, annotation, and screenshot files.
+Those visual packs now include a diff heatmap and an image-diff score so regressions can be ranked instead of treated as binary drift only.
 
 The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:
 
@@ -359,6 +360,7 @@ Optional authenticated preview secret:
 - `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64=<base64 of browse export-session output>`
 
 For same-repo PRs, `pr-review.yml` republishes the preview subtree with hosted review evidence under `pr-preview/pr-<number>/__codex/`, including the deploy visual pack at `__codex/visual/index.html`.
+The PR review comment uses that hosted pack to show direct visual-summary links and inline screenshots for the highest-signal regressions.
 
 When a PR closes, `.github/workflows/preview-cleanup.yml` removes only `gh-pages/pr-preview/pr-<number>/` and keeps the root QA site plus other active PR previews intact.
 

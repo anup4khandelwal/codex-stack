@@ -67,6 +67,16 @@ interface VisualPackRef {
   currentJson?: string;
   baselineScreenshot?: string;
   currentScreenshot?: string;
+  diffImage?: string;
+  imageDiff?: {
+    comparedPixels: number;
+    changedPixels: number;
+    diffRatio: number;
+    score: number;
+    dimensionsMatch: boolean;
+    baseline: { width: number; height: number };
+    current: { width: number; height: number };
+  } | null;
 }
 
 interface SnapshotCommandResult {
@@ -393,6 +403,22 @@ function asVisualPackRef(value: unknown): VisualPackRef | undefined {
     currentJson: asString(obj.currentJson),
     baselineScreenshot: asString(obj.baselineScreenshot),
     currentScreenshot: asString(obj.currentScreenshot),
+    diffImage: asString(obj.diffImage),
+    imageDiff: asObject(obj.imageDiff) ? {
+      comparedPixels: asNumber(asObject(obj.imageDiff)?.comparedPixels),
+      changedPixels: asNumber(asObject(obj.imageDiff)?.changedPixels),
+      diffRatio: asNumber(asObject(obj.imageDiff)?.diffRatio),
+      score: asNumber(asObject(obj.imageDiff)?.score),
+      dimensionsMatch: Boolean(asObject(obj.imageDiff)?.dimensionsMatch),
+      baseline: {
+        width: asNumber(asObject(asObject(obj.imageDiff)?.baseline)?.width),
+        height: asNumber(asObject(asObject(obj.imageDiff)?.baseline)?.height),
+      },
+      current: {
+        width: asNumber(asObject(asObject(obj.imageDiff)?.current)?.width),
+        height: asNumber(asObject(asObject(obj.imageDiff)?.current)?.height),
+      },
+    } : null,
   };
 }
 
@@ -558,6 +584,7 @@ function buildMarkdown(report: QaReport): string {
         report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
         report.snapshotResult.visualPack?.index ? `- Visual pack: ${report.snapshotResult.visualPack.index}` : "",
         report.snapshotResult.visualPack?.manifest ? `- Visual manifest: ${report.snapshotResult.visualPack.manifest}` : "",
+        report.snapshotResult.visualPack?.imageDiff ? `- Image diff score: ${report.snapshotResult.visualPack.imageDiff.score}` : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -1059,6 +1086,9 @@ function attachSnapshotAnnotation(report: QaReport, snapshotEvidence: SnapshotEv
       if (report.snapshotResult?.visualPack?.index) {
         item.evidence.visualPack = report.snapshotResult.visualPack.index;
       }
+      if (report.snapshotResult?.visualPack?.diffImage) {
+        item.evidence.diffImage = report.snapshotResult.visualPack.diffImage;
+      }
     }
   }
   report.artifacts.annotation = artifact.annotation;
@@ -1104,6 +1134,7 @@ function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>)
       if (report.snapshotResult.visualPack.currentJson && pathMap[report.snapshotResult.visualPack.currentJson]) report.snapshotResult.visualPack.currentJson = pathMap[report.snapshotResult.visualPack.currentJson];
       if (report.snapshotResult.visualPack.baselineScreenshot && pathMap[report.snapshotResult.visualPack.baselineScreenshot]) report.snapshotResult.visualPack.baselineScreenshot = pathMap[report.snapshotResult.visualPack.baselineScreenshot];
       if (report.snapshotResult.visualPack.currentScreenshot && pathMap[report.snapshotResult.visualPack.currentScreenshot]) report.snapshotResult.visualPack.currentScreenshot = pathMap[report.snapshotResult.visualPack.currentScreenshot];
+      if (report.snapshotResult.visualPack.diffImage && pathMap[report.snapshotResult.visualPack.diffImage]) report.snapshotResult.visualPack.diffImage = pathMap[report.snapshotResult.visualPack.diffImage];
     }
   }
 
@@ -1116,6 +1147,7 @@ function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>)
     if (report.artifacts.visualPack.currentJson && pathMap[report.artifacts.visualPack.currentJson]) report.artifacts.visualPack.currentJson = pathMap[report.artifacts.visualPack.currentJson];
     if (report.artifacts.visualPack.baselineScreenshot && pathMap[report.artifacts.visualPack.baselineScreenshot]) report.artifacts.visualPack.baselineScreenshot = pathMap[report.artifacts.visualPack.baselineScreenshot];
     if (report.artifacts.visualPack.currentScreenshot && pathMap[report.artifacts.visualPack.currentScreenshot]) report.artifacts.visualPack.currentScreenshot = pathMap[report.artifacts.visualPack.currentScreenshot];
+    if (report.artifacts.visualPack.diffImage && pathMap[report.artifacts.visualPack.diffImage]) report.artifacts.visualPack.diffImage = pathMap[report.artifacts.visualPack.diffImage];
   }
 
   for (const item of report.findings) {
@@ -1165,6 +1197,8 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
       currentJson: fs.existsSync(path.join(visualDir, "current.json")) ? relative(path.join(visualDir, "current.json")) : "",
       baselineScreenshot: fs.existsSync(path.join(visualDir, "baseline.png")) ? relative(path.join(visualDir, "baseline.png")) : "",
       currentScreenshot: fs.existsSync(path.join(visualDir, "current.png")) ? relative(path.join(visualDir, "current.png")) : "",
+      diffImage: fs.existsSync(path.join(visualDir, "diff.png")) ? relative(path.join(visualDir, "diff.png")) : "",
+      imageDiff: sourceVisualPack.imageDiff || null,
     };
     pathMap[sourceVisualPack.dir] = publishedVisualPack.dir;
     pathMap[sourceVisualPack.index] = publishedVisualPack.index;
@@ -1174,6 +1208,7 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
     if (sourceVisualPack.currentJson && publishedVisualPack.currentJson) pathMap[sourceVisualPack.currentJson] = publishedVisualPack.currentJson;
     if (sourceVisualPack.baselineScreenshot && publishedVisualPack.baselineScreenshot) pathMap[sourceVisualPack.baselineScreenshot] = publishedVisualPack.baselineScreenshot;
     if (sourceVisualPack.currentScreenshot && publishedVisualPack.currentScreenshot) pathMap[sourceVisualPack.currentScreenshot] = publishedVisualPack.currentScreenshot;
+    if (sourceVisualPack.diffImage && publishedVisualPack.diffImage) pathMap[sourceVisualPack.diffImage] = publishedVisualPack.diffImage;
   }
 
   rewriteEvidencePaths(published, pathMap);

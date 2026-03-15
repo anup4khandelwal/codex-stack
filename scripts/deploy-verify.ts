@@ -108,6 +108,16 @@ interface VisualPackRef {
   currentJson?: string;
   baselineScreenshot?: string;
   currentScreenshot?: string;
+  diffImage?: string;
+  imageDiff?: {
+    comparedPixels: number;
+    changedPixels: number;
+    diffRatio: number;
+    score: number;
+    dimensionsMatch: boolean;
+    baseline: { width: number; height: number };
+    current: { width: number; height: number };
+  } | null;
 }
 
 interface QaPublishedArtifacts {
@@ -649,9 +659,10 @@ function renderDeployVisualIndex(manifest: {
       <article class="card">
         <h2>${escapeHtml(String(item.name || "snapshot"))}</h2>
         <p>Status: <strong>${escapeHtml(item.status || "unknown")}</strong> • ${escapeHtml(`${item.targetPath || "/"} @ ${item.device || "desktop"}`)}</p>
+        ${typeof item.imageDiffScore === "number" ? `<p>Image diff score: <strong>${escapeHtml(item.imageDiffScore)}</strong> • ratio ${escapeHtml(item.imageDiffRatio ?? "n/a")}</p>` : ""}
         ${item.index ? `<p><a href="${escapeHtml(String(item.index))}">Open visual pack</a></p>` : ""}
         ${item.manifest ? `<p><a href="${escapeHtml(String(item.manifest))}">Manifest JSON</a></p>` : ""}
-        ${item.annotation ? `<object data="${escapeHtml(String(item.annotation))}" type="image/svg+xml" aria-label="Snapshot annotation"></object>` : item.screenshot ? `<img src="${escapeHtml(String(item.screenshot))}" alt="${escapeHtml(String(item.name || "snapshot"))}">` : "<p>No visual evidence recorded.</p>"}
+        ${item.diffImage ? `<img src="${escapeHtml(String(item.diffImage))}" alt="${escapeHtml(String(item.name || "snapshot"))} diff heatmap">` : item.annotation ? `<object data="${escapeHtml(String(item.annotation))}" type="image/svg+xml" aria-label="Snapshot annotation"></object>` : item.screenshot ? `<img src="${escapeHtml(String(item.screenshot))}" alt="${escapeHtml(String(item.name || "snapshot"))}">` : "<p>No visual evidence recorded.</p>"}
       </article>
     `).join("\n")
     : "<p>No snapshot visual packs recorded.</p>";
@@ -1192,6 +1203,7 @@ function renderSnapshotLines(snapshotResults: DeploySnapshotResult[]): string[] 
     const refs = [
       `${item.name} @ ${item.targetPath} (${item.device})`,
       `status=${item.status}`,
+      item.visualPack?.imageDiff ? `imageScore=${item.visualPack.imageDiff.score}` : "",
       item.report ? `report=${item.report}` : "",
       item.annotation ? `annotation=${item.annotation}` : "",
       item.screenshot ? `screenshot=${item.screenshot}` : "",
@@ -1330,6 +1342,7 @@ function writeVisualPack({
     }
     const copiedAnnotation = entry.annotation ? copyFileIfPresent(entry.annotation, path.join(targetDir, "annotation.svg")) : "";
     const copiedScreenshot = entry.screenshot ? copyFileIfPresent(entry.screenshot, path.join(targetDir, "screenshot.png")) : "";
+    const copiedDiff = entry.visualPack?.diffImage ? copyFileIfPresent(entry.visualPack.diffImage, path.join(targetDir, "diff.png")) : "";
     const indexPath = path.join(targetDir, "index.html");
     const manifestPath = path.join(targetDir, "manifest.json");
     return {
@@ -1341,6 +1354,9 @@ function writeVisualPack({
       manifest: fs.existsSync(manifestPath) ? relFrom(visualDir, manifestPath) : "",
       annotation: copiedAnnotation ? relFrom(visualDir, path.resolve(process.cwd(), copiedAnnotation)) : (fs.existsSync(path.join(targetDir, "annotation.svg")) ? relFrom(visualDir, path.join(targetDir, "annotation.svg")) : ""),
       screenshot: copiedScreenshot ? relFrom(visualDir, path.resolve(process.cwd(), copiedScreenshot)) : (fs.existsSync(path.join(targetDir, "current.png")) ? relFrom(visualDir, path.join(targetDir, "current.png")) : ""),
+      diffImage: copiedDiff ? relFrom(visualDir, path.resolve(process.cwd(), copiedDiff)) : (fs.existsSync(path.join(targetDir, "diff.png")) ? relFrom(visualDir, path.join(targetDir, "diff.png")) : ""),
+      imageDiffScore: entry.visualPack?.imageDiff?.score ?? null,
+      imageDiffRatio: entry.visualPack?.imageDiff?.diffRatio ?? null,
     };
   });
 

@@ -32,10 +32,11 @@ async function main(): Promise<void> {
   fs.writeFileSync(pageScreenshotB, png);
   fs.mkdirSync(visualDir, { recursive: true });
   fs.writeFileSync(path.join(visualDir, "index.html"), "<html><body>visual pack</body></html>");
-  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed" }, null, 2));
+  fs.writeFileSync(path.join(visualDir, "manifest.json"), JSON.stringify({ status: "changed", imageDiff: { score: 68.2, diffRatio: 0.318 } }, null, 2));
   fs.writeFileSync(path.join(visualDir, "annotation.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
   fs.writeFileSync(path.join(visualDir, "baseline.png"), png);
   fs.writeFileSync(path.join(visualDir, "current.png"), png);
+  fs.writeFileSync(path.join(visualDir, "diff.png"), png);
   fs.writeFileSync(sessionBundlePath, JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -106,6 +107,16 @@ async function main(): Promise<void> {
           index: path.join(visualDir, "index.html"),
           manifest: path.join(visualDir, "manifest.json"),
           annotation: path.join(visualDir, "annotation.svg"),
+          diffImage: path.join(visualDir, "diff.png"),
+          imageDiff: {
+            score: 68.2,
+            diffRatio: 0.318,
+            changedPixels: 11,
+            comparedPixels: 16,
+            dimensionsMatch: true,
+            baseline: { width: 1, height: 1 },
+            current: { width: 1, height: 1 },
+          },
         },
         comparison: {
           missingSelectors: ["h1"],
@@ -212,6 +223,11 @@ async function main(): Promise<void> {
   assert.ok(report.screenshotManifest);
   assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
   assert.ok(String(report.visualPack?.manifest).includes("visual/manifest.json"));
+  const visualManifest = JSON.parse(fs.readFileSync(path.join(publishDir, "visual", "manifest.json"), "utf8")) as {
+    snapshots?: Array<{ imageDiffScore?: number; diffImage?: string }>;
+  };
+  assert.ok(visualManifest.snapshots?.some((entry) => entry.imageDiffScore === 68.2));
+  assert.ok(visualManifest.snapshots?.some((entry) => String(entry.diffImage).includes("diff.png")));
 
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(jsonOut));
@@ -224,6 +240,7 @@ async function main(): Promise<void> {
   assert.ok(fs.existsSync(path.join(publishDir, "visual", "manifest.json")));
   const visualSnapshotDirs = fs.readdirSync(path.join(publishDir, "visual", "snapshots"));
   assert.ok(visualSnapshotDirs.some((entry) => fs.existsSync(path.join(publishDir, "visual", "snapshots", entry, "index.html"))));
+  assert.ok(visualSnapshotDirs.some((entry) => fs.existsSync(path.join(publishDir, "visual", "snapshots", entry, "diff.png"))));
   assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "root-desktop.png")));
   assert.ok(fs.existsSync(path.join(publishDir, "screenshots", "dashboard-mobile.png")));
 
