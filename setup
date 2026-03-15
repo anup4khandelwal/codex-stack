@@ -70,11 +70,12 @@ write_wrapper "browse" "browse"
 write_wrapper "setup-browser-cookies" "show setup-browser-cookies"
 write_wrapper "retro" "retro"
 write_wrapper "upgrade" "upgrade"
+write_wrapper "fleet" "fleet"
 
 echo "[codex-stack] local wrappers ready:"
 echo "  $LOCAL_BIN/codex-stack"
 echo "  $LOCAL_BIN/codex-stack-browse"
-echo "  $LOCAL_BIN/{product,tech,review,qa,qa-decide,preview,deploy,ship,browse,setup-browser-cookies,retro,upgrade}"
+echo "  $LOCAL_BIN/{product,tech,review,qa,qa-decide,preview,deploy,ship,browse,setup-browser-cookies,retro,upgrade,fleet}"
 echo
 echo "Next steps:"
 echo "  1. bun src/cli.ts list"

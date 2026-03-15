@@ -79,6 +79,12 @@ export const modeRegistry: ModeDefinition[] = [
     summary: "Audit install health and update drift across dependencies, skills, and workflows.",
     skillPath: path.join(rootDir, "skills", "upgrade", "SKILL.md"),
   },
+  {
+    name: "fleet",
+    role: "Platform engineer",
+    summary: "Roll out codex-stack policies across multiple repos and aggregate org-level health.",
+    skillPath: path.join(rootDir, "skills", "fleet", "SKILL.md"),
+  },
 ];
 
 export function findMode(name: string): ModeDefinition | undefined {

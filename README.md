@@ -61,6 +61,7 @@ Use the repo in this order:
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
+- Fleet rollout controls for multi-repo policy packs, drift detection, rollout PR planning, and org-level dashboard rendering
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
@@ -90,6 +91,7 @@ bun src/cli.ts list
 - `browse`
 - `retro`
 - `upgrade`
+- `fleet`
 
 If you want shell-level commands, link those wrappers into your `PATH`:
 
@@ -184,6 +186,10 @@ bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --devi
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
+bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
+bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
@@ -225,6 +231,34 @@ bun run upgrade
 bun run upgrade:apply
 bun run weekly
 ```
+
+## Fleet rollout
+
+Use `fleet` when one repo needs to manage `codex-stack` policy across many repos.
+
+Example:
+
+```bash
+bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
+bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
+bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
+```
+
+The control repo owns:
+
+- a fleet manifest listing managed repos
+- shared policy packs under `.codex-stack/policies/`
+- generated member config and fleet-status workflow for each target repo
+- an org-level dashboard that ranks rollout drift and unresolved risk across repos
+
+`fleet sync` generates three files in each managed repo:
+
+- `.codex-stack/fleet-member.json`
+- `.github/codex-stack/fleet-status.js`
+- `.github/workflows/codex-stack-fleet-status.yml`
+
+That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend.
 
 ## Browser QA model
 
