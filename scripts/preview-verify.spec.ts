@@ -84,6 +84,55 @@ async function main(): Promise<void> {
 
   fs.writeFileSync(qaFixturePath, JSON.stringify({
     url: "https://preview.example.com/dashboard",
+    accessibility: {
+      enabled: true,
+      minimumImpact: "serious",
+      scopeSelectors: ["main"],
+      violationCount: 1,
+      passCount: 10,
+      incompleteCount: 0,
+      topRules: ["color-contrast (1)"],
+      violations: [
+        {
+          id: "color-contrast",
+          impact: "serious",
+          help: "Ensure text contrast is sufficient",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.11/color-contrast",
+          selectors: ["#hero-copy"],
+          nodeCount: 1,
+        },
+      ],
+    },
+    performance: {
+      enabled: true,
+      waitMs: 250,
+      metrics: {
+        ttfb: 100,
+        domContentLoaded: 380,
+        loadEvent: 660,
+        fcp: 280,
+        lcp: 2260,
+        cls: 0.12,
+        jsHeapUsed: 1048576,
+        resourceCount: 11,
+        failedResourceCount: 1,
+      },
+      budgets: [
+        {
+          metric: "lcp",
+          label: "LCP",
+          threshold: 2000,
+          unit: "ms",
+          severity: "high",
+          raw: "lcp=2s",
+          value: 2260,
+          passed: false,
+          detail: "LCP was 2260 ms which exceeds the budget of 2000 ms.",
+        },
+      ],
+      budgetViolationCount: 1,
+      topViolations: ["LCP was 2260 ms which exceeds the budget of 2000 ms."],
+    },
     snapshot: {
       name: "landing-home",
       result: {
@@ -144,6 +193,16 @@ async function main(): Promise<void> {
     "landing-home",
     "--session-bundle",
     sessionBundlePath,
+    "--a11y",
+    "--a11y-scope",
+    "main",
+    "--a11y-impact",
+    "serious",
+    "--perf",
+    "--perf-budget",
+    "lcp=2s",
+    "--perf-wait-ms",
+    "250",
     "--publish-dir",
     publishDir,
     "--markdown-out",
@@ -178,7 +237,12 @@ async function main(): Promise<void> {
     readiness?: { status?: string; attempts?: number };
     context?: { branchSlug?: string; shortSha?: string };
     deploy?: { screenshotManifest?: string; visualPack?: { index?: string; manifest?: string }; pathResults?: Array<{ status?: string; screenshot?: string }> };
-    qa?: { snapshotResult?: { status?: string; annotation?: string }; findings?: Array<{ title?: string }> };
+    qa?: {
+      snapshotResult?: { status?: string; annotation?: string };
+      findings?: Array<{ title?: string }>;
+      accessibility?: { enabled?: boolean; violationCount?: number };
+      performance?: { enabled?: boolean; budgetViolationCount?: number; metrics?: { lcp?: number } };
+    };
     visualPack?: { index?: string; manifest?: string };
   };
 
@@ -199,6 +263,11 @@ async function main(): Promise<void> {
   assert.ok(report.deploy?.pathResults?.some((entry) => entry.status === "warning" && String(entry.screenshot).includes("root-desktop")));
   assert.equal(report.qa?.snapshotResult?.status, "changed");
   assert.ok(report.qa?.findings?.some((entry) => String(entry.title).includes("Expected UI selectors")));
+  assert.equal(report.qa?.accessibility?.enabled, true);
+  assert.equal(report.qa?.accessibility?.violationCount, 1);
+  assert.equal(report.qa?.performance?.enabled, true);
+  assert.equal(report.qa?.performance?.budgetViolationCount, 1);
+  assert.equal(report.qa?.performance?.metrics?.lcp, 2260);
 
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(jsonOut));
@@ -217,6 +286,10 @@ async function main(): Promise<void> {
   assert.match(markdown, /root-desktop\.png/);
   assert.match(markdown, /Visual pack/);
   assert.match(markdown, /visual\/manifest\.json/);
+  assert.match(markdown, /## Accessibility/);
+  assert.match(markdown, /Violations: 1/);
+  assert.match(markdown, /## Performance/);
+  assert.match(markdown, /Budget violations: 1/);
   assert.match(comment, /Expected UI selectors are missing/);
 
   console.log("preview-verify spec passed");

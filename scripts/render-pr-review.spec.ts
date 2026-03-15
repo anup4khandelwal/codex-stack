@@ -78,6 +78,24 @@ async function main(): Promise<void> {
     },
     qa: {
       healthScore: 60,
+      accessibility: {
+        enabled: true,
+        violationCount: 3,
+        minimumImpact: "serious",
+        topRules: ["color-contrast (2)", "label (1)"],
+        artifactMarkdown: "preview-artifacts/a11y.md",
+      },
+      performance: {
+        enabled: true,
+        budgetViolationCount: 2,
+        topViolations: ["LCP exceeded 2000 ms", "CLS exceeded 0.1"],
+        metrics: {
+          lcp: 2420,
+          cls: 0.18,
+          failedResourceCount: 1,
+        },
+        artifactMarkdown: "preview-artifacts/performance.md",
+      },
       findings: [
         {
           severity: "critical",
@@ -173,6 +191,13 @@ async function main(): Promise<void> {
   assert.match(stdout, /`changed` `score 68\.2` `ratio 0\.318` dashboard @ \//);
   assert.match(stdout, /1 stale baseline need review or refresh/);
   assert.match(stdout, /CRITICAL\/VISUAL/);
+  assert.match(stdout, /Accessibility: 3 violations \(min impact serious\)/);
+  assert.match(stdout, /Performance: 2 budget violations, 1 failed resources/);
+  assert.match(stdout, /### Accessibility summary/);
+  assert.match(stdout, /Top rules: color-contrast \(2\), label \(1\)/);
+  assert.match(stdout, /### Performance summary/);
+  assert.match(stdout, /LCP: 2420/);
+  assert.match(stdout, /CLS: 0.18/);
   assert.match(stdout, /annotation\.svg/);
   assert.match(stdout, /### Deploy checks/);
   assert.match(stdout, /baselineAge=43d-stale/);

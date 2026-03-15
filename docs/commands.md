@@ -11,13 +11,17 @@ bun src/cli.ts issue branch 42 --title "Add PR workflow" --prefix feat
 bun src/cli.ts review
 bun src/cli.ts review --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
+bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s
 bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
 bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun src/cli.ts retro --since "7 days ago"
 bun src/cli.ts retro --since "7 days ago" --artifact-dir .codex-stack/retros
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -107,6 +111,7 @@ bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
 bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --draft
 ```
 
@@ -119,6 +124,7 @@ Notes:
 - When GitHub access is available, `ship` creates missing labels before attaching them to the PR.
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
 - `ship` can call the deploy verification workflow before push/PR creation with `--verify-url`, `--verify-path`, `--verify-device`, `--verify-flow`, and `--verify-snapshot`.
+- `ship` can also pass through accessibility and performance verification with `--verify-a11y`, `--verify-a11y-scope`, `--verify-a11y-impact`, `--verify-perf`, `--verify-perf-budget`, and `--verify-perf-wait-ms`.
 - `--verify-console-errors` upgrades captured console errors from warnings to merge-blocking failures.
 - When `ship --pr` runs with deploy verification, it also posts a PR comment with the deploy summary and any available artifact references.
 - During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/deploy/` before push/PR creation.
@@ -129,6 +135,7 @@ Notes:
 
 ```bash
 bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --json
 bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
 bun scripts/qa-run.ts https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun scripts/qa-trends.ts --dir .codex-stack/qa --json
@@ -140,6 +147,8 @@ Notes:
 - It upgrades raw browser evidence into categorized findings, severity, health score, and recommendation.
 - `--mode diff-aware` inspects the git diff, infers changed routes for common app/page layouts, and probes those URLs from the supplied base URL.
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
+- `--a11y` injects `axe-core` into the current page/session and writes `a11y.json` plus `a11y.md` when enabled.
+- `--perf` captures browser metrics like TTFB, FCP, LCP, CLS, and failed resources, then writes `performance.json` plus `performance.md`.
 - `compare-snapshot` now emits a self-contained visual pack, and `qa --publish-dir ...` copies that pack into `visual/index.html` and `visual/manifest.json`.
 - Every `qa-run` also refreshes `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so you can compare the latest run against prior QA history.
 - Snapshot baselines now store route/device metadata and QA flags stale baselines automatically when the saved reference ages out.
@@ -165,6 +174,7 @@ Notes:
 ```bash
 bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url https://preview.example.com --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --json
 ```
@@ -176,6 +186,7 @@ Notes:
 - The script polls preview readiness before it delegates to `deploy-verify.ts`.
 - `--session-bundle <path>` imports an exported browser session into the named preview session before live checks run.
 - Preview reports now expose the deploy visual-risk score, including stale-baseline counts and top drivers.
+- Preview reports also surface accessibility counts, top a11y rules, performance budget failures, and the worst captured perf metrics when those checks are enabled.
 - `preview-verify.yml` is the manual rerun path. `pr-review.yml` is the automatic PR-time path and publishes the GitHub Pages preview before verification.
 - For same-repo PRs, preview evidence is republished into the same Pages subtree under `__codex/visual/index.html`.
 - Both preview workflows can consume the repo secret `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64` and decode it to a temp bundle file without exposing the contents in logs.
@@ -185,6 +196,7 @@ Notes:
 
 ```bash
 bun scripts/deploy-verify.ts --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
+bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
 bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
 bun scripts/deploy-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device mobile --strict-console --strict-http --json
 ```
@@ -194,6 +206,7 @@ Notes:
 - `deploy-verify.ts` resolves the live deploy URL from either `--url` or `--url-template`.
 - It waits for readiness, verifies every requested `path x device` combination, and captures screenshots plus console evidence.
 - Flow and snapshot checks are delegated to the existing QA runtime so the deploy report reuses the same finding model and artifacts.
+- The same runtime can also run accessibility and performance checks, and deploy reports now publish those summaries into both markdown and `visual/index.html`.
 - `--session-bundle <path>` validates the bundle up front, imports it into the named deploy session when live browser checks need it, and passes it through to `qa-run.ts`.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
 - Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
@@ -250,6 +263,8 @@ bun browse/src/cli.ts export-flow portal-full-demo ./docs/portal-full-demo.md
 bun browse/src/cli.ts export-session ./tmp/staging-session.json --session staging
 bun browse/src/cli.ts import-session ./tmp/staging-session.json --session staging-copy
 bun browse/src/cli.ts import-browser-cookies chrome --session staging --profile Default
+bun browse/src/cli.ts a11y https://example.com/dashboard --scope main --impact serious --session staging
+bun browse/src/cli.ts perf https://example.com/dashboard --budget lcp=2s --budget cls=0.1 --wait-ms 400 --session staging
 bun browse/src/cli.ts probe https://example.com/settings --session staging
 bun browse/src/cli.ts snapshot https://example.com marketing-home --session staging
 bun browse/src/cli.ts compare-snapshot https://example.com marketing-home --session staging

@@ -98,6 +98,55 @@ async function main(): Promise<void> {
 
   fs.writeFileSync(qaFixturePath, JSON.stringify({
     url: "https://preview-77.example.com/dashboard",
+    accessibility: {
+      enabled: true,
+      minimumImpact: "serious",
+      scopeSelectors: ["#app"],
+      violationCount: 2,
+      passCount: 8,
+      incompleteCount: 0,
+      topRules: ["color-contrast (1)", "label (1)"],
+      violations: [
+        {
+          id: "color-contrast",
+          impact: "serious",
+          help: "Ensure text contrast is sufficient",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.11/color-contrast",
+          selectors: ["#hero-cta"],
+          nodeCount: 1,
+        },
+      ],
+    },
+    performance: {
+      enabled: true,
+      waitMs: 350,
+      metrics: {
+        ttfb: 110,
+        domContentLoaded: 410,
+        loadEvent: 700,
+        fcp: 290,
+        lcp: 2410,
+        cls: 0.17,
+        jsHeapUsed: 1048576,
+        resourceCount: 15,
+        failedResourceCount: 2,
+      },
+      budgets: [
+        {
+          metric: "lcp",
+          label: "LCP",
+          threshold: 2000,
+          unit: "ms",
+          severity: "high",
+          raw: "lcp=2s",
+          value: 2410,
+          passed: false,
+          detail: "LCP was 2410 ms which exceeds the budget of 2000 ms.",
+        },
+      ],
+      budgetViolationCount: 1,
+      topViolations: ["LCP was 2410 ms which exceeds the budget of 2000 ms."],
+    },
     snapshot: {
       name: "portal-dashboard",
       result: {
@@ -168,6 +217,16 @@ async function main(): Promise<void> {
     "portal-dashboard",
     "--session-bundle",
     sessionBundlePath,
+    "--a11y",
+    "--a11y-scope",
+    "#app",
+    "--a11y-impact",
+    "serious",
+    "--perf",
+    "--perf-budget",
+    "lcp=2s",
+    "--perf-wait-ms",
+    "350",
     "--strict-http",
     "--publish-dir",
     publishDir,
@@ -203,7 +262,14 @@ async function main(): Promise<void> {
     readiness?: { status?: string; attempts?: number };
     checks?: { paths?: string[]; devices?: string[]; strictHttp?: boolean };
     pathResults?: Array<{ path?: string; device?: string; status?: string; httpStatus?: number | null; screenshot?: string; console?: { errors?: string[]; warnings?: string[] } }>;
-    qa?: { status?: string; flowResults?: Array<{ name?: string }>; snapshotResults?: Array<{ name?: string; status?: string; annotation?: string }>; findings?: Array<{ title?: string }> };
+    qa?: {
+      status?: string;
+      flowResults?: Array<{ name?: string }>;
+      snapshotResults?: Array<{ name?: string; status?: string; annotation?: string }>;
+      findings?: Array<{ title?: string }>;
+      accessibility?: { enabled?: boolean; violationCount?: number; topRules?: string[] };
+      performance?: { enabled?: boolean; budgetViolationCount?: number; metrics?: { lcp?: number; cls?: number } };
+    };
     visualPack?: { index?: string; manifest?: string };
     screenshotManifest?: string;
   };
@@ -228,14 +294,24 @@ async function main(): Promise<void> {
   assert.ok(report.qa?.flowResults?.some((entry) => entry.name === "portal-dashboard"));
   assert.ok(report.qa?.snapshotResults?.some((entry) => entry.name === "portal-dashboard" && entry.status === "changed"));
   assert.ok(report.qa?.findings?.some((entry) => String(entry.title).includes("Expected UI selectors")));
+  assert.equal(report.qa?.accessibility?.enabled, true);
+  assert.equal(report.qa?.accessibility?.violationCount, 2);
+  assert.ok(report.qa?.accessibility?.topRules?.includes("color-contrast (1)"));
+  assert.equal(report.qa?.performance?.enabled, true);
+  assert.equal(report.qa?.performance?.budgetViolationCount, 1);
+  assert.equal(report.qa?.performance?.metrics?.lcp, 2410);
   assert.ok(report.screenshotManifest);
   assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
   assert.ok(String(report.visualPack?.manifest).includes("visual/manifest.json"));
   const visualManifest = JSON.parse(fs.readFileSync(path.join(publishDir, "visual", "manifest.json"), "utf8")) as {
     visualRisk?: { score?: number; staleBaselines?: number };
+    accessibility?: { violationCount?: number };
+    performance?: { budgetViolationCount?: number };
     snapshots?: Array<{ imageDiffScore?: number; diffImage?: string; baselineFreshness?: { stale?: boolean; routePath?: string } }>;
   };
   assert.equal(visualManifest.visualRisk?.staleBaselines, 1);
+  assert.equal(visualManifest.accessibility?.violationCount, 2);
+  assert.equal(visualManifest.performance?.budgetViolationCount, 1);
   assert.ok(visualManifest.snapshots?.some((entry) => entry.imageDiffScore === 68.2));
   assert.ok(visualManifest.snapshots?.some((entry) => String(entry.diffImage).includes("diff.png")));
   assert.ok(visualManifest.snapshots?.some((entry) => entry.baselineFreshness?.stale === true && entry.baselineFreshness?.routePath === "/dashboard"));
@@ -265,6 +341,12 @@ async function main(): Promise<void> {
   assert.match(markdown, /Visual pack/);
   assert.match(markdown, /Visual risk: CRITICAL/);
   assert.match(markdown, /baselineAge=/);
+  assert.match(markdown, /## Accessibility/);
+  assert.match(markdown, /Violations: 2/);
+  assert.match(markdown, /Top rules: color-contrast \(1\), label \(1\)/);
+  assert.match(markdown, /## Performance/);
+  assert.match(markdown, /Budget violations: 1/);
+  assert.match(markdown, /LCP: 2410/);
   assert.match(comment, /Deploy URL: https:\/\/preview-77\.example\.com/);
 
   console.log("deploy-verify spec passed");

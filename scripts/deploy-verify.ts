@@ -29,6 +29,12 @@ export interface DeployArgs {
   updateSnapshot: boolean;
   session: string;
   sessionBundle: string;
+  a11y: boolean;
+  a11yScopes: string[];
+  a11yImpact: string;
+  perf: boolean;
+  perfBudgets: string[];
+  perfWaitMs: number;
   publishDir: string;
   markdownOut: string;
   jsonOut: string;
@@ -100,6 +106,63 @@ interface QaFlowResult {
   steps?: number;
 }
 
+interface QaAccessibilityViolation {
+  id?: string;
+  impact?: string;
+  help?: string;
+  helpUrl?: string;
+  selectors?: string[];
+  nodeCount?: number;
+}
+
+interface QaAccessibilitySummary {
+  enabled?: boolean;
+  minimumImpact?: string;
+  scopeSelectors?: string[];
+  violationCount?: number;
+  passCount?: number;
+  incompleteCount?: number;
+  topRules?: string[];
+  violations?: QaAccessibilityViolation[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
+}
+
+interface QaPerformanceMetrics {
+  ttfb?: number | null;
+  domContentLoaded?: number | null;
+  loadEvent?: number | null;
+  fcp?: number | null;
+  lcp?: number | null;
+  cls?: number | null;
+  jsHeapUsed?: number | null;
+  resourceCount?: number;
+  failedResourceCount?: number;
+}
+
+interface QaPerformanceBudget {
+  metric?: string;
+  label?: string;
+  threshold?: number;
+  unit?: string;
+  severity?: string;
+  raw?: string;
+  value?: number | null;
+  passed?: boolean;
+  detail?: string;
+}
+
+interface QaPerformanceSummary {
+  enabled?: boolean;
+  waitMs?: number;
+  metrics?: QaPerformanceMetrics;
+  budgets?: QaPerformanceBudget[];
+  budgetViolationCount?: number;
+  topViolations?: string[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
+}
+
 interface VisualPackRef {
   dir?: string;
   index?: string;
@@ -134,6 +197,10 @@ interface QaArtifacts {
   json?: string;
   annotation?: string;
   screenshot?: string;
+  accessibilityJson?: string;
+  accessibilityMarkdown?: string;
+  performanceJson?: string;
+  performanceMarkdown?: string;
   visualPack?: VisualPackRef | null;
   published?: QaPublishedArtifacts;
 }
@@ -154,6 +221,8 @@ interface QaRunReport {
   findings?: QaFinding[];
   flowResults?: QaFlowResult[];
   snapshotResult?: QaSnapshotReport | null;
+  accessibility?: QaAccessibilitySummary | null;
+  performance?: QaPerformanceSummary | null;
   artifacts?: QaArtifacts;
 }
 
@@ -176,6 +245,8 @@ export interface DeployQaSummary {
   findings: QaFinding[];
   flowResults: QaFlowResult[];
   snapshotResults: DeploySnapshotResult[];
+  accessibility: QaAccessibilitySummary | null;
+  performance: QaPerformanceSummary | null;
   artifacts: QaArtifacts;
 }
 
@@ -208,6 +279,16 @@ export interface DeployReport {
     strictConsole: boolean;
     strictHttp: boolean;
     session: string;
+    accessibility: {
+      enabled: boolean;
+      impact: string;
+      scopes: string[];
+    };
+    performance: {
+      enabled: boolean;
+      budgets: string[];
+      waitMs: number;
+    };
   };
   pathResults: DeployPathResult[];
   qa: DeployQaSummary;
@@ -248,7 +329,7 @@ function usage(): never {
   console.log(`deploy-verify
 
 Usage:
-  bun scripts/deploy-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
+  bun scripts/deploy-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--a11y] [--a11y-scope <selector>] [--a11y-impact <critical|serious|moderate|minor>] [--perf] [--perf-budget <metric=value>] [--perf-wait-ms <n>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
 `);
   process.exit(0);
 }
@@ -331,6 +412,12 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
     updateSnapshot: false,
     session: "",
     sessionBundle: "",
+    a11y: false,
+    a11yScopes: [],
+    a11yImpact: "serious",
+    perf: false,
+    perfBudgets: [],
+    perfWaitMs: 250,
     publishDir: "",
     markdownOut: "",
     jsonOut: "",
@@ -385,6 +472,22 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
     } else if (arg === "--session-bundle") {
       args.sessionBundle = path.resolve(process.cwd(), argv[i + 1] || "");
       i += 1;
+    } else if (arg === "--a11y") {
+      args.a11y = true;
+    } else if (arg === "--a11y-scope") {
+      args.a11yScopes.push(cleanSubject(argv[i + 1] || ""));
+      i += 1;
+    } else if (arg === "--a11y-impact") {
+      args.a11yImpact = cleanSubject(argv[i + 1] || "") || args.a11yImpact;
+      i += 1;
+    } else if (arg === "--perf") {
+      args.perf = true;
+    } else if (arg === "--perf-budget") {
+      args.perfBudgets.push(cleanSubject(argv[i + 1] || ""));
+      i += 1;
+    } else if (arg === "--perf-wait-ms") {
+      args.perfWaitMs = parsePositiveInteger(argv[i + 1] || "", args.perfWaitMs);
+      i += 1;
     } else if (arg === "--publish-dir") {
       args.publishDir = path.resolve(process.cwd(), argv[i + 1] || "");
       i += 1;
@@ -427,6 +530,8 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
   args.devices = [...new Set(args.devices.filter(Boolean))];
   args.flows = [...new Set(args.flows.filter(Boolean))];
   args.snapshots = [...new Set(args.snapshots.filter(Boolean))];
+  args.a11yScopes = [...new Set(args.a11yScopes.filter(Boolean))];
+  args.perfBudgets = [...new Set(args.perfBudgets.filter(Boolean))];
   if (!args.url && !args.urlTemplate) {
     throw new Error("Provide either --url or --url-template.");
   }
@@ -645,6 +750,8 @@ function renderDeployVisualIndex(manifest: {
   visualRisk?: VisualRiskSummary;
   previewUrl: string;
   screenshotManifest: string;
+  accessibility?: QaAccessibilitySummary | null;
+  performance?: QaPerformanceSummary | null;
   screenshots: Array<Record<string, unknown>>;
   snapshots: Array<Record<string, unknown>>;
 }): string {
@@ -672,6 +779,36 @@ function renderDeployVisualIndex(manifest: {
       </article>
     `).join("\n")
     : "<p>No snapshot visual packs recorded.</p>";
+
+  const accessibilitySummary = manifest.accessibility?.enabled
+    ? `
+      <article class="card">
+        <h2>Accessibility</h2>
+        <p>Violations: <strong>${escapeHtml(manifest.accessibility.violationCount ?? 0)}</strong> • Minimum impact: ${escapeHtml(manifest.accessibility.minimumImpact || "serious")}</p>
+        ${manifest.accessibility.topRules?.length ? `<p>Top rules: ${escapeHtml(manifest.accessibility.topRules.join(", "))}</p>` : "<p>No rule summary recorded.</p>"}
+      </article>
+    `
+    : `
+      <article class="card">
+        <h2>Accessibility</h2>
+        <p>Accessibility checks were not enabled for this deploy verification.</p>
+      </article>
+    `;
+
+  const performanceSummary = manifest.performance?.enabled
+    ? `
+      <article class="card">
+        <h2>Performance</h2>
+        <p>Budget violations: <strong>${escapeHtml(manifest.performance.budgetViolationCount ?? 0)}</strong> • Failed resources: ${escapeHtml(manifest.performance.metrics?.failedResourceCount ?? 0)}</p>
+        ${manifest.performance.topViolations?.length ? `<p>Top violations: ${escapeHtml(manifest.performance.topViolations.join("; "))}</p>` : "<p>No budget violations recorded.</p>"}
+      </article>
+    `
+    : `
+      <article class="card">
+        <h2>Performance</h2>
+        <p>Performance checks were not enabled for this deploy verification.</p>
+      </article>
+    `;
 
   return `<!doctype html>
 <html lang="en">
@@ -706,6 +843,10 @@ function renderDeployVisualIndex(manifest: {
     <section>
       <h2>Page/device checks</h2>
       <div class="grid">${screenshotCards}</div>
+    </section>
+    <section style="margin-top: 28px;">
+      <h2>Accessibility and performance</h2>
+      <div class="grid">${accessibilitySummary}${performanceSummary}</div>
     </section>
     <section style="margin-top: 28px;">
       <h2>Snapshot regressions</h2>
@@ -995,19 +1136,33 @@ function runQaReport({
   session,
   sessionBundle,
   publishDir,
+  device,
   flows,
   snapshot,
   updateSnapshot,
   fixture,
+  a11y,
+  a11yScopes,
+  a11yImpact,
+  perf,
+  perfBudgets,
+  perfWaitMs,
 }: {
   url: string;
   session: string;
   sessionBundle: string;
   publishDir: string;
+  device: DeviceName;
   flows: string[];
   snapshot: string;
   updateSnapshot: boolean;
   fixture: string;
+  a11y: boolean;
+  a11yScopes: string[];
+  a11yImpact: string;
+  perf: boolean;
+  perfBudgets: string[];
+  perfWaitMs: number;
 }): QaRunReport {
   const qaArgs = [path.resolve(process.cwd(), "scripts", "qa-run.ts")];
   if (fixture) {
@@ -1015,7 +1170,7 @@ function runQaReport({
   } else {
     qaArgs.push(url);
   }
-  qaArgs.push("--session", session, "--publish-dir", publishDir, "--json");
+  qaArgs.push("--session", session, "--device", device, "--publish-dir", publishDir, "--json");
   if (sessionBundle) {
     qaArgs.push("--session-bundle", sessionBundle);
   }
@@ -1027,6 +1182,14 @@ function runQaReport({
   }
   if (updateSnapshot) {
     qaArgs.push("--update-snapshot");
+  }
+  if (a11y) {
+    qaArgs.push("--a11y", "--a11y-impact", a11yImpact);
+    for (const scope of a11yScopes) qaArgs.push("--a11y-scope", scope);
+  }
+  if (perf) {
+    qaArgs.push("--perf", "--perf-wait-ms", String(perfWaitMs));
+    for (const budget of perfBudgets) qaArgs.push("--perf-budget", budget);
   }
 
   const result = spawnSync(BUN_RUNTIME, qaArgs, {
@@ -1058,14 +1221,16 @@ function aggregateQa({
 }): DeployQaSummary {
   const flows = [...args.flows];
   const snapshots = [...args.snapshots];
-  if (!flows.length && !snapshots.length) {
+  if (!flows.length && !snapshots.length && !args.a11y && !args.perf) {
     return {
       status: "pass",
       healthScore: 100,
-      recommendation: "No flow or snapshot QA checks were configured.",
+      recommendation: "No flow, snapshot, accessibility, or performance QA checks were configured.",
       findings: [],
       flowResults: [],
       snapshotResults: [],
+      accessibility: null,
+      performance: null,
       artifacts: {},
     };
   }
@@ -1084,10 +1249,17 @@ function aggregateQa({
       session: sessionName,
       sessionBundle,
       publishDir: primaryPublishDir,
-        flows,
-        snapshot: primarySnapshot,
-        updateSnapshot: args.updateSnapshot,
+      device: defaultDevice,
+      flows,
+      snapshot: primarySnapshot,
+      updateSnapshot: args.updateSnapshot,
         fixture: args.qaFixture,
+        a11y: args.a11y,
+        a11yScopes: args.a11yScopes,
+        a11yImpact: args.a11yImpact,
+        perf: args.perf,
+        perfBudgets: args.perfBudgets,
+        perfWaitMs: args.perfWaitMs,
       }),
     snapshotName: primarySnapshot,
     publishDir: primaryPublishDir,
@@ -1103,10 +1275,17 @@ function aggregateQa({
         session: sessionName,
         sessionBundle,
         publishDir: snapshotPublishDir,
+        device: defaultDevice,
         flows: [],
         snapshot,
         updateSnapshot: args.updateSnapshot,
         fixture: args.qaFixture,
+        a11y: args.a11y,
+        a11yScopes: args.a11yScopes,
+        a11yImpact: args.a11yImpact,
+        perf: args.perf,
+        perfBudgets: args.perfBudgets,
+        perfWaitMs: args.perfWaitMs,
       }),
       snapshotName: snapshot,
       publishDir: snapshotPublishDir,
@@ -1140,6 +1319,9 @@ function aggregateQa({
     .map((entry) => cleanSubject(entry.report.recommendation || ""))
     .find(Boolean) || "Deploy QA checks passed.";
 
+  const primaryAccessibility = reports[0]?.report.accessibility || null;
+  const primaryPerformance = reports[0]?.report.performance || null;
+
   return {
     status: deriveQaStatus(statuses),
     healthScore,
@@ -1147,6 +1329,8 @@ function aggregateQa({
     findings,
     flowResults,
     snapshotResults,
+    accessibility: primaryAccessibility,
+    performance: primaryPerformance,
     artifacts: reports[0]?.report.artifacts || {},
   };
 }
@@ -1221,6 +1405,42 @@ function renderSnapshotLines(snapshotResults: DeploySnapshotResult[]): string[] 
   });
 }
 
+function renderAccessibilityLines(summary: QaAccessibilitySummary | null | undefined): string[] {
+  if (!summary?.enabled) return ["- Accessibility checks were not enabled."];
+  return [
+    `- Minimum impact: ${summary.minimumImpact || "serious"}`,
+    `- Scope selectors: ${summary.scopeSelectors?.length ? summary.scopeSelectors.join(", ") : "document"}`,
+    `- Violations: ${summary.violationCount ?? 0}`,
+    `- Passes: ${summary.passCount ?? 0}`,
+    `- Incomplete: ${summary.incompleteCount ?? 0}`,
+    summary.topRules?.length ? `- Top rules: ${summary.topRules.join(", ")}` : "",
+    summary.artifactJson ? `- Accessibility JSON: \`${summary.artifactJson}\`` : "",
+    summary.artifactMarkdown ? `- Accessibility Markdown: \`${summary.artifactMarkdown}\`` : "",
+  ].filter(Boolean);
+}
+
+function renderPerformanceLines(summary: QaPerformanceSummary | null | undefined): string[] {
+  if (!summary?.enabled) return ["- Performance checks were not enabled."];
+  const metrics = summary.metrics || {};
+  const failedBudgets = (summary.budgets || []).filter((item) => item && item.passed === false);
+  return [
+    `- Wait after load: ${summary.waitMs ?? 250} ms`,
+    `- Budget violations: ${summary.budgetViolationCount ?? failedBudgets.length}`,
+    failedBudgets.length ? `- Failed budgets: ${failedBudgets.map((item) => item.label || item.metric || "metric").join(", ")}` : "",
+    `- TTFB: ${metrics.ttfb ?? "n/a"}`,
+    `- DOMContentLoaded: ${metrics.domContentLoaded ?? "n/a"}`,
+    `- Load event: ${metrics.loadEvent ?? "n/a"}`,
+    `- FCP: ${metrics.fcp ?? "n/a"}`,
+    `- LCP: ${metrics.lcp ?? "n/a"}`,
+    `- CLS: ${metrics.cls ?? "n/a"}`,
+    `- JS heap used: ${metrics.jsHeapUsed ?? "n/a"}`,
+    `- Resource count: ${metrics.resourceCount ?? 0}`,
+    `- Failed resources: ${metrics.failedResourceCount ?? 0}`,
+    summary.artifactJson ? `- Performance JSON: \`${summary.artifactJson}\`` : "",
+    summary.artifactMarkdown ? `- Performance Markdown: \`${summary.artifactMarkdown}\`` : "",
+  ].filter(Boolean);
+}
+
 export function renderDeployMarkdown(report: DeployReport): string {
   const primaryQaArtifacts = report.qa.artifacts?.published || {};
   const lines = [
@@ -1241,6 +1461,12 @@ export function renderDeployMarkdown(report: DeployReport): string {
     `- Paths: ${report.checks.paths.join(", ")}`,
     `- Strict console errors: ${report.checks.strictConsole ? "yes" : "no"}`,
     `- Strict HTTP errors: ${report.checks.strictHttp ? "yes" : "no"}`,
+    `- Accessibility enabled: ${report.checks.accessibility.enabled ? "yes" : "no"}`,
+    report.checks.accessibility.enabled ? `- Accessibility minimum impact: ${report.checks.accessibility.impact}` : "",
+    report.checks.accessibility.enabled && report.checks.accessibility.scopes.length ? `- Accessibility scopes: ${report.checks.accessibility.scopes.join(", ")}` : "",
+    `- Performance enabled: ${report.checks.performance.enabled ? "yes" : "no"}`,
+    report.checks.performance.enabled ? `- Performance wait: ${report.checks.performance.waitMs} ms` : "",
+    report.checks.performance.enabled && report.checks.performance.budgets.length ? `- Performance budgets: ${report.checks.performance.budgets.join(", ")}` : "",
     `- QA health score: ${report.qa.healthScore}`,
     `- Recommendation: ${report.recommendation}`,
     report.runUrl ? `- Workflow run: ${report.runUrl}` : "",
@@ -1256,6 +1482,14 @@ export function renderDeployMarkdown(report: DeployReport): string {
     "## Snapshot results",
     "",
     ...renderSnapshotLines(report.qa.snapshotResults),
+    "",
+    "## Accessibility",
+    "",
+    ...renderAccessibilityLines(report.qa.accessibility),
+    "",
+    "## Performance",
+    "",
+    ...renderPerformanceLines(report.qa.performance),
     "",
     "## QA findings",
     "",
@@ -1317,6 +1551,8 @@ function writeVisualPack({
   screenshotManifest,
   status,
   visualRisk,
+  accessibility,
+  performance,
 }: {
   publishDir: string;
   resolvedUrl: string;
@@ -1325,6 +1561,8 @@ function writeVisualPack({
   screenshotManifest: string;
   status: DeployStatus;
   visualRisk: VisualRiskSummary;
+  accessibility: QaAccessibilitySummary | null;
+  performance: QaPerformanceSummary | null;
 }): DeployVisualPack {
   const visualDir = path.join(publishDir, "visual");
   const screenshotDir = path.join(visualDir, "screenshots");
@@ -1381,6 +1619,8 @@ function writeVisualPack({
     visualRisk,
     previewUrl: resolvedUrl,
     screenshotManifest: screenshotManifest ? relFrom(visualDir, path.resolve(process.cwd(), screenshotManifest)) : "",
+    accessibility,
+    performance,
     screenshots: screenshotEntries,
     snapshots: snapshotEntries,
   };
@@ -1414,6 +1654,8 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     findings: [],
     flowResults: [],
     snapshotResults: [],
+    accessibility: null,
+    performance: null,
     artifacts: {},
   };
   let overallStatus: DeployStatus = readiness.status === "ready" ? "pass" : "error";
@@ -1455,6 +1697,16 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
       strictConsole: args.strictConsole,
       strictHttp: args.strictHttp,
       session,
+      accessibility: {
+        enabled: args.a11y,
+        impact: args.a11yImpact,
+        scopes: [...args.a11yScopes],
+      },
+      performance: {
+        enabled: args.perf,
+        budgets: [...args.perfBudgets],
+        waitMs: args.perfWaitMs,
+      },
     },
     pathResults,
     qa,
@@ -1478,6 +1730,8 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     screenshotManifest: report.screenshotManifest,
     status: report.status,
     visualRisk: report.visualRisk,
+    accessibility: report.qa.accessibility,
+    performance: report.qa.performance,
   });
   report.recommendation = recommendation(report);
 

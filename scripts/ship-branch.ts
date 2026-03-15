@@ -37,6 +37,12 @@ interface ShipArgs {
   verifySnapshot: string;
   verifySession: string;
   verifyConsoleErrors: boolean;
+  verifyA11y: boolean;
+  verifyA11yScopes: string[];
+  verifyA11yImpact: string;
+  verifyPerf: boolean;
+  verifyPerfBudgets: string[];
+  verifyPerfWaitMs: number;
   updateVerifySnapshot: boolean;
 }
 
@@ -132,13 +138,46 @@ interface QaPublishedArtifacts {
   json?: string;
   annotation?: string;
   screenshot?: string;
+  accessibilityJson?: string;
+  accessibilityMarkdown?: string;
+  performanceJson?: string;
+  performanceMarkdown?: string;
 }
 
 interface QaArtifacts {
   markdown?: string;
   json?: string;
   annotation?: string;
+  accessibilityJson?: string;
+  accessibilityMarkdown?: string;
+  performanceJson?: string;
+  performanceMarkdown?: string;
   published?: QaPublishedArtifacts;
+}
+
+interface QaAccessibilitySummary {
+  enabled?: boolean;
+  minimumImpact?: string;
+  violationCount?: number;
+  topRules?: string[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
+}
+
+interface QaPerformanceMetrics {
+  lcp?: number | null;
+  cls?: number | null;
+  failedResourceCount?: number;
+}
+
+interface QaPerformanceSummary {
+  enabled?: boolean;
+  waitMs?: number;
+  metrics?: QaPerformanceMetrics;
+  budgetViolationCount?: number;
+  topViolations?: string[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
 }
 
 interface QaReportSummary {
@@ -202,6 +241,8 @@ interface DeployQaReport {
   findings?: QaFinding[];
   flowResults?: QaFlowResult[];
   snapshotResults?: DeploySnapshotResult[];
+  accessibility?: QaAccessibilitySummary | null;
+  performance?: QaPerformanceSummary | null;
   artifacts?: DeployArtifacts;
 }
 
@@ -245,6 +286,8 @@ interface VerificationSummary {
   visualRiskLevel: string;
   staleBaselines: number;
   consoleErrors: number;
+  accessibilityViolations: number;
+  performanceBudgetViolations: number;
   reportPath: string;
   stableReportUrl: string;
   publishDir: string;
@@ -285,7 +328,7 @@ function usage(): never {
   console.log(`ship-branch
 
 Usage:
-  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--verify-a11y] [--verify-a11y-scope <selector>] [--verify-a11y-impact <critical|serious|moderate|minor>] [--verify-perf] [--verify-perf-budget <metric=value>] [--verify-perf-wait-ms <n>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -368,6 +411,12 @@ function parseArgs(argv: string[]): ShipArgs {
     verifySnapshot: "",
     verifySession: "",
     verifyConsoleErrors: false,
+    verifyA11y: false,
+    verifyA11yScopes: [],
+    verifyA11yImpact: "serious",
+    verifyPerf: false,
+    verifyPerfBudgets: [],
+    verifyPerfWaitMs: 250,
     updateVerifySnapshot: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -430,6 +479,23 @@ function parseArgs(argv: string[]): ShipArgs {
       i += 1;
     } else if (arg === "--verify-console-errors") {
       out.verifyConsoleErrors = true;
+    } else if (arg === "--verify-a11y") {
+      out.verifyA11y = true;
+    } else if (arg === "--verify-a11y-scope") {
+      out.verifyA11yScopes.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--verify-a11y-impact") {
+      out.verifyA11yImpact = argv[i + 1] || out.verifyA11yImpact;
+      i += 1;
+    } else if (arg === "--verify-perf") {
+      out.verifyPerf = true;
+    } else if (arg === "--verify-perf-budget") {
+      out.verifyPerfBudgets.push(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--verify-perf-wait-ms") {
+      const raw = Number.parseInt(argv[i + 1] || "", 10);
+      out.verifyPerfWaitMs = Number.isFinite(raw) && raw >= 0 ? raw : out.verifyPerfWaitMs;
+      i += 1;
     } else if (arg === "--update-verify-snapshot") {
       out.updateVerifySnapshot = true;
     } else if (arg === "--label") {
@@ -451,6 +517,8 @@ function parseArgs(argv: string[]): ShipArgs {
   out.verifyPaths = uniq(out.verifyPaths);
   out.verifyDevices = uniq(out.verifyDevices);
   out.verifyFlows = uniq(out.verifyFlows);
+  out.verifyA11yScopes = uniq(out.verifyA11yScopes);
+  out.verifyPerfBudgets = uniq(out.verifyPerfBudgets);
   out.labels = uniq(out.labels);
   return out;
 }
@@ -944,6 +1012,8 @@ function shouldRunVerification(args: ShipArgs): boolean {
     || args.verifyFlows.length
     || args.verifySnapshot
     || args.verifyConsoleErrors
+    || args.verifyA11y
+    || args.verifyPerf
   );
 }
 
@@ -978,6 +1048,14 @@ function runDeployVerification(args: ShipArgs, branch: string): DeployVerificati
   }
   if (args.verifyConsoleErrors) {
     deployArgs.push("--strict-console");
+  }
+  if (args.verifyA11y) {
+    deployArgs.push("--a11y", "--a11y-impact", args.verifyA11yImpact);
+    for (const scope of args.verifyA11yScopes) deployArgs.push("--a11y-scope", scope);
+  }
+  if (args.verifyPerf) {
+    deployArgs.push("--perf", "--perf-wait-ms", String(args.verifyPerfWaitMs));
+    for (const budget of args.verifyPerfBudgets) deployArgs.push("--perf-budget", budget);
   }
 
   const child = spawnSync(BUN_RUNTIME, deployArgs, {
@@ -1122,6 +1200,28 @@ function deploySnapshotSummary(entries: DeploySnapshotResult[] | undefined, limi
   return lines;
 }
 
+function deployAccessibilitySummary(summary: QaAccessibilitySummary | null | undefined): string[] {
+  if (!summary?.enabled) return ["- Accessibility checks were not enabled."];
+  return [
+    `- Violations: ${summary.violationCount ?? 0}`,
+    `- Minimum impact: ${summary.minimumImpact || "serious"}`,
+    summary.topRules?.length ? `- Top rules: ${summary.topRules.join(", ")}` : "",
+    summary.artifactMarkdown ? `- Report: ${summary.artifactMarkdown}` : "",
+  ].filter(Boolean);
+}
+
+function deployPerformanceSummary(summary: QaPerformanceSummary | null | undefined): string[] {
+  if (!summary?.enabled) return ["- Performance checks were not enabled."];
+  return [
+    `- Budget violations: ${summary.budgetViolationCount ?? 0}`,
+    summary.topViolations?.length ? `- Top violations: ${summary.topViolations.join("; ")}` : "",
+    `- LCP: ${summary.metrics?.lcp ?? "n/a"}`,
+    `- CLS: ${summary.metrics?.cls ?? "n/a"}`,
+    `- Failed resources: ${summary.metrics?.failedResourceCount ?? 0}`,
+    summary.artifactMarkdown ? `- Report: ${summary.artifactMarkdown}` : "",
+  ].filter(Boolean);
+}
+
 function buildDeployPrComment({
   report,
   repo,
@@ -1185,6 +1285,17 @@ function buildDeployPrComment({
       ...deploySnapshotSummary(report.qa.snapshotResults)
     );
   }
+
+  sections.push(
+    "",
+    "### Accessibility",
+    "",
+    ...deployAccessibilitySummary(report.qa?.accessibility),
+    "",
+    "### Performance",
+    "",
+    ...deployPerformanceSummary(report.qa?.performance),
+  );
 
   if (trackedReportRef || stableReportRef || trackedAnnotationRef || trackedScreenshotRef || screenshotManifestRef) {
     sections.push("");
@@ -1272,6 +1383,12 @@ function printText(result: ShipResult): void {
   if (result.verification.consoleErrors) {
     console.log(`- Verification console errors: ${result.verification.consoleErrors}`);
   }
+  if (result.verification.accessibilityViolations) {
+    console.log(`- Verification accessibility violations: ${result.verification.accessibilityViolations}`);
+  }
+  if (result.verification.performanceBudgetViolations) {
+    console.log(`- Verification performance budget violations: ${result.verification.performanceBudgetViolations}`);
+  }
   if (result.verification.reportPath) {
     console.log(`- Verification report: ${result.verification.reportPath}`);
   }
@@ -1326,6 +1443,8 @@ const result: ShipResult = {
     visualRiskLevel: "",
     staleBaselines: 0,
     consoleErrors: 0,
+    accessibilityViolations: 0,
+    performanceBudgetViolations: 0,
     reportPath: "",
     stableReportUrl: "",
     publishDir: "",
@@ -1417,6 +1536,8 @@ if (shouldRunVerification(args)) {
   if (args.verifyFlows.length) verificationParts.push(`flows ${args.verifyFlows.join(", ")}`);
   if (args.verifySnapshot) verificationParts.push(`${args.updateVerifySnapshot ? "refresh" : "compare"} snapshot ${args.verifySnapshot}`);
   if (args.verifyConsoleErrors) verificationParts.push("strict console errors");
+  if (args.verifyA11y) verificationParts.push(`a11y impact ${args.verifyA11yImpact}${args.verifyA11yScopes.length ? ` scopes ${args.verifyA11yScopes.join(", ")}` : ""}`);
+  if (args.verifyPerf) verificationParts.push(`perf budgets ${args.verifyPerfBudgets.length ? args.verifyPerfBudgets.join(", ") : "capture only"}`);
   result.verification.session = result.verification.session || defaultVerifySession(result.branch);
   result.verification.publishDir = defaultVerifyPublishDir(result.branch);
   result.verification.paths = effectivePaths;
@@ -1443,6 +1564,8 @@ if (shouldRunVerification(args)) {
     result.verification.consoleErrors = (verification.report.pathResults || []).reduce((count: number, entry: DeployPathResult) => (
       count + (Array.isArray(entry.console?.errors) ? entry.console?.errors.length : 0)
     ), 0);
+    result.verification.accessibilityViolations = Number(verification.report.qa?.accessibility?.violationCount || 0);
+    result.verification.performanceBudgetViolations = Number(verification.report.qa?.performance?.budgetViolationCount || 0);
     result.verification.reportPath = verification.report.artifactRoot
       ? path.join(verification.report.artifactRoot, "report.md")
       : "";

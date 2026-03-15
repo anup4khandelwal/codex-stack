@@ -17,6 +17,16 @@ import {
   type SessionOriginState,
   type SessionStorageEntry,
 } from "./session-bundle.ts";
+import {
+  parseAccessibilityImpact,
+  parsePerformanceBudget,
+  runAccessibilityAudit,
+  runPerformanceAudit,
+  type AccessibilityAuditResult,
+  type AccessibilityImpact,
+  type PerformanceAuditResult,
+  type PerformanceBudget,
+} from "./page-insights.ts";
 
 type FlowFormat = "json" | "yaml" | "markdown";
 type FlowSource = "local" | "repo";
@@ -29,6 +39,10 @@ type PlaywrightPage = {
 } & Record<string, any>;
 type PlaywrightContext = Record<string, any>;
 type StepResult = Record<string, unknown>;
+
+function cleanSubject(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
 
 interface SessionState {
   name: string;
@@ -168,6 +182,18 @@ interface ProbeResult {
   bodyLength: number;
 }
 
+interface AccessibilityCommandArgs {
+  url: string;
+  scopeSelectors: string[];
+  minimumImpact: AccessibilityImpact;
+}
+
+interface PerformanceCommandArgs {
+  url: string;
+  waitMs: number;
+  budgetSpecs: string[];
+}
+
 type WaitState = "visible" | "hidden" | "attached" | "detached";
 type LoadState = "load" | "domcontentloaded" | "networkidle" | "commit";
 type DevicePresetName = "desktop" | "tablet" | "mobile";
@@ -222,6 +248,8 @@ Usage:
   codex-stack browse snapshot <url> [name] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse compare-snapshot <url> <name> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse probe <url> [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse a11y <url> [--scope <selector>] [--impact <critical|serious|moderate|minor>] [--session <name>] [--device <desktop|tablet|mobile>]
+  codex-stack browse perf <url> [--budget <metric=value>] [--wait-ms <n>] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse text <url> [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse html <url> [selector] [--session <name>] [--device <desktop|tablet|mobile>]
   codex-stack browse links <url> [--session <name>] [--device <desktop|tablet|mobile>]
@@ -760,6 +788,49 @@ function parseGlobalArgs(argv: string[]): ParsedGlobalArgs {
     }
   }
   return out;
+}
+
+function takeOptionValues(args: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== flag) continue;
+    values.push(String(args[index + 1] || ""));
+    args.splice(index, 2);
+    index -= 1;
+  }
+  return values.map((item) => cleanSubject(item)).filter(Boolean);
+}
+
+function takeSingleOption(args: string[], flag: string): string {
+  const values = takeOptionValues(args, flag);
+  return values.length ? values[values.length - 1] : "";
+}
+
+function parseAccessibilityArgs(rest: string[]): AccessibilityCommandArgs {
+  const args = [...rest];
+  const url = cleanSubject(args.shift() || "");
+  if (!url) usage();
+  const scopeSelectors = takeOptionValues(args, "--scope");
+  const minimumImpact = parseAccessibilityImpact(takeSingleOption(args, "--impact") || "serious");
+  return {
+    url,
+    scopeSelectors,
+    minimumImpact,
+  };
+}
+
+function parsePerformanceArgs(rest: string[]): PerformanceCommandArgs {
+  const args = [...rest];
+  const url = cleanSubject(args.shift() || "");
+  if (!url) usage();
+  const budgetSpecs = takeOptionValues(args, "--budget");
+  const waitRaw = takeSingleOption(args, "--wait-ms");
+  const parsedWait = Number.parseInt(waitRaw || "", 10);
+  return {
+    url,
+    waitMs: Number.isFinite(parsedWait) && parsedWait >= 0 ? parsedWait : 250,
+    budgetSpecs,
+  };
 }
 
 function parseFlow(jsonText: string): FlowStep[] | null {
@@ -1907,7 +1978,7 @@ async function main(): Promise<void> {
     console.log(`- snapshot root: ${SNAPSHOT_DIR}`);
     console.log(`- artifact root: ${ARTIFACT_DIR}`);
     console.log("- session model: persistent browser profile per named session");
-    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, import-browser-cookies, snapshot, compare-snapshot, probe, text, html, links, screenshot, eval, click, fill, upload, dialog, wait, press, assert-visible, assert-hidden, assert-enabled, assert-disabled, assert-checked, assert-editable, assert-focused, assert-text, assert-url, assert-count, flow, run-flow, login");
+    console.log("- commands: sessions, flows, save-flow, save-repo-flow, import-flow, import-repo-flow, export-flow, show-flow, delete-flow, clear-session, export-session, import-session, import-cookies, import-browser-cookies, snapshot, compare-snapshot, probe, a11y, perf, text, html, links, screenshot, eval, click, fill, upload, dialog, wait, press, assert-visible, assert-hidden, assert-enabled, assert-disabled, assert-checked, assert-editable, assert-focused, assert-text, assert-url, assert-count, flow, run-flow, login");
     console.log(`- repo flow root: ${REPO_FLOW_DIR}`);
     console.log("- flow search order: local .codex-stack flow overrides checked-in repo flow with the same name");
     console.log("- interchange formats: json, yaml, markdown (fenced yaml/json)");
@@ -2203,6 +2274,45 @@ async function main(): Promise<void> {
       };
     });
     recordSession(session, { lastCommand: "probe", lastUrl: url, output: `${result.status ?? "n/a"}:${result.bodyLength}` });
+    printJson(result);
+    return;
+  }
+
+  if (command === "a11y") {
+    const parsedArgs = parseAccessibilityArgs(rest);
+    const result = await withPage(session, parsedArgs.url, device, async ({ page }) => (
+      runAccessibilityAudit({
+        page: page as any,
+        url: parsedArgs.url,
+        scopeSelectors: parsedArgs.scopeSelectors,
+        minimumImpact: parsedArgs.minimumImpact,
+      })
+    ));
+    recordSession(session, {
+      lastCommand: "a11y",
+      lastUrl: parsedArgs.url,
+      output: `${result.violationCount} violations`,
+    });
+    printJson(result);
+    return;
+  }
+
+  if (command === "perf") {
+    const parsedArgs = parsePerformanceArgs(rest);
+    const budgets: PerformanceBudget[] = parsedArgs.budgetSpecs.map((item) => parsePerformanceBudget(item));
+    const result = await withPage(session, "", device, async ({ page }) => (
+      runPerformanceAudit({
+        page: page as any,
+        url: parsedArgs.url,
+        waitMs: parsedArgs.waitMs,
+        budgets,
+      })
+    ));
+    recordSession(session, {
+      lastCommand: "perf",
+      lastUrl: parsedArgs.url,
+      output: `${result.budgetViolationCount} perf budget violations`,
+    });
     printJson(result);
     return;
   }
