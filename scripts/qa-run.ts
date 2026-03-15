@@ -5,6 +5,16 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { readSessionBundle } from "../browse/src/session-bundle.ts";
 import { inferChangedRoutes, type RouteCandidate } from "./qa-diff.ts";
+import {
+  isDecisionExpired,
+  isDecisionExpiringSoon,
+  matchDecision,
+  readDecisionRecords,
+  type QaDecisionCategory,
+  type QaDecisionKind,
+  type QaDecisionRecord,
+  type QaDecisionTarget,
+} from "./qa-decisions.ts";
 import { writeQaTrendArtifacts } from "./qa-trends.ts";
 import { computeBaselineFreshness, computeVisualRisk, type BaselineFreshness, type VisualRiskSummary } from "./visual-risk.ts";
 
@@ -251,6 +261,68 @@ interface QaArtifacts {
   published?: PublishedArtifacts;
 }
 
+interface QaDecisionSummary {
+  totalDecisions: number;
+  appliedCount: number;
+  approvedCount: number;
+  suppressedCount: number;
+  refreshRequiredCount: number;
+  expiredCount: number;
+  unresolvedCount: number;
+  expiringSoonCount: number;
+}
+
+interface QaAppliedDecision {
+  id: string;
+  decision: string;
+  category: QaDecisionCategory;
+  kind: QaDecisionKind;
+  snapshot: string;
+  routePath: string;
+  device: string;
+  reason: string;
+  author: string;
+  createdAt: string;
+  reviewAfter?: string;
+  expiresAt?: string;
+  file: string;
+  matchedFindings: string[];
+  effect: "downgraded" | "suppressed" | "noted";
+  originalSeverity?: FindingSeverity;
+  resultingSeverity?: FindingSeverity;
+}
+
+interface QaExpiredDecision {
+  id: string;
+  decision: string;
+  category: QaDecisionCategory;
+  kind: QaDecisionKind;
+  snapshot: string;
+  routePath: string;
+  device: string;
+  reason: string;
+  author: string;
+  createdAt: string;
+  expiresAt?: string;
+  file: string;
+  matchedFindings: string[];
+}
+
+interface QaUnresolvedRegression {
+  category: QaDecisionCategory;
+  kind: QaDecisionKind;
+  title: string;
+  severity: FindingSeverity;
+  snapshot: string;
+  routePath: string;
+  device: string;
+  selectors: string[];
+  ruleId: string;
+  metric: string;
+  decisionStatus?: string;
+  decisionFile?: string;
+}
+
 interface QaRouteResult {
   route: string;
   url: string;
@@ -292,7 +364,18 @@ interface QaReport {
   accessibility: QaAccessibilitySummary | null;
   performance: QaPerformanceSummary | null;
   visualRisk: VisualRiskSummary;
+  decisionSummary: QaDecisionSummary;
+  appliedDecisions: QaAppliedDecision[];
+  expiredDecisions: QaExpiredDecision[];
+  unresolvedRegressions: QaUnresolvedRegression[];
   artifacts: QaArtifacts;
+}
+
+interface TriageCandidate {
+  findingIndex: number;
+  target: QaDecisionTarget;
+  title: string;
+  severity: FindingSeverity;
 }
 
 interface AnnotationMarker {
@@ -777,6 +860,216 @@ function recommendation(status: ReportStatus, healthScore: number): string {
   return "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.";
 }
 
+function routePathFromUrl(rawUrl: string): string {
+  const cleaned = cleanSubject(rawUrl);
+  if (!cleaned) return "/";
+  try {
+    const parsed = new URL(cleaned);
+    return `${parsed.pathname || "/"}${parsed.search || ""}` || "/";
+  } catch {
+    return "/";
+  }
+}
+
+function downgradeSeverity(severity: FindingSeverity): FindingSeverity {
+  if (severity === "critical") return "high";
+  if (severity === "high") return "medium";
+  if (severity === "medium") return "low";
+  return "low";
+}
+
+function parseDecisionCategory(value: string): QaDecisionCategory | null {
+  const normalized = cleanSubject(value).toLowerCase();
+  if (normalized === "visual" || normalized === "accessibility" || normalized === "performance") return normalized;
+  return null;
+}
+
+function parseDecisionKind(value: string): QaDecisionKind | null {
+  const normalized = cleanSubject(value).toLowerCase();
+  if (
+    normalized === "snapshot-drift"
+    || normalized === "missing-selectors"
+    || normalized === "stale-baseline"
+    || normalized === "accessibility-rule"
+    || normalized === "performance-budget"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function decisionTargetFromFinding(finding: QaFinding): QaDecisionTarget | null {
+  const category = parseDecisionCategory(String(finding.category || ""));
+  const kind = parseDecisionKind(String(finding.evidence.decisionKind || ""));
+  if (!category || !kind) return null;
+  return {
+    category,
+    kind,
+    snapshot: cleanSubject(finding.evidence.snapshot),
+    routePath: cleanSubject(finding.evidence.route || "/") || "/",
+    device: cleanSubject(finding.evidence.device || "desktop") || "desktop",
+    selectors: String(finding.evidence.selectors || "")
+      .split(",")
+      .map((item) => cleanSubject(item))
+      .filter(Boolean),
+    ruleId: cleanSubject(finding.evidence.rule),
+    metric: cleanSubject(finding.evidence.metric).toLowerCase(),
+    title: cleanSubject(finding.evidence.decisionTitle || finding.title),
+    findingKey: cleanSubject(finding.evidence.findingKey),
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((item) => cleanSubject(item)).filter(Boolean))];
+}
+
+function decisionRef(record: QaDecisionRecord): Omit<QaAppliedDecision, "matchedFindings" | "effect" | "originalSeverity" | "resultingSeverity"> {
+  return {
+    id: record.id,
+    decision: record.decision,
+    category: record.category,
+    kind: record.kind,
+    snapshot: record.snapshot,
+    routePath: record.routePath,
+    device: record.device,
+    reason: record.reason,
+    author: record.author,
+    createdAt: record.createdAt,
+    reviewAfter: record.reviewAfter,
+    expiresAt: record.expiresAt,
+    file: record.file,
+  };
+}
+
+function expiredDecisionRef(record: QaDecisionRecord): QaExpiredDecision {
+  return {
+    ...decisionRef(record),
+    matchedFindings: [],
+  };
+}
+
+function unresolvedRegression(candidate: TriageCandidate, finding: QaFinding, decision?: QaDecisionRecord): QaUnresolvedRegression {
+  return {
+    category: candidate.target.category,
+    kind: candidate.target.kind,
+    title: candidate.title,
+    severity: candidate.severity,
+    snapshot: candidate.target.snapshot,
+    routePath: candidate.target.routePath,
+    device: candidate.target.device,
+    selectors: candidate.target.selectors || [],
+    ruleId: candidate.target.ruleId || "",
+    metric: candidate.target.metric || "",
+    decisionStatus: decision?.decision,
+    decisionFile: decision?.file,
+  };
+}
+
+function applyDecisionTriage(findings: QaFinding[]): {
+  findings: QaFinding[];
+  decisionSummary: QaDecisionSummary;
+  appliedDecisions: QaAppliedDecision[];
+  expiredDecisions: QaExpiredDecision[];
+  unresolvedRegressions: QaUnresolvedRegression[];
+} {
+  const records = readDecisionRecords();
+  const now = Date.now();
+  const activeRecords = records.filter((record) => !isDecisionExpired(record, now));
+  const expiringSoonCount = activeRecords.filter((record) => isDecisionExpiringSoon(record, now)).length;
+  const candidates: TriageCandidate[] = findings
+    .map((item, index) => {
+      const target = decisionTargetFromFinding(item);
+      if (!target) return null;
+      return {
+        findingIndex: index,
+        target,
+        title: cleanSubject(item.title),
+        severity: item.severity,
+      };
+    })
+    .filter((item): item is TriageCandidate => Boolean(item));
+
+  const nextFindings = findings.map((item) => ({ ...item, evidence: { ...item.evidence } }));
+  const suppressed = new Set<number>();
+  const applied = new Map<string, QaAppliedDecision>();
+  const expired = new Map<string, QaExpiredDecision>();
+  const unresolved: QaUnresolvedRegression[] = [];
+
+  for (const candidate of candidates) {
+    const matchingExpired = records.filter((record) => isDecisionExpired(record, now) && matchDecision(record, candidate.target));
+    for (const record of matchingExpired) {
+      const entry = expired.get(record.id) || expiredDecisionRef(record);
+      entry.matchedFindings = uniqueStrings([...entry.matchedFindings, candidate.title]);
+      expired.set(record.id, entry);
+    }
+
+    const matches = activeRecords
+      .filter((record) => matchDecision(record, candidate.target))
+      .sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0));
+
+    if (!matches.length) {
+      unresolved.push(unresolvedRegression(candidate, nextFindings[candidate.findingIndex]));
+      continue;
+    }
+
+    const decision = matches[0];
+    const finding = nextFindings[candidate.findingIndex];
+    const originalSeverity = finding.severity;
+    let resultingSeverity = originalSeverity;
+    let effect: QaAppliedDecision["effect"] = "noted";
+
+    finding.evidence.decision = decision.decision;
+    finding.evidence.decisionFile = decision.file;
+    finding.evidence.decisionAuthor = decision.author;
+
+    if (decision.decision === "suppress") {
+      suppressed.add(candidate.findingIndex);
+      effect = "suppressed";
+    } else if (decision.decision === "approve-current") {
+      resultingSeverity = downgradeSeverity(finding.severity);
+      finding.severity = resultingSeverity;
+      effect = "downgraded";
+    } else {
+      unresolved.push(unresolvedRegression(candidate, finding, decision));
+    }
+
+    const entry = applied.get(decision.id) || {
+      ...decisionRef(decision),
+      matchedFindings: [],
+      effect,
+      originalSeverity,
+      resultingSeverity,
+    };
+    entry.effect = effect;
+    entry.originalSeverity = entry.originalSeverity || originalSeverity;
+    entry.resultingSeverity = effect === "suppressed" ? entry.resultingSeverity : resultingSeverity;
+    entry.matchedFindings = uniqueStrings([...entry.matchedFindings, candidate.title]);
+    applied.set(decision.id, entry);
+  }
+
+  const finalFindings = nextFindings.filter((_, index) => !suppressed.has(index));
+  const appliedDecisions = [...applied.values()];
+  const expiredDecisions = [...expired.values()];
+  const decisionSummary: QaDecisionSummary = {
+    totalDecisions: records.length,
+    appliedCount: appliedDecisions.length,
+    approvedCount: appliedDecisions.filter((item) => item.decision === "approve-current").length,
+    suppressedCount: appliedDecisions.filter((item) => item.decision === "suppress").length,
+    refreshRequiredCount: appliedDecisions.filter((item) => item.decision === "refresh-required").length,
+    expiredCount: expiredDecisions.length,
+    unresolvedCount: unresolved.length,
+    expiringSoonCount,
+  };
+
+  return {
+    findings: finalFindings,
+    decisionSummary,
+    appliedDecisions,
+    expiredDecisions,
+    unresolvedRegressions: unresolved,
+  };
+}
+
 function formatMetric(metric: string, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "n/a";
   if (metric === "cls") return String(Number(value.toFixed(3)));
@@ -966,6 +1259,31 @@ function buildMarkdown(report: QaReport): string {
         report.artifacts.performanceMarkdown ? `- Performance Markdown: ${report.artifacts.performanceMarkdown}` : "",
       ].filter(Boolean).join("\n")
     : "- Performance: not enabled";
+  const decisionSummaryLines = [
+    `- Decisions loaded: ${report.decisionSummary.totalDecisions}`,
+    `- Applied decisions: ${report.decisionSummary.appliedCount}`,
+    `- Approved regressions: ${report.decisionSummary.approvedCount}`,
+    `- Suppressed findings: ${report.decisionSummary.suppressedCount}`,
+    `- Refresh required decisions: ${report.decisionSummary.refreshRequiredCount}`,
+    `- Expired decisions: ${report.decisionSummary.expiredCount}`,
+    `- Unresolved regressions: ${report.decisionSummary.unresolvedCount}`,
+    `- Decisions expiring soon: ${report.decisionSummary.expiringSoonCount}`,
+  ].join("\n");
+  const appliedDecisionLines = report.appliedDecisions.length
+    ? report.appliedDecisions
+        .map((item) => `- ${item.decision} ${item.category}/${item.kind} @ ${item.routePath} (${item.device}) • ${item.reason} • ${item.file}`)
+        .join("\n")
+    : "- none";
+  const expiredDecisionLines = report.expiredDecisions.length
+    ? report.expiredDecisions
+        .map((item) => `- ${item.decision} ${item.category}/${item.kind} @ ${item.routePath} (${item.device}) expired ${item.expiresAt || "previously"} • ${item.file}`)
+        .join("\n")
+    : "- none";
+  const unresolvedLines = report.unresolvedRegressions.length
+    ? report.unresolvedRegressions
+        .map((item) => `- ${item.severity.toUpperCase()} ${item.category}/${item.kind}: ${item.title} @ ${item.routePath} (${item.device})${item.decisionStatus ? ` • decision=${item.decisionStatus}` : ""}`)
+        .join("\n")
+    : "- none";
 
   return `# QA Report
 
@@ -1005,6 +1323,22 @@ ${accessibilityLines}
 ## Performance
 
 ${performanceLines}
+
+## Regression triage
+
+${decisionSummaryLines}
+
+### Applied decisions
+
+${appliedDecisionLines}
+
+### Expired decisions
+
+${expiredDecisionLines}
+
+### Unresolved regressions
+
+${unresolvedLines}
 `;
 }
 
@@ -1320,6 +1654,8 @@ function buildReport({
   performance: QaPerformanceSummary | null;
 }): QaReport {
   const findings: QaFinding[] = [];
+  const targetRoutePath = routePathFromUrl(args.url);
+  const targetDevice = cleanSubject(args.device || "desktop") || "desktop";
   const baselineDocument = snapshotEvidence
     ? loadSnapshotDocument(snapshotEvidence.result.baseline || snapshotEvidence.result.snapshot || "")
     : null;
@@ -1340,7 +1676,7 @@ function buildReport({
           "functional",
           `Flow failed: ${flow.name}`,
           flow.stderr || `The ${flow.name} flow exited with a non-zero status.`,
-          { flow: flow.name },
+          { flow: flow.name, route: targetRoutePath, device: targetDevice },
         ),
       );
     }
@@ -1369,6 +1705,11 @@ function buildReport({
             `The live page no longer contains ${(comparison.missingSelectors || []).length} selectors from the baseline.`,
             {
               snapshot: args.snapshot,
+              route: baselineFreshness?.routePath || targetRoutePath,
+              device: baselineFreshness?.device || targetDevice,
+              selectors: (comparison.missingSelectors || []).join(", "),
+              decisionKind: "missing-selectors",
+              decisionTitle: "Expected UI selectors are missing",
               baseline: snapshotResult.baseline || "",
               current: snapshotResult.current || "",
             },
@@ -1390,6 +1731,14 @@ function buildReport({
             `The page differs from the saved baseline for ${args.snapshot}.`,
             {
               snapshot: args.snapshot,
+              route: baselineFreshness?.routePath || targetRoutePath,
+              device: baselineFreshness?.device || targetDevice,
+              selectors: uniqueStrings([
+                ...(comparison.changedSelectors || []).map((item) => cleanSubject(item.selector)),
+                ...(comparison.newSelectors || []),
+              ]).join(", "),
+              decisionKind: "snapshot-drift",
+              decisionTitle: "Snapshot drift detected",
               screenshot: snapshotResult.screenshot || "",
               current: snapshotResult.current || "",
             },
@@ -1411,6 +1760,8 @@ function buildReport({
           snapshot: baselineFreshness.snapshot,
           route: baselineFreshness.routePath,
           device: baselineFreshness.device,
+          decisionKind: "stale-baseline",
+          decisionTitle: "Snapshot baseline is stale",
           capturedAt: baselineFreshness.capturedAt,
         },
       ),
@@ -1427,6 +1778,7 @@ function buildReport({
           "The changed route contains dynamic segments, so codex-stack could not derive a stable preview URL automatically.",
           {
             route: route.route,
+            device: targetDevice,
             files: route.files.join(", "),
           },
         ),
@@ -1443,6 +1795,7 @@ function buildReport({
           {
             route: route.route,
             url: route.url,
+            device: targetDevice,
             files: route.files.join(", "),
             status: route.httpStatus !== null ? String(route.httpStatus) : "",
           },
@@ -1467,6 +1820,10 @@ function buildReport({
           {
             rule: violation.id,
             impact: violation.impact,
+            route: targetRoutePath,
+            device: targetDevice,
+            decisionKind: "accessibility-rule",
+            decisionTitle: violation.id || violation.help,
             selectors: violation.selectors.join(", "),
             helpUrl: violation.helpUrl,
           },
@@ -1485,6 +1842,10 @@ function buildReport({
           budget.detail,
           {
             metric: budget.metric,
+            route: targetRoutePath,
+            device: targetDevice,
+            decisionKind: "performance-budget",
+            decisionTitle: budget.label || budget.metric,
             threshold: String(budget.threshold),
             value: budget.value === null ? "n/a" : String(budget.value),
           },
@@ -1500,14 +1861,20 @@ function buildReport({
           `${performance.metrics.failedResourceCount} resource request(s) failed during the performance capture.`,
           {
             failedResourceCount: String(performance.metrics.failedResourceCount),
+            route: targetRoutePath,
+            device: targetDevice,
+            decisionKind: "performance-budget",
+            decisionTitle: "failedResourceCount",
+            metric: "failedResourceCount",
           },
         ),
       );
     }
   }
 
-  const healthScore = scoreFindings(findings);
-  const status = statusFromFindings(findings);
+  const triaged = applyDecisionTriage(findings);
+  const healthScore = scoreFindings(triaged.findings);
+  const status = statusFromFindings(triaged.findings);
   const generatedAt = new Date().toISOString();
   const snapshotResult = snapshotEvidence
     ? {
@@ -1532,7 +1899,7 @@ function buildReport({
     status,
     healthScore,
     recommendation: recommendation(status, healthScore),
-    findings,
+    findings: triaged.findings,
     flowResults: flowEvidence.map((item) => ({ name: item.name, status: item.status, steps: item.steps })),
     routeResults: routeEvidence.map((item) => ({
       route: item.route,
@@ -1550,6 +1917,10 @@ function buildReport({
     accessibility,
     performance,
     visualRisk,
+    decisionSummary: triaged.decisionSummary,
+    appliedDecisions: triaged.appliedDecisions,
+    expiredDecisions: triaged.expiredDecisions,
+    unresolvedRegressions: triaged.unresolvedRegressions,
     artifacts: snapshotEvidence?.result.visualPack ? { visualPack: snapshotEvidence.result.visualPack } : {},
   };
 }

@@ -63,6 +63,33 @@ async function main(): Promise<void> {
       violationCount: 1,
       topRules: ["color-contrast (1)"],
     },
+    decisionSummary: {
+      approvedCount: 1,
+      unresolvedCount: 1,
+      expiredCount: 0,
+      expiringSoonCount: 1,
+    },
+    appliedDecisions: [
+      {
+        decision: "approve-current",
+        category: "visual",
+        kind: "snapshot-drift",
+        routePath: "/login",
+        file: ".codex-stack/baseline-decisions/login-approval.json",
+        reason: "Intentional copy refresh",
+      },
+    ],
+    unresolvedRegressions: [
+      {
+        severity: "medium",
+        category: "performance",
+        kind: "performance-budget",
+        routePath: "/login",
+        device: "mobile",
+        title: "Performance budget exceeded: LCP",
+        decisionFile: ".codex-stack/baseline-decisions/login-approval.json",
+      },
+    ],
     performance: {
       enabled: true,
       budgetViolationCount: 1,
@@ -112,6 +139,43 @@ async function main(): Promise<void> {
       violationCount: 4,
       topRules: ["color-contrast (2)", "label (2)"],
     },
+    decisionSummary: {
+      approvedCount: 2,
+      unresolvedCount: 3,
+      expiredCount: 1,
+      expiringSoonCount: 1,
+    },
+    appliedDecisions: [
+      {
+        decision: "approve-current",
+        category: "visual",
+        kind: "snapshot-drift",
+        routePath: "/dashboard",
+        file: ".codex-stack/baseline-decisions/dashboard-approval.json",
+        reason: "Intentional redesign",
+      },
+    ],
+    expiredDecisions: [
+      {
+        decision: "suppress",
+        category: "accessibility",
+        kind: "accessibility-rule",
+        routePath: "/dashboard",
+        file: ".codex-stack/baseline-decisions/dashboard-expired.json",
+        reason: "Waiver expired",
+      },
+    ],
+    unresolvedRegressions: [
+      {
+        severity: "high",
+        category: "accessibility",
+        kind: "accessibility-rule",
+        routePath: "/dashboard",
+        device: "desktop",
+        title: "Accessibility violation: color-contrast",
+        decisionFile: ".codex-stack/baseline-decisions/dashboard-expired.json",
+      },
+    ],
     performance: {
       enabled: true,
       budgetViolationCount: 2,
@@ -153,10 +217,13 @@ async function main(): Promise<void> {
     performanceBudgetViolations?: number;
     largestContentfulPaint?: number;
     cumulativeLayoutShift?: number;
+    approvedRegressions?: number;
+    unresolvedRegressions?: number;
+    expiredDecisions?: number;
   }>;
   const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
     historyPath?: string;
-    reports?: Array<{ visualRiskScore?: number; staleBaseline?: boolean; accessibilityViolations?: number; performanceBudgetViolations?: number }>;
+    reports?: Array<{ visualRiskScore?: number; staleBaseline?: boolean; accessibilityViolations?: number; performanceBudgetViolations?: number; approvedRegressions?: number; unresolvedRegressions?: number; expiredDecisions?: number }>;
   };
 
   assert.match(indexHtml, /Visual history/);
@@ -169,6 +236,9 @@ async function main(): Promise<void> {
   assert.match(indexHtml, /Latest visual risk:<\/strong> CRITICAL \(86\/100\)/);
   assert.match(indexHtml, /Latest accessibility violations:<\/strong> 4/);
   assert.match(indexHtml, /Latest perf budget violations:<\/strong> 2/);
+  assert.match(indexHtml, /Approved regressions:<\/strong> 2/);
+  assert.match(indexHtml, /Unresolved regressions:<\/strong> 3/);
+  assert.match(indexHtml, /Expired decisions:<\/strong> 1/);
   assert.match(indexHtml, /Baseline age:<\/strong> 47d • stale/);
   assert.match(indexHtml, /A11y violations:<\/strong> 4/);
   assert.match(indexHtml, /Perf budget violations:<\/strong> 2/);
@@ -179,6 +249,10 @@ async function main(): Promise<void> {
   assert.match(reportHtml, /Performance/);
   assert.match(reportHtml, /Budget violations:<\/strong> 2/);
   assert.match(reportHtml, /LCP:<\/strong> 2840 ms/);
+  assert.match(reportHtml, /Applied decisions/);
+  assert.match(reportHtml, /Expired decisions/);
+  assert.match(reportHtml, /Unresolved regressions/);
+  assert.match(reportHtml, /dashboard-expired\.json/);
   assert.equal(history.length, 2);
   assert.equal(history[1]?.slug, "2026-03-15-dashboard");
   assert.equal(history[1]?.visualRiskScore, 86);
@@ -189,11 +263,17 @@ async function main(): Promise<void> {
   assert.equal(history[1]?.performanceBudgetViolations, 2);
   assert.equal(history[1]?.largestContentfulPaint, 2840);
   assert.equal(history[1]?.cumulativeLayoutShift, 0.19);
+  assert.equal(history[1]?.approvedRegressions, 2);
+  assert.equal(history[1]?.unresolvedRegressions, 3);
+  assert.equal(history[1]?.expiredDecisions, 1);
   assert.equal(manifest.historyPath, "qa/history.json");
   assert.equal(manifest.reports?.[0]?.visualRiskScore, 86);
   assert.equal(manifest.reports?.[0]?.staleBaseline, true);
   assert.equal(manifest.reports?.[0]?.accessibilityViolations, 4);
   assert.equal(manifest.reports?.[0]?.performanceBudgetViolations, 2);
+  assert.equal(manifest.reports?.[0]?.approvedRegressions, 2);
+  assert.equal(manifest.reports?.[0]?.unresolvedRegressions, 3);
+  assert.equal(manifest.reports?.[0]?.expiredDecisions, 1);
 
   console.log("render-qa-pages spec passed");
 }

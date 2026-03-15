@@ -32,6 +32,10 @@ interface PreviewQaCompat {
   flowResults?: DeployReport["qa"]["flowResults"];
   accessibility?: DeployReport["qa"]["accessibility"];
   performance?: DeployReport["qa"]["performance"];
+  decisionSummary?: DeployReport["qa"]["decisionSummary"];
+  appliedDecisions?: DeployReport["qa"]["appliedDecisions"];
+  expiredDecisions?: DeployReport["qa"]["expiredDecisions"];
+  unresolvedRegressions?: DeployReport["qa"]["unresolvedRegressions"];
   snapshotResult?: {
     name?: string;
     status?: string;
@@ -99,6 +103,10 @@ function buildCompatQa(report: DeployReport): PreviewQaCompat {
     flowResults: report.qa.flowResults,
     accessibility: report.qa.accessibility,
     performance: report.qa.performance,
+    decisionSummary: report.qa.decisionSummary,
+    appliedDecisions: report.qa.appliedDecisions,
+    expiredDecisions: report.qa.expiredDecisions,
+    unresolvedRegressions: report.qa.unresolvedRegressions,
     snapshotResult: firstSnapshot
       ? {
           name: firstSnapshot.name,
@@ -176,6 +184,26 @@ function renderPerformanceLines(report: PreviewReport): string[] {
   ].filter(Boolean);
 }
 
+function renderDecisionLines(report: PreviewReport): string[] {
+  const summary = report.qa.decisionSummary;
+  if (!summary) return ["- No regression decisions loaded."];
+  const unresolved = Array.isArray(report.qa.unresolvedRegressions) ? report.qa.unresolvedRegressions : [];
+  const applied = Array.isArray(report.qa.appliedDecisions) ? report.qa.appliedDecisions : [];
+  const expired = Array.isArray(report.qa.expiredDecisions) ? report.qa.expiredDecisions : [];
+  return [
+    `- Decisions loaded: ${summary.totalDecisions ?? 0}`,
+    `- Applied decisions: ${summary.appliedCount ?? 0}`,
+    `- Approved regressions: ${summary.approvedCount ?? 0}`,
+    `- Suppressed findings: ${summary.suppressedCount ?? 0}`,
+    `- Refresh required decisions: ${summary.refreshRequiredCount ?? 0}`,
+    `- Expired decisions: ${summary.expiredCount ?? expired.length}`,
+    `- Unresolved regressions: ${summary.unresolvedCount ?? unresolved.length}`,
+    `- Decisions expiring soon: ${summary.expiringSoonCount ?? 0}`,
+    applied.length ? `- Applied: ${applied.slice(0, 4).map((item) => `${item.decision} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+    unresolved.length ? `- Top unresolved: ${unresolved.slice(0, 4).map((item) => `${String(item.severity || "info").toUpperCase()} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+  ].filter(Boolean);
+}
+
 function renderMarkdown(report: PreviewReport): string {
   const published = report.qa.artifacts?.published || {};
   const snapshot = report.qa.snapshotResult;
@@ -220,6 +248,10 @@ function renderMarkdown(report: PreviewReport): string {
     "## Performance",
     "",
     ...renderPerformanceLines(report),
+    "",
+    "## Regression triage",
+    "",
+    ...renderDecisionLines(report),
     "",
     "## Artifacts",
     "",

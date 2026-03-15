@@ -24,6 +24,8 @@ const markdownOut = path.join(fixtureRoot, "deploy.md");
 const jsonOut = path.join(fixtureRoot, "deploy.json");
 const commentOut = path.join(fixtureRoot, "deploy-comment.md");
 const publishDir = path.join(fixtureRoot, "published");
+const decisionsDir = path.join(rootDir, ".codex-stack", "baseline-decisions");
+const approvedDecisionPath = path.join(decisionsDir, "spec-approved-visual.json");
 
 async function main(): Promise<void> {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=", "base64");
@@ -60,6 +62,21 @@ async function main(): Promise<void> {
       type: "manual",
       exportedFrom: "fixture",
     },
+  }, null, 2));
+  fs.mkdirSync(decisionsDir, { recursive: true });
+  fs.writeFileSync(approvedDecisionPath, JSON.stringify({
+    version: 1,
+    id: "approved-visual",
+    decision: "approve-current",
+    category: "visual",
+    kind: "snapshot-drift",
+    snapshot: "portal-dashboard",
+    routePath: "/dashboard",
+    device: "mobile",
+    reason: "Intentional dashboard redesign",
+    author: "spec",
+    createdAt: "2026-03-15T00:00:00.000Z",
+    findingKey: "visual|snapshot-drift|portal-dashboard|/dashboard|mobile||||snapshot drift detected",
   }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "portal-dashboard",
@@ -269,6 +286,7 @@ async function main(): Promise<void> {
       findings?: Array<{ title?: string }>;
       accessibility?: { enabled?: boolean; violationCount?: number; topRules?: string[] };
       performance?: { enabled?: boolean; budgetViolationCount?: number; metrics?: { lcp?: number; cls?: number } };
+      decisionSummary?: { appliedCount?: number; approvedCount?: number; unresolvedCount?: number };
     };
     visualPack?: { index?: string; manifest?: string };
     screenshotManifest?: string;
@@ -300,6 +318,9 @@ async function main(): Promise<void> {
   assert.equal(report.qa?.performance?.enabled, true);
   assert.equal(report.qa?.performance?.budgetViolationCount, 1);
   assert.equal(report.qa?.performance?.metrics?.lcp, 2410);
+  assert.equal(report.qa?.decisionSummary?.appliedCount, 1);
+  assert.equal(report.qa?.decisionSummary?.approvedCount, 1);
+  assert.ok(Number(report.qa?.decisionSummary?.unresolvedCount || 0) >= 1);
   assert.ok(report.screenshotManifest);
   assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
   assert.ok(String(report.visualPack?.manifest).includes("visual/manifest.json"));
@@ -347,6 +368,8 @@ async function main(): Promise<void> {
   assert.match(markdown, /## Performance/);
   assert.match(markdown, /Budget violations: 1/);
   assert.match(markdown, /LCP: 2410/);
+  assert.match(markdown, /## Regression triage/);
+  assert.match(markdown, /Approved regressions: 1/);
   assert.match(comment, /Deploy URL: https:\/\/preview-77\.example\.com/);
 
   console.log("deploy-verify spec passed");
@@ -355,5 +378,6 @@ async function main(): Promise<void> {
 try {
   await main();
 } finally {
+  fs.rmSync(approvedDecisionPath, { force: true });
   fs.rmSync(fixtureRoot, { recursive: true, force: true });
 }

@@ -49,6 +49,7 @@ bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --ve
 - Shipping action taken
 - PR details
 - Deploy verification status including visual, accessibility, and performance evidence when enabled
+- Regression triage summary so approved drift stays visible and unresolved critical regressions remain blocking
 - Risks or blockers
 
 ## Guardrails

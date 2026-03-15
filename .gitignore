@@ -4,7 +4,9 @@ dist/.cache/
 browse/node_modules/
 browse/dist/.cache/
 .codex/
-.codex-stack/
+.codex-stack/*
+!.codex-stack/baseline-decisions/
+!.codex-stack/baseline-decisions/**
 .site/
 coverage/
 *.log

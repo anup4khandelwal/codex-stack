@@ -24,10 +24,11 @@ Run repeatable browser verification, collect evidence, and turn it into a ship/n
 6. Add `--perf` with `--perf-budget` and `--perf-wait-ms` when user-perceived performance needs to be enforced.
 7. Capture or compare a snapshot when visual/text drift matters.
 8. Score the result with categorized findings, severity, evidence, and a recommendation.
-9. Save the QA report under `.codex-stack/qa/`, including annotated screenshot evidence when snapshot failures occur.
-10. Refresh `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so the operator can compare the latest run against prior QA history.
-11. Publish tracked copies into `docs/qa/` when the shipping workflow needs GitHub-linkable evidence.
-12. Render `docs/qa/` through `scripts/render-qa-pages.ts` when the operator needs a static review site.
+9. Load `.codex-stack/baseline-decisions/` so known regressions can be downgraded, suppressed, or flagged for refresh explicitly.
+10. Save the QA report under `.codex-stack/qa/`, including annotated screenshot evidence when snapshot failures occur.
+11. Refresh `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so the operator can compare the latest run against prior QA history.
+12. Publish tracked copies into `docs/qa/` when the shipping workflow needs GitHub-linkable evidence.
+13. Render `docs/qa/` through `scripts/render-qa-pages.ts` when the operator needs a static review site.
 
 ## CLI
 
@@ -49,6 +50,7 @@ bun scripts/qa-trends.ts --dir .codex-stack/qa --json
 - Diff-aware route probe summary
 - Snapshot evidence
 - Accessibility and performance summaries plus artifact paths
+- Regression triage summary plus applied, expired, and unresolved decisions
 - Flow pass/fail summary
 - Recommendation
 - Trend delta vs previous runs via `.codex-stack/qa/trends.json`

@@ -32,6 +32,12 @@ export const modeRegistry: ModeDefinition[] = [
     skillPath: path.join(rootDir, "skills", "qa", "SKILL.md"),
   },
   {
+    name: "qa-decide",
+    role: "Regression triage operator",
+    summary: "Record approvals, suppressions, and refresh decisions for known QA regressions.",
+    skillPath: path.join(rootDir, "skills", "qa-decide", "SKILL.md"),
+  },
+  {
     name: "preview",
     role: "Preview verifier",
     summary: "Resolve preview URLs, wait for deployment readiness, and verify merge readiness against the live preview.",

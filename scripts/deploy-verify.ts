@@ -163,6 +163,52 @@ interface QaPerformanceSummary {
   artifactMarkdown?: string;
 }
 
+interface QaDecisionSummary {
+  totalDecisions?: number;
+  appliedCount?: number;
+  approvedCount?: number;
+  suppressedCount?: number;
+  refreshRequiredCount?: number;
+  expiredCount?: number;
+  unresolvedCount?: number;
+  expiringSoonCount?: number;
+}
+
+interface QaDecisionEntry {
+  id?: string;
+  decision?: string;
+  category?: string;
+  kind?: string;
+  snapshot?: string;
+  routePath?: string;
+  device?: string;
+  reason?: string;
+  author?: string;
+  createdAt?: string;
+  reviewAfter?: string;
+  expiresAt?: string;
+  file?: string;
+  matchedFindings?: string[];
+  effect?: string;
+  originalSeverity?: string;
+  resultingSeverity?: string;
+}
+
+interface QaUnresolvedRegression {
+  category?: string;
+  kind?: string;
+  title?: string;
+  severity?: string;
+  snapshot?: string;
+  routePath?: string;
+  device?: string;
+  selectors?: string[];
+  ruleId?: string;
+  metric?: string;
+  decisionStatus?: string;
+  decisionFile?: string;
+}
+
 interface VisualPackRef {
   dir?: string;
   index?: string;
@@ -223,6 +269,10 @@ interface QaRunReport {
   snapshotResult?: QaSnapshotReport | null;
   accessibility?: QaAccessibilitySummary | null;
   performance?: QaPerformanceSummary | null;
+  decisionSummary?: QaDecisionSummary;
+  appliedDecisions?: QaDecisionEntry[];
+  expiredDecisions?: QaDecisionEntry[];
+  unresolvedRegressions?: QaUnresolvedRegression[];
   artifacts?: QaArtifacts;
 }
 
@@ -247,6 +297,10 @@ export interface DeployQaSummary {
   snapshotResults: DeploySnapshotResult[];
   accessibility: QaAccessibilitySummary | null;
   performance: QaPerformanceSummary | null;
+  decisionSummary: QaDecisionSummary;
+  appliedDecisions: QaDecisionEntry[];
+  expiredDecisions: QaDecisionEntry[];
+  unresolvedRegressions: QaUnresolvedRegression[];
   artifacts: QaArtifacts;
 }
 
@@ -1231,6 +1285,19 @@ function aggregateQa({
       snapshotResults: [],
       accessibility: null,
       performance: null,
+      decisionSummary: {
+        totalDecisions: 0,
+        appliedCount: 0,
+        approvedCount: 0,
+        suppressedCount: 0,
+        refreshRequiredCount: 0,
+        expiredCount: 0,
+        unresolvedCount: 0,
+        expiringSoonCount: 0,
+      },
+      appliedDecisions: [],
+      expiredDecisions: [],
+      unresolvedRegressions: [],
       artifacts: {},
     };
   }
@@ -1331,6 +1398,19 @@ function aggregateQa({
     snapshotResults,
     accessibility: primaryAccessibility,
     performance: primaryPerformance,
+    decisionSummary: reports[0]?.report.decisionSummary || {
+      totalDecisions: 0,
+      appliedCount: 0,
+      approvedCount: 0,
+      suppressedCount: 0,
+      refreshRequiredCount: 0,
+      expiredCount: 0,
+      unresolvedCount: 0,
+      expiringSoonCount: 0,
+    },
+    appliedDecisions: reports.flatMap((entry) => Array.isArray(entry.report.appliedDecisions) ? entry.report.appliedDecisions : []),
+    expiredDecisions: reports.flatMap((entry) => Array.isArray(entry.report.expiredDecisions) ? entry.report.expiredDecisions : []),
+    unresolvedRegressions: reports.flatMap((entry) => Array.isArray(entry.report.unresolvedRegressions) ? entry.report.unresolvedRegressions : []),
     artifacts: reports[0]?.report.artifacts || {},
   };
 }
@@ -1441,6 +1521,30 @@ function renderPerformanceLines(summary: QaPerformanceSummary | null | undefined
   ].filter(Boolean);
 }
 
+function renderDecisionLines(summary: QaDecisionSummary | undefined, unresolved: QaUnresolvedRegression[], applied: QaDecisionEntry[], expired: QaDecisionEntry[]): string[] {
+  if (!summary) return ["- No regression decisions loaded."];
+  const lines = [
+    `- Decisions loaded: ${summary.totalDecisions ?? 0}`,
+    `- Applied decisions: ${summary.appliedCount ?? 0}`,
+    `- Approved regressions: ${summary.approvedCount ?? 0}`,
+    `- Suppressed findings: ${summary.suppressedCount ?? 0}`,
+    `- Refresh required decisions: ${summary.refreshRequiredCount ?? 0}`,
+    `- Expired decisions: ${summary.expiredCount ?? 0}`,
+    `- Unresolved regressions: ${summary.unresolvedCount ?? unresolved.length}`,
+    `- Decisions expiring soon: ${summary.expiringSoonCount ?? 0}`,
+  ];
+  if (applied.length) {
+    lines.push(`- Applied: ${applied.slice(0, 4).map((item) => `${item.decision} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}`);
+  }
+  if (expired.length) {
+    lines.push(`- Expired: ${expired.slice(0, 4).map((item) => `${item.decision} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}`);
+  }
+  if (unresolved.length) {
+    lines.push(`- Top unresolved: ${unresolved.slice(0, 4).map((item) => `${String(item.severity || "info").toUpperCase()} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}`);
+  }
+  return lines.filter(Boolean);
+}
+
 export function renderDeployMarkdown(report: DeployReport): string {
   const primaryQaArtifacts = report.qa.artifacts?.published || {};
   const lines = [
@@ -1490,6 +1594,10 @@ export function renderDeployMarkdown(report: DeployReport): string {
     "## Performance",
     "",
     ...renderPerformanceLines(report.qa.performance),
+    "",
+    "## Regression triage",
+    "",
+    ...renderDecisionLines(report.qa.decisionSummary, report.qa.unresolvedRegressions, report.qa.appliedDecisions, report.qa.expiredDecisions),
     "",
     "## QA findings",
     "",
@@ -1656,6 +1764,19 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     snapshotResults: [],
     accessibility: null,
     performance: null,
+    decisionSummary: {
+      totalDecisions: 0,
+      appliedCount: 0,
+      approvedCount: 0,
+      suppressedCount: 0,
+      refreshRequiredCount: 0,
+      expiredCount: 0,
+      unresolvedCount: 0,
+      expiringSoonCount: 0,
+    },
+    appliedDecisions: [],
+    expiredDecisions: [],
+    unresolvedRegressions: [],
     artifacts: {},
   };
   let overallStatus: DeployStatus = readiness.status === "ready" ? "pass" : "error";

@@ -43,6 +43,7 @@ bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device des
 - QA status, health score, recommendation, and findings
 - Snapshot results and artifact paths
 - Accessibility and performance summaries when enabled
+- Regression triage summary from repo-tracked baseline decisions
 - Screenshot manifest and workflow run link when available
 
 ## Guardrails
