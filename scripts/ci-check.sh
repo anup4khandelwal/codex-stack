@@ -21,6 +21,7 @@ run_eval() {
 echo "[1/8] root CLI list"
 run_ts src/cli.ts list >/tmp/codex-stack-list.log
 grep -q '^qa' /tmp/codex-stack-list.log
+grep -q '^qa-decide' /tmp/codex-stack-list.log
 grep -q '^preview' /tmp/codex-stack-list.log
 grep -q '^deploy' /tmp/codex-stack-list.log
 grep -q '^upgrade' /tmp/codex-stack-list.log
@@ -29,6 +30,7 @@ echo "[2/8] root CLI show/path"
 run_ts src/cli.ts show review >/tmp/codex-stack-show.log
 run_ts src/cli.ts path review >/tmp/codex-stack-path.log
 run_ts src/cli.ts show qa >/tmp/codex-stack-show-qa.log
+run_ts src/cli.ts show qa-decide >/tmp/codex-stack-show-qa-decide.log
 run_ts src/cli.ts show preview >/tmp/codex-stack-show-preview.log
 run_ts src/cli.ts show deploy >/tmp/codex-stack-show-deploy.log
 run_ts src/cli.ts show upgrade >/tmp/codex-stack-show-upgrade.log
@@ -65,6 +67,7 @@ run_ts browse/src/cli.ts delete-flow imported-smoke-md >/tmp/codex-stack-flow-de
 bash ./setup >/tmp/codex-stack-setup.log
 test -x .codex-stack/bin/review
 test -x .codex-stack/bin/qa
+test -x .codex-stack/bin/qa-decide
 test -x .codex-stack/bin/preview
 test -x .codex-stack/bin/deploy
 test -x .codex-stack/bin/ship
@@ -85,6 +88,8 @@ run_ts scripts/browse-download.spec.ts >/tmp/codex-stack-browse-download-spec.lo
 run_ts scripts/browse-a11y-perf.spec.ts >/tmp/codex-stack-browse-a11y-perf-spec.log
 run_ts scripts/qa-diff.spec.ts >/tmp/codex-stack-qa-diff-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
+run_ts scripts/qa-decide.ts --help >/tmp/codex-stack-qa-decide-help.log
+run_ts scripts/qa-decisions.spec.ts >/tmp/codex-stack-qa-decisions-spec.log
 run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log
 run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log

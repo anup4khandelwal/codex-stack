@@ -187,6 +187,35 @@ interface QaReportSummary {
   findings?: QaFinding[];
   flowResults?: QaFlowResult[];
   snapshotResult?: QaSnapshotResult | null;
+  decisionSummary?: {
+    totalDecisions?: number;
+    appliedCount?: number;
+    approvedCount?: number;
+    suppressedCount?: number;
+    refreshRequiredCount?: number;
+    expiredCount?: number;
+    unresolvedCount?: number;
+    expiringSoonCount?: number;
+  } | null;
+  appliedDecisions?: Array<{
+    decision?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+  }>;
+  expiredDecisions?: Array<{
+    decision?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+  }>;
+  unresolvedRegressions?: Array<{
+    severity?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+    title?: string;
+  }>;
   artifacts?: QaArtifacts;
 }
 
@@ -243,6 +272,10 @@ interface DeployQaReport {
   snapshotResults?: DeploySnapshotResult[];
   accessibility?: QaAccessibilitySummary | null;
   performance?: QaPerformanceSummary | null;
+  decisionSummary?: QaReportSummary["decisionSummary"];
+  appliedDecisions?: QaReportSummary["appliedDecisions"];
+  expiredDecisions?: QaReportSummary["expiredDecisions"];
+  unresolvedRegressions?: QaReportSummary["unresolvedRegressions"];
   artifacts?: DeployArtifacts;
 }
 
@@ -285,6 +318,9 @@ interface VerificationSummary {
   visualRiskScore: number | null;
   visualRiskLevel: string;
   staleBaselines: number;
+  approvedRegressions: number;
+  unresolvedRegressions: number;
+  expiredDecisions: number;
   consoleErrors: number;
   accessibilityViolations: number;
   performanceBudgetViolations: number;
@@ -1222,6 +1258,26 @@ function deployPerformanceSummary(summary: QaPerformanceSummary | null | undefin
   ].filter(Boolean);
 }
 
+function deployDecisionSummary(report: DeployReportSummary | null): string[] {
+  const summary = report?.qa?.decisionSummary;
+  if (!summary) return ["- No regression decisions loaded."];
+  const unresolved = Array.isArray(report?.qa?.unresolvedRegressions) ? report?.qa?.unresolvedRegressions : [];
+  const applied = Array.isArray(report?.qa?.appliedDecisions) ? report?.qa?.appliedDecisions : [];
+  const expired = Array.isArray(report?.qa?.expiredDecisions) ? report?.qa?.expiredDecisions : [];
+  return [
+    `- Decisions loaded: ${summary.totalDecisions ?? 0}`,
+    `- Applied decisions: ${summary.appliedCount ?? 0}`,
+    `- Approved regressions: ${summary.approvedCount ?? 0}`,
+    `- Suppressed findings: ${summary.suppressedCount ?? 0}`,
+    `- Refresh required decisions: ${summary.refreshRequiredCount ?? 0}`,
+    `- Expired decisions: ${summary.expiredCount ?? expired.length}`,
+    `- Unresolved regressions: ${summary.unresolvedCount ?? unresolved.length}`,
+    `- Decisions expiring soon: ${summary.expiringSoonCount ?? 0}`,
+    applied.length ? `- Applied: ${applied.slice(0, 4).map((item) => `${item.decision} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+    unresolved.length ? `- Top unresolved: ${unresolved.slice(0, 4).map((item) => `${String(item.severity || "info").toUpperCase()} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+  ].filter(Boolean);
+}
+
 function buildDeployPrComment({
   report,
   repo,
@@ -1295,6 +1351,10 @@ function buildDeployPrComment({
     "### Performance",
     "",
     ...deployPerformanceSummary(report.qa?.performance),
+    "",
+    "### Regression triage",
+    "",
+    ...deployDecisionSummary(report),
   );
 
   if (trackedReportRef || stableReportRef || trackedAnnotationRef || trackedScreenshotRef || screenshotManifestRef) {
@@ -1380,6 +1440,15 @@ function printText(result: ShipResult): void {
   if (result.verification.staleBaselines) {
     console.log(`- Verification stale baselines: ${result.verification.staleBaselines}`);
   }
+  if (result.verification.approvedRegressions) {
+    console.log(`- Verification approved regressions: ${result.verification.approvedRegressions}`);
+  }
+  if (result.verification.unresolvedRegressions) {
+    console.log(`- Verification unresolved regressions: ${result.verification.unresolvedRegressions}`);
+  }
+  if (result.verification.expiredDecisions) {
+    console.log(`- Verification expired decisions: ${result.verification.expiredDecisions}`);
+  }
   if (result.verification.consoleErrors) {
     console.log(`- Verification console errors: ${result.verification.consoleErrors}`);
   }
@@ -1442,6 +1511,9 @@ const result: ShipResult = {
     visualRiskScore: null,
     visualRiskLevel: "",
     staleBaselines: 0,
+    approvedRegressions: 0,
+    unresolvedRegressions: 0,
+    expiredDecisions: 0,
     consoleErrors: 0,
     accessibilityViolations: 0,
     performanceBudgetViolations: 0,
@@ -1561,6 +1633,9 @@ if (shouldRunVerification(args)) {
     result.verification.visualRiskScore = typeof verification.report.visualRisk?.score === "number" ? verification.report.visualRisk.score : null;
     result.verification.visualRiskLevel = String(verification.report.visualRisk?.level || "");
     result.verification.staleBaselines = Number(verification.report.visualRisk?.staleBaselines || 0);
+    result.verification.approvedRegressions = Number(verification.report.qa?.decisionSummary?.approvedCount || 0);
+    result.verification.unresolvedRegressions = Number(verification.report.qa?.decisionSummary?.unresolvedCount || 0);
+    result.verification.expiredDecisions = Number(verification.report.qa?.decisionSummary?.expiredCount || 0);
     result.verification.consoleErrors = (verification.report.pathResults || []).reduce((count: number, entry: DeployPathResult) => (
       count + (Array.isArray(entry.console?.errors) ? entry.console?.errors.length : 0)
     ), 0);

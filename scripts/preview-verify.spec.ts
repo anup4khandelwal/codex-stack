@@ -23,6 +23,8 @@ const markdownOut = path.join(fixtureRoot, "preview.md");
 const jsonOut = path.join(fixtureRoot, "preview.json");
 const commentOut = path.join(fixtureRoot, "preview-comment.md");
 const publishDir = path.join(fixtureRoot, "published");
+const decisionsDir = path.join(rootDir, ".codex-stack", "baseline-decisions");
+const approvedDecisionPath = path.join(decisionsDir, "spec-preview-approved-visual.json");
 
 async function main(): Promise<void> {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9i8AAAAASUVORK5CYII=", "base64");
@@ -58,6 +60,21 @@ async function main(): Promise<void> {
       type: "manual",
       exportedFrom: "fixture",
     },
+  }, null, 2));
+  fs.mkdirSync(decisionsDir, { recursive: true });
+  fs.writeFileSync(approvedDecisionPath, JSON.stringify({
+    version: 1,
+    id: "approved-visual",
+    decision: "approve-current",
+    category: "visual",
+    kind: "snapshot-drift",
+    snapshot: "landing-home",
+    routePath: "/",
+    device: "desktop",
+    reason: "Intentional landing refresh",
+    author: "spec",
+    createdAt: "2026-03-15T00:00:00.000Z",
+    findingKey: "visual|snapshot-drift|landing-home|/|desktop||||snapshot drift detected",
   }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "landing-home",
@@ -242,6 +259,7 @@ async function main(): Promise<void> {
       findings?: Array<{ title?: string }>;
       accessibility?: { enabled?: boolean; violationCount?: number };
       performance?: { enabled?: boolean; budgetViolationCount?: number; metrics?: { lcp?: number } };
+      decisionSummary?: { appliedCount?: number; approvedCount?: number; unresolvedCount?: number };
     };
     visualPack?: { index?: string; manifest?: string };
   };
@@ -268,6 +286,9 @@ async function main(): Promise<void> {
   assert.equal(report.qa?.performance?.enabled, true);
   assert.equal(report.qa?.performance?.budgetViolationCount, 1);
   assert.equal(report.qa?.performance?.metrics?.lcp, 2260);
+  assert.equal(report.qa?.decisionSummary?.appliedCount, 1);
+  assert.equal(report.qa?.decisionSummary?.approvedCount, 1);
+  assert.ok(Number(report.qa?.decisionSummary?.unresolvedCount || 0) >= 1);
 
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(jsonOut));
@@ -290,6 +311,8 @@ async function main(): Promise<void> {
   assert.match(markdown, /Violations: 1/);
   assert.match(markdown, /## Performance/);
   assert.match(markdown, /Budget violations: 1/);
+  assert.match(markdown, /## Regression triage/);
+  assert.match(markdown, /Approved regressions: 1/);
   assert.match(comment, /Expected UI selectors are missing/);
 
   console.log("preview-verify spec passed");
@@ -298,5 +321,6 @@ async function main(): Promise<void> {
 try {
   await main();
 } finally {
+  fs.rmSync(approvedDecisionPath, { force: true });
   fs.rmSync(fixtureRoot, { recursive: true, force: true });
 }

@@ -42,6 +42,7 @@ bun src/cli.ts preview --url http://127.0.0.1:4173 --path /dashboard --device de
 - QA status, health score, and recommendation
 - Deploy path/device matrix with screenshot evidence and console counts
 - Accessibility and performance summaries when enabled
+- Regression triage summary for approved versus unresolved regressions
 - Findings and flow results
 - Artifact paths and workflow run link when available
 

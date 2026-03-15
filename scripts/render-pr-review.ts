@@ -30,6 +30,39 @@ interface PreviewQaReport {
   healthScore?: number;
   recommendation?: string;
   findings?: PreviewFinding[];
+  decisionSummary?: {
+    totalDecisions?: number;
+    appliedCount?: number;
+    approvedCount?: number;
+    suppressedCount?: number;
+    refreshRequiredCount?: number;
+    expiredCount?: number;
+    unresolvedCount?: number;
+    expiringSoonCount?: number;
+  } | null;
+  appliedDecisions?: Array<{
+    decision?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+    file?: string;
+  }>;
+  expiredDecisions?: Array<{
+    decision?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+    file?: string;
+  }>;
+  unresolvedRegressions?: Array<{
+    severity?: string;
+    category?: string;
+    kind?: string;
+    routePath?: string;
+    title?: string;
+    decisionStatus?: string;
+    decisionFile?: string;
+  }>;
   accessibility?: {
     enabled?: boolean;
     violationCount?: number;
@@ -368,6 +401,26 @@ function visualImageEmbeds(preview: PreviewReport | null, previewPagesRoot: stri
   return images;
 }
 
+function decisionLines(preview: PreviewReport | null): string[] {
+  const summary = preview?.qa?.decisionSummary;
+  if (!summary) return ["- No regression decisions loaded."];
+  const unresolved = Array.isArray(preview?.qa?.unresolvedRegressions) ? preview?.qa?.unresolvedRegressions : [];
+  const applied = Array.isArray(preview?.qa?.appliedDecisions) ? preview?.qa?.appliedDecisions : [];
+  const expired = Array.isArray(preview?.qa?.expiredDecisions) ? preview?.qa?.expiredDecisions : [];
+  return [
+    `- Decisions loaded: ${summary.totalDecisions ?? 0}`,
+    `- Applied decisions: ${summary.appliedCount ?? 0}`,
+    `- Approved regressions: ${summary.approvedCount ?? 0}`,
+    `- Suppressed findings: ${summary.suppressedCount ?? 0}`,
+    `- Refresh required decisions: ${summary.refreshRequiredCount ?? 0}`,
+    `- Expired decisions: ${summary.expiredCount ?? expired.length}`,
+    `- Unresolved regressions: ${summary.unresolvedCount ?? unresolved.length}`,
+    `- Decisions expiring soon: ${summary.expiringSoonCount ?? 0}`,
+    applied.length ? `- Applied: ${applied.slice(0, 4).map((item) => `${item.decision} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+    unresolved.length ? `- Top unresolved: ${unresolved.slice(0, 4).map((item) => `${String(item.severity || "info").toUpperCase()} ${item.category}/${item.kind} @ ${item.routePath}`).join("; ")}` : "",
+  ].filter(Boolean);
+}
+
 function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSummary, previewPagesRoot: string): string {
   if (!preview) return "";
   const findings = Array.isArray(preview.qa?.findings) ? preview.qa?.findings : [];
@@ -434,6 +487,10 @@ ${perf.topViolations?.length ? `- Top violations: ${perf.topViolations.join("; "
 - Failed resources: ${perf.metrics?.failedResourceCount ?? 0}
 ${perf.artifactMarkdown ? `- Report: \`${perf.artifactMarkdown}\`` : ""}
 ` : ""}
+
+### Regression triage
+
+${decisionLines(preview).join("\n")}
 
 ${preview.visualRisk?.topDrivers?.length ? `### Visual risk drivers
 

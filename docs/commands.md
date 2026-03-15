@@ -13,6 +13,10 @@ bun src/cli.ts review --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
+bun src/cli.ts qa-decide approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun src/cli.ts qa-decide suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
+bun src/cli.ts qa-decide list --active-only
+bun src/cli.ts qa-decide prune-expired
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s
 bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
@@ -138,6 +142,10 @@ bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --
 bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --json
 bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
 bun scripts/qa-run.ts https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
+bun scripts/qa-decide.ts approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun scripts/qa-decide.ts suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
+bun scripts/qa-decide.ts list --active-only
+bun scripts/qa-decide.ts prune-expired
 bun scripts/qa-trends.ts --dir .codex-stack/qa --json
 ```
 
@@ -153,6 +161,8 @@ Notes:
 - Every `qa-run` also refreshes `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so you can compare the latest run against prior QA history.
 - Snapshot baselines now store route/device metadata and QA flags stale baselines automatically when the saved reference ages out.
 - `qa-run` also emits a consolidated visual-risk score so preview, deploy, and Pages rendering rank the same evidence consistently.
+- `qa-run` also loads repo-tracked decisions from `.codex-stack/baseline-decisions/`, downgrades or suppresses approved regressions, and reports unresolved vs expired approvals explicitly.
+- Decision files are narrow on purpose: route + device are always part of the match, and accessibility/performance decisions only apply to the exact rule or metric they name.
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.

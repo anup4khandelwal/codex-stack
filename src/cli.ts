@@ -22,6 +22,7 @@ Usage:
   codex-stack issue <create|branch|start> <args...>
   codex-stack review [--json] [--base <ref>]
   codex-stack qa <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--json]
+  codex-stack qa-decide <approve|suppress|list|prune-expired> <args...>
   codex-stack preview [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--strict-console] [--strict-http] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
   codex-stack deploy [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
   codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--update-verify-snapshot] [--draft]
@@ -100,6 +101,10 @@ if (command === "issue") {
 
 if (command === "qa") {
   runScript(path.join("scripts", "qa-run.ts"), rest);
+}
+
+if (command === "qa-decide") {
+  runScript(path.join("scripts", "qa-decide.ts"), rest);
 }
 
 if (command === "preview") {

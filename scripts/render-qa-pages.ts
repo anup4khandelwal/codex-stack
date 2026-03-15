@@ -74,6 +74,38 @@ interface QaPerformanceSummary {
   };
 }
 
+interface QaDecisionSummary {
+  totalDecisions?: string | number;
+  appliedCount?: string | number;
+  approvedCount?: string | number;
+  suppressedCount?: string | number;
+  refreshRequiredCount?: string | number;
+  expiredCount?: string | number;
+  unresolvedCount?: string | number;
+  expiringSoonCount?: string | number;
+}
+
+interface QaDecisionEntry {
+  id?: string;
+  decision?: string;
+  category?: string;
+  kind?: string;
+  routePath?: string;
+  device?: string;
+  file?: string;
+  reason?: string;
+}
+
+interface QaUnresolvedRegression {
+  severity?: string;
+  category?: string;
+  kind?: string;
+  routePath?: string;
+  device?: string;
+  title?: string;
+  decisionFile?: string;
+}
+
 interface QaReportData extends Record<string, unknown> {
   status?: string;
   recommendation?: string;
@@ -88,6 +120,10 @@ interface QaReportData extends Record<string, unknown> {
   visualRisk?: QaVisualRisk;
   accessibility?: QaAccessibilitySummary | null;
   performance?: QaPerformanceSummary | null;
+  decisionSummary?: QaDecisionSummary | null;
+  appliedDecisions?: QaDecisionEntry[];
+  expiredDecisions?: QaDecisionEntry[];
+  unresolvedRegressions?: QaUnresolvedRegression[];
 }
 
 interface CollectedReport {
@@ -115,6 +151,10 @@ interface CollectedReport {
   performanceBudgetViolations: number | null;
   largestContentfulPaint: number | null;
   cumulativeLayoutShift: number | null;
+  approvedRegressions: number | null;
+  unresolvedRegressions: number | null;
+  expiredDecisions: number | null;
+  expiringSoonCount: number | null;
 }
 
 interface VisualHistoryPoint {
@@ -132,6 +172,10 @@ interface VisualHistoryPoint {
   largestContentfulPaint: number | null;
   cumulativeLayoutShift: number | null;
   stableUrl: string;
+  approvedRegressions: number | null;
+  unresolvedRegressions: number | null;
+  expiredDecisions: number | null;
+  expiringSoonCount: number | null;
 }
 
 interface LayoutProps {
@@ -258,6 +302,11 @@ function absoluteUrl(baseUrl: string, sitePath: string): string {
   return new URL(sitePath.replace(/^\/+/, ""), ensureTrailingSlash(baseUrl)).toString();
 }
 
+function repoBlobUrl(repo: string, filePath: string): string {
+  if (!repo || !filePath) return "";
+  return `https://github.com/${repo}/blob/main/${filePath.replace(/^\/+/, "")}`;
+}
+
 function formatDate(value: unknown): string {
   if (!value) return "n/a";
   try {
@@ -336,6 +385,10 @@ function buildVisualHistory(reports: CollectedReport[]): VisualHistoryPoint[] {
       performanceBudgetViolations: report.performanceBudgetViolations,
       largestContentfulPaint: report.largestContentfulPaint,
       cumulativeLayoutShift: report.cumulativeLayoutShift,
+      approvedRegressions: report.approvedRegressions,
+      unresolvedRegressions: report.unresolvedRegressions,
+      expiredDecisions: report.expiredDecisions,
+      expiringSoonCount: report.expiringSoonCount,
       stableUrl: report.stableUrl,
     }))
     .sort((left, right) => (Date.parse(left.generatedAt || "0") || 0) - (Date.parse(right.generatedAt || "0") || 0));
@@ -399,6 +452,8 @@ function renderHistorySection(reports: CollectedReport[]): string {
     latest.visualRiskScore !== null ? `<span><strong>Latest visual risk:</strong> ${latest.visualRiskLevel.toUpperCase()} (${latest.visualRiskScore}/100)</span>` : "",
     latest.accessibilityViolations !== null ? `<span><strong>Latest accessibility violations:</strong> ${latest.accessibilityViolations}</span>` : "",
     latest.performanceBudgetViolations !== null ? `<span><strong>Latest perf budget violations:</strong> ${latest.performanceBudgetViolations}</span>` : "",
+    latest.approvedRegressions !== null ? `<span><strong>Latest approved regressions:</strong> ${latest.approvedRegressions}</span>` : "",
+    latest.unresolvedRegressions !== null ? `<span><strong>Latest unresolved regressions:</strong> ${latest.unresolvedRegressions}</span>` : "",
     latest.imageDiffScore !== null ? `<span><strong>Latest image diff score:</strong> ${latest.imageDiffScore}</span>` : "",
     `<span><strong>Stale baselines:</strong> ${staleCount}</span>`,
   ].filter(Boolean).join("");
@@ -449,6 +504,24 @@ function flowRows(report: CollectedReport): string {
   const flows = Array.isArray(report.data?.flowResults) ? report.data.flowResults : [];
   if (!flows.length) return '<li class="empty">No flows recorded.</li>';
   return flows.map((item) => `<li><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.status)}${item.steps ? ` • ${item.steps} steps` : ""}</span></li>`).join("\n");
+}
+
+function decisionLink(repo: string, filePath: string | undefined): string {
+  const target = cleanSubject(filePath);
+  if (!target) return "";
+  const href = repoBlobUrl(repo, target);
+  if (!href) return escapeHtml(target);
+  return `<a href="${escapeHtml(href)}">${escapeHtml(target)}</a>`;
+}
+
+function decisionRows(items: QaDecisionEntry[] | undefined, repo: string): string {
+  if (!Array.isArray(items) || !items.length) return '<li class="empty">None.</li>';
+  return items.map((item) => `<li><strong>${escapeHtml(item.decision || "decision")}</strong><span>${escapeHtml(`${item.category || "qa"}/${item.kind || "unknown"} @ ${item.routePath || "/"}`)}</span>${item.reason ? `<p>${escapeHtml(item.reason)}</p>` : ""}${item.file ? `<div class="evidence"><span><strong>file:</strong> ${decisionLink(repo, item.file)}</span></div>` : ""}</li>`).join("\n");
+}
+
+function unresolvedRows(items: QaUnresolvedRegression[] | undefined, repo: string): string {
+  if (!Array.isArray(items) || !items.length) return '<li class="empty">None.</li>';
+  return items.map((item) => `<li class="finding ${severityClass(item.severity)}"><div class="finding-head"><span class="pill ${severityClass(item.severity)}">${escapeHtml(String(item.severity || "info").toUpperCase())}</span><strong>${escapeHtml(item.title || "Regression")}</strong>${item.category ? `<span class="pill">${escapeHtml(String(item.category))}</span>` : ""}</div><p>${escapeHtml(`${item.kind || "unknown"} @ ${item.routePath || "/"} (${item.device || "desktop"})`)}</p>${item.decisionFile ? `<div class="evidence"><span><strong>decision:</strong> ${decisionLink(repo, item.decisionFile)}</span></div>` : ""}</li>`).join("\n");
 }
 
 function layout({ title, body, baseUrl, heading, subheading }: LayoutProps): string {
@@ -668,6 +741,9 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
           ${report.visualRiskScore !== null ? `<span><strong>Visual risk:</strong> ${escapeHtml(`${report.visualRiskLevel.toUpperCase()} (${report.visualRiskScore}/100)`)}</span>` : ""}
           ${report.accessibilityViolations !== null ? `<span><strong>A11y violations:</strong> ${escapeHtml(report.accessibilityViolations)}</span>` : ""}
           ${report.performanceBudgetViolations !== null ? `<span><strong>Perf budget violations:</strong> ${escapeHtml(report.performanceBudgetViolations)}</span>` : ""}
+          ${report.approvedRegressions !== null ? `<span><strong>Approved regressions:</strong> ${escapeHtml(report.approvedRegressions)}</span>` : ""}
+          ${report.unresolvedRegressions !== null ? `<span><strong>Unresolved regressions:</strong> ${escapeHtml(report.unresolvedRegressions)}</span>` : ""}
+          ${report.expiredDecisions !== null ? `<span><strong>Expired decisions:</strong> ${escapeHtml(report.expiredDecisions)}</span>` : ""}
           ${report.largestContentfulPaint !== null ? `<span><strong>LCP:</strong> ${escapeHtml(`${report.largestContentfulPaint} ms`)}</span>` : ""}
           ${report.imageDiffScore !== null ? `<span><strong>Image diff:</strong> ${escapeHtml(report.imageDiffScore)}</span>` : ""}
           ${report.baselineAgeDays !== null ? `<span><strong>Baseline age:</strong> ${escapeHtml(`${report.baselineAgeDays}d${report.staleBaseline ? " • stale" : ""}`)}</span>` : ""}
@@ -698,7 +774,7 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
   });
 }
 
-function renderReport(report: CollectedReport, baseUrl: string): string {
+function renderReport(report: CollectedReport, baseUrl: string, repo: string): string {
   const snapshot = report.data.snapshotResult || {};
   const detailLinks: string[] = [];
   if (report.visualIndexPath) detailLinks.push(`<a href="visual/index.html">Visual pack</a>`);
@@ -732,6 +808,9 @@ function renderReport(report: CollectedReport, baseUrl: string): string {
             <span><strong>URL:</strong> ${escapeHtml(report.data.url || "fixture")}</span>
             ${report.accessibilityViolations !== null ? `<span><strong>A11y violations:</strong> ${escapeHtml(report.accessibilityViolations)}</span>` : ""}
             ${report.performanceBudgetViolations !== null ? `<span><strong>Perf budget violations:</strong> ${escapeHtml(report.performanceBudgetViolations)}</span>` : ""}
+            ${report.approvedRegressions !== null ? `<span><strong>Approved regressions:</strong> ${escapeHtml(report.approvedRegressions)}</span>` : ""}
+            ${report.unresolvedRegressions !== null ? `<span><strong>Unresolved regressions:</strong> ${escapeHtml(report.unresolvedRegressions)}</span>` : ""}
+            ${report.expiredDecisions !== null ? `<span><strong>Expired decisions:</strong> ${escapeHtml(report.expiredDecisions)}</span>` : ""}
             ${report.largestContentfulPaint !== null ? `<span><strong>LCP:</strong> ${escapeHtml(`${report.largestContentfulPaint} ms`)}</span>` : ""}
             ${report.cumulativeLayoutShift !== null ? `<span><strong>CLS:</strong> ${escapeHtml(report.cumulativeLayoutShift)}</span>` : ""}
           </div>
@@ -782,6 +861,20 @@ function renderReport(report: CollectedReport, baseUrl: string): string {
           ${Array.isArray(report.data.performance?.topViolations) && report.data.performance.topViolations.length ? `<ul class="clean">${report.data.performance.topViolations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<p class="empty">No performance summary recorded.</p>'}
         </article>
       </section>
+      <section class="grid two" style="margin-top: 18px;">
+        <article class="card section">
+          <h2>Applied decisions</h2>
+          <ul class="clean">${decisionRows(report.data.appliedDecisions, repo)}</ul>
+        </article>
+        <article class="card section">
+          <h2>Expired decisions</h2>
+          <ul class="clean">${decisionRows(report.data.expiredDecisions, repo)}</ul>
+        </article>
+      </section>
+      <section class="card section" style="margin-top: 18px;">
+        <h2>Unresolved regressions</h2>
+        <ul class="clean">${unresolvedRows(report.data.unresolvedRegressions, repo)}</ul>
+      </section>
       <section class="card section" style="margin-top: 18px;">
         <h2>Visual evidence</h2>
         <div class="preview">${snapshotPreview}</div>
@@ -824,6 +917,10 @@ function collectReports(sourceDir: string, baseUrl: string): CollectedReport[] {
         performanceBudgetViolations: asNumber(data.performance?.budgetViolationCount),
         largestContentfulPaint: asNumber(data.performance?.metrics?.lcp),
         cumulativeLayoutShift: asNumber(data.performance?.metrics?.cls),
+        approvedRegressions: asNumber(data.decisionSummary?.approvedCount),
+        unresolvedRegressions: asNumber(data.decisionSummary?.unresolvedCount),
+        expiredDecisions: asNumber(data.decisionSummary?.expiredCount),
+        expiringSoonCount: asNumber(data.decisionSummary?.expiringSoonCount),
       };
       report.stableUrl = reportLink(baseUrl, report);
       report.stableAnnotationUrl = report.annotationPath ? assetLink(baseUrl, report, "annotation.svg") : "";
@@ -854,7 +951,7 @@ function main(): void {
     for (const report of reports) {
       const targetDir = path.join(args.out, "qa", report.slug);
       copyTree(report.sourceDir, targetDir);
-      fs.writeFileSync(path.join(targetDir, "index.html"), renderReport(report, baseUrl));
+      fs.writeFileSync(path.join(targetDir, "index.html"), renderReport(report, baseUrl, repo));
     }
   }
 
@@ -888,6 +985,10 @@ function main(): void {
       performanceBudgetViolations: report.performanceBudgetViolations,
       largestContentfulPaint: report.largestContentfulPaint,
       cumulativeLayoutShift: report.cumulativeLayoutShift,
+      approvedRegressions: report.approvedRegressions,
+      unresolvedRegressions: report.unresolvedRegressions,
+      expiredDecisions: report.expiredDecisions,
+      expiringSoonCount: report.expiringSoonCount,
     })),
   };
   fs.writeFileSync(path.join(args.out, "qa", "history.json"), JSON.stringify(buildVisualHistory(reports), null, 2));

@@ -78,6 +78,41 @@ async function main(): Promise<void> {
     },
     qa: {
       healthScore: 60,
+      decisionSummary: {
+        totalDecisions: 3,
+        appliedCount: 1,
+        approvedCount: 1,
+        expiredCount: 1,
+        unresolvedCount: 2,
+        expiringSoonCount: 1,
+      },
+      appliedDecisions: [
+        {
+          decision: "approve-current",
+          category: "visual",
+          kind: "snapshot-drift",
+          routePath: "/",
+          file: ".codex-stack/baseline-decisions/approved-visual.json",
+        },
+      ],
+      expiredDecisions: [
+        {
+          decision: "suppress",
+          category: "accessibility",
+          kind: "accessibility-rule",
+          routePath: "/",
+          file: ".codex-stack/baseline-decisions/expired-a11y.json",
+        },
+      ],
+      unresolvedRegressions: [
+        {
+          severity: "high",
+          category: "accessibility",
+          kind: "accessibility-rule",
+          routePath: "/",
+          title: "Accessibility violation: color-contrast",
+        },
+      ],
       accessibility: {
         enabled: true,
         violationCount: 3,
@@ -198,6 +233,10 @@ async function main(): Promise<void> {
   assert.match(stdout, /### Performance summary/);
   assert.match(stdout, /LCP: 2420/);
   assert.match(stdout, /CLS: 0.18/);
+  assert.match(stdout, /### Regression triage/);
+  assert.match(stdout, /Approved regressions: 1/);
+  assert.match(stdout, /Expired decisions: 1/);
+  assert.match(stdout, /Top unresolved: HIGH accessibility\/accessibility-rule @ \//);
   assert.match(stdout, /annotation\.svg/);
   assert.match(stdout, /### Deploy checks/);
   assert.match(stdout, /baselineAge=43d-stale/);

@@ -20,6 +20,7 @@ const screenshotPath = path.join(fixtureRoot, "screenshot.png");
 const visualDir = path.join(fixtureRoot, "visual");
 const bundlePath = path.join(fixtureRoot, "session-bundle.json");
 const importMarker = path.join(fixtureRoot, "imported-session.json");
+const decisionsDir = path.join(fixtureRoot, ".codex-stack", "baseline-decisions");
 
   fs.writeFileSync(
     screenshotPath,
@@ -283,6 +284,104 @@ process.exit(1);
   assert.equal(imported.sourcePath, bundlePath);
   assert.equal(imported.sessionFlag, "--session");
   assert.equal(imported.sessionName, "qa");
+
+  fs.mkdirSync(decisionsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(decisionsDir, "approved-visual.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        id: "approved-visual",
+        decision: "approve-current",
+        category: "visual",
+        kind: "snapshot-drift",
+        snapshot: "landing-home",
+        routePath: "/login",
+        device: "desktop",
+        reason: "Intentional copy refresh",
+        author: "spec",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        findingKey: "visual|snapshot-drift|landing-home|/login|desktop||||snapshot drift detected",
+      },
+      null,
+      2,
+    ),
+  );
+  fs.writeFileSync(
+    path.join(decisionsDir, "expired-a11y.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        id: "expired-a11y",
+        decision: "suppress",
+        category: "accessibility",
+        kind: "accessibility-rule",
+        snapshot: "",
+        routePath: "/login",
+        device: "desktop",
+        ruleId: "color-contrast",
+        reason: "Temporary waiver",
+        author: "spec",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        expiresAt: "2026-03-10T00:00:00.000Z",
+        findingKey: "accessibility|accessibility-rule||/login|desktop|color-contrast|||color-contrast",
+      },
+      null,
+      2,
+    ),
+  );
+
+  const triagedRaw = execFileSync(
+    bun,
+    [
+      path.join(rootDir, "scripts", "qa-run.ts"),
+      "https://example.com/login",
+      "--flow",
+      "login-smoke",
+      "--snapshot",
+      "landing-home",
+      "--a11y",
+      "--a11y-scope",
+      "#app",
+      "--a11y-impact",
+      "serious",
+      "--perf",
+      "--perf-budget",
+      "lcp=2s",
+      "--perf-wait-ms",
+      "400",
+      "--session-bundle",
+      bundlePath,
+      "--json",
+    ],
+    {
+      cwd: fixtureRoot,
+      encoding: "utf8",
+    },
+  );
+  const triaged = JSON.parse(triagedRaw) as {
+    decisionSummary?: {
+      totalDecisions?: number;
+      appliedCount?: number;
+      approvedCount?: number;
+      expiredCount?: number;
+      unresolvedCount?: number;
+    };
+    appliedDecisions?: Array<{ decision?: string; file?: string }>;
+    expiredDecisions?: Array<{ decision?: string; file?: string }>;
+    unresolvedRegressions?: Array<{ category?: string; kind?: string }>;
+    findings?: Array<{ evidence?: { decision?: string; decisionFile?: string } }>;
+  };
+  assert.equal(triaged.decisionSummary?.totalDecisions, 2);
+  assert.equal(triaged.decisionSummary?.appliedCount, 1);
+  assert.equal(triaged.decisionSummary?.approvedCount, 1);
+  assert.equal(triaged.decisionSummary?.expiredCount, 1);
+  assert.ok((triaged.decisionSummary?.unresolvedCount || 0) >= 1);
+  assert.equal(triaged.appliedDecisions?.[0]?.decision, "approve-current");
+  assert.match(String(triaged.appliedDecisions?.[0]?.file), /baseline-decisions/);
+  assert.equal(triaged.expiredDecisions?.[0]?.decision, "suppress");
+  assert.ok(triaged.findings?.some((item) => item.evidence?.decision === "approve-current"));
+  assert.ok(triaged.unresolvedRegressions?.some((item) => item.category === "accessibility" && item.kind === "accessibility-rule"));
 
   console.log("qa-run spec passed");
 }

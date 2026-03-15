@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Ten opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, browser QA, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
+Eleven opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -23,6 +23,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `tech` | Tech lead | Locks architecture, trust boundaries, rollout risks, and the test plan. |
 | `review` | Paranoid staff engineer | Audits the diff for structural production risks instead of style noise. |
 | `qa` | QA lead | Runs browser flows, diff-aware route probes, and snapshot checks, then scores release readiness. |
+| `qa-decide` | Regression triage operator | Records explicit approvals, suppressions, and refresh-required decisions for known regressions. |
 | `preview` | Preview verifier | Resolves a PR preview URL, waits for readiness, runs QA, and reports whether the preview is safe to merge. |
 | `deploy` | Deploy verifier | Verifies a preview or staging deploy across path and device checks, flows, snapshots, screenshots, and console evidence. |
 | `ship` | Release engineer | Validates the branch, prepares PR metadata, and can run QA before opening the PR. |
@@ -50,6 +51,7 @@ Use the repo in this order:
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts with self-contained visual packs, diff heatmaps, and image-diff scores
 - QA reports with typed categories, severity, health score, diff-aware route inference, stale-baseline detection, visual-risk scoring, saved evidence, annotated screenshots, and published visual packs for snapshot failures
+- Repo-tracked baseline decision files under `.codex-stack/baseline-decisions/` so expected regressions stay explicit, reviewable, and expirable
 - Opt-in accessibility scans and performance budget checks that feed the same QA, preview, deploy, ship, PR review, and Pages report surfaces
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
@@ -81,6 +83,7 @@ bun src/cli.ts list
 - `tech`
 - `review`
 - `qa`
+- `qa-decide`
 - `preview`
 - `deploy`
 - `ship`
@@ -170,6 +173,8 @@ bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snap
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun src/cli.ts qa https://preview.example.com/dashboard --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
+bun src/cli.ts qa-decide approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun src/cli.ts qa-decide suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
 bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
@@ -211,6 +216,7 @@ bun run demo:start
 bun run demo:smoke
 bun run review
 bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
+bun src/cli.ts qa-decide list --active-only
 bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --device desktop --flow landing-smoke --snapshot landing-home
 bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard
 bun run ship:dry
