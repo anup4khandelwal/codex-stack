@@ -268,6 +268,8 @@ The control repo owns:
 
 That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend.
 
+Policy packs also define whether a repo is expected to publish a codex-stack QA/deploy report. `review-only` repos are considered healthy when they are installed and in sync even if they do not publish `docs/qa/` artifacts. Full rollout packs can still require a latest report before fleet health turns green.
+
 Current checked-in targets:
 
 - `anup4khandelwal/autopilot-multi-agent-loop` via `default`

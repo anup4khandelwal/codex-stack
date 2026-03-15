@@ -240,6 +240,7 @@ Notes:
 - `fleet sync` generates a compiled member config, a self-contained fleet-status script, and a status workflow for each managed repo.
 - Use `localPath` entries in the manifest for local testing. Use `--open-prs` to clone target repos, push a rollout branch, and open or update PRs remotely.
 - `fleet collect` reads normalized `codex-stack-fleet-status` outputs and ranks repos by rollout drift plus unresolved QA risk.
+- Policy packs define whether a repo must publish a latest codex-stack QA/deploy report. Review-only repos can still be healthy without `docs/qa/` artifacts when rollout drift is zero.
 - `fleet dashboard` writes `index.html`, `manifest.json`, and `summary.md` so the control repo can publish an org dashboard with the same data.
 - Start from `.codex-stack/fleet.example.json` and `.codex-stack/policies/default.json` when bootstrapping a new fleet.
 - Use `.codex-stack/fleet.anup4khandelwal.json` for the current checked-in rollout targeting `autopilot-multi-agent-loop`, `awesome-codex-skills`, and the profile repo.

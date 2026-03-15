@@ -9,7 +9,7 @@
       "repo": "anup4khandelwal/autopilot-multi-agent-loop",
       "branch": "main",
       "team": "reviewops",
-      "policyPack": "default"
+      "policyPack": "review-only"
     },
     {
       "repo": "anup4khandelwal/awesome-codex-skills",

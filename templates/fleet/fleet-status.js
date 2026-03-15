@@ -86,6 +86,7 @@ function main() {
   const branch = clean(process.env.GITHUB_REF_NAME || '');
   const latest = pickLatestReport(findJsonFiles(path.resolve(REPO_ROOT, 'docs', 'qa')));
   const latestData = latest ? latest.data : null;
+  const requiresLatestReport = member ? member.status?.requiresLatestReport !== false : true;
 
   const unresolved = asNumber(latestData && latestData.decisionSummary && latestData.decisionSummary.unresolvedCount) || 0;
   const expired = asNumber(latestData && latestData.decisionSummary && latestData.decisionSummary.expiredCount) || 0;
@@ -98,7 +99,7 @@ function main() {
   let status = 'healthy';
   if (!member) {
     status = 'missing';
-  } else if (!latestData) {
+  } else if (!latestData && requiresLatestReport) {
     status = 'warning';
   } else if (baseStatus === 'critical') {
     status = 'critical';
@@ -108,7 +109,7 @@ function main() {
 
   let riskScore = 0;
   if (!member) riskScore += 80;
-  if (!latestData) riskScore += 20;
+  if (!latestData && requiresLatestReport) riskScore += 20;
   if (baseStatus === 'critical') riskScore += 40;
   if (baseStatus === 'warning') riskScore += 20;
   riskScore += Math.min(24, unresolved * 8);
@@ -129,6 +130,7 @@ function main() {
     team: clean(member && member.team || ''),
     policyPack: clean(member && member.policyPack || ''),
     requiredChecks: Array.isArray(member && member.requiredChecks) ? member.requiredChecks : [],
+    requiresLatestReport,
     status,
     riskScore,
     latestReport: latestData ? {
@@ -158,7 +160,7 @@ function main() {
     `- Risk score: ${payload.riskScore}/100`,
     payload.team ? `- Team: ${payload.team}` : '',
     payload.policyPack ? `- Policy pack: ${payload.policyPack}` : '',
-    payload.latestReport ? `- Latest QA status: ${payload.latestReport.status}` : '- Latest QA status: missing',
+    payload.latestReport ? `- Latest QA status: ${payload.latestReport.status}` : `- Latest QA status: ${requiresLatestReport ? 'missing' : 'not required'}`,
     payload.latestReport && payload.latestReport.visualRiskScore !== null ? `- Visual risk: ${payload.latestReport.visualRiskLevel || 'none'} (${payload.latestReport.visualRiskScore}/100)` : '',
     payload.latestReport ? `- Unresolved regressions: ${payload.latestReport.unresolvedRegressions}` : '',
     payload.latestReport && payload.latestReport.accessibilityViolations !== null ? `- Accessibility violations: ${payload.latestReport.accessibilityViolations}` : '',
