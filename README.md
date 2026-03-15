@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Eleven opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, and upgrade audits.
+Twelve opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, and fleet rollout control.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -30,6 +30,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `browse` | QA engineer | Drives a real browser with persistent sessions, portable session bundles, named flows, snapshots, and artifacts. |
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 | `upgrade` | Repo maintainer | Audits Bun, dependency drift, workflow action drift, and install health for codex-stack itself. |
+| `fleet` | Control plane operator | Pushes shared policy packs across repos, collects normalized health, and renders a GitHub-native rollout dashboard. |
 
 ## Default workflow
 
@@ -61,7 +62,7 @@ Use the repo in this order:
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
-- Fleet rollout controls for multi-repo policy packs, drift detection, rollout PR planning, and org-level dashboard rendering
+- Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, and org-level dashboard rendering
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
@@ -272,9 +273,15 @@ Policy packs also define whether a repo is expected to publish a codex-stack QA/
 
 Current checked-in targets:
 
-- `anup4khandelwal/autopilot-multi-agent-loop` via `default`
+- `anup4khandelwal/autopilot-multi-agent-loop` via `review-only`
 - `anup4khandelwal/awesome-codex-skills` via `review-only`
 - `anup4khandelwal/anup4khandelwal` via `review-only`
+
+Current checked-in fleet state:
+
+- `3/3` repos installed
+- `3/3` repos healthy
+- `0` repos drifted
 
 ## Browser QA model
 
