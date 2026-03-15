@@ -20,6 +20,9 @@
     "staleAfterDays": 14,
     "expiringSoonDays": 7
   },
+  "status": {
+    "requiresLatestReport": true
+  },
   "schedule": {
     "cron": "17 8 * * 1-5"
   }

@@ -99,6 +99,9 @@ interface FleetPolicyPack {
   qa?: FleetQaConfig;
   preview?: FleetPreviewConfig;
   decisions?: FleetDecisionConfig;
+  status?: {
+    requiresLatestReport?: boolean;
+  };
   schedule?: {
     cron?: string;
   };
@@ -131,6 +134,9 @@ interface FleetMemberConfig {
   qa: FleetQaConfig;
   preview: FleetPreviewConfig;
   decisions: FleetDecisionConfig;
+  status: {
+    requiresLatestReport: boolean;
+  };
   schedule: {
     cron: string;
   };
@@ -184,6 +190,7 @@ interface FleetStatusReport {
   team?: string;
   policyPack?: string;
   requiredChecks?: string[];
+  requiresLatestReport?: boolean;
   status?: RepoHealth;
   riskScore?: number;
   latestReport?: {
@@ -495,6 +502,9 @@ function loadPolicyPack(context: FleetContext, name: string): FleetPolicyPack {
     qa: normalizeQaConfig(raw.qa),
     preview: normalizePreviewConfig(raw.preview),
     decisions: normalizeDecisionConfig(raw.decisions),
+    status: {
+      requiresLatestReport: raw.status?.requiresLatestReport !== false,
+    },
     schedule: {
       cron: clean(raw.schedule?.cron || "") || "17 8 * * 1-5",
     },
@@ -565,6 +575,9 @@ function compileMemberConfig(context: FleetContext, target: FleetTarget): FleetM
     qa,
     preview,
     decisions,
+    status: {
+      requiresLatestReport: policyPack.status?.requiresLatestReport !== false,
+    },
     schedule: {
       cron: clean(policyPack.schedule?.cron || "") || "17 8 * * 1-5",
     },
@@ -898,7 +911,7 @@ function readLocalFleetStatus(repoRoot: string): FleetStatusReport | null {
   }
 }
 
-function computeCollectedStatus(installed: boolean, drift: DriftState, latestReport: FleetStatusReport["latestReport"]): { status: RepoHealth; riskScore: number } {
+function computeCollectedStatus(installed: boolean, drift: DriftState, latestReport: FleetStatusReport["latestReport"], requiresLatestReport: boolean): { status: RepoHealth; riskScore: number } {
   if (!installed) {
     return { status: "missing", riskScore: 85 };
   }
@@ -906,7 +919,7 @@ function computeCollectedStatus(installed: boolean, drift: DriftState, latestRep
   if (drift === "diverged") riskScore += 45;
   if (drift === "missing") riskScore += 35;
   if (drift === "outdated") riskScore += 20;
-  if (!latestReport) riskScore += 15;
+  if (!latestReport && requiresLatestReport) riskScore += 15;
   if (latestReport?.status === "critical") riskScore += 40;
   if (latestReport?.status === "warning") riskScore += 20;
   riskScore += Math.min(24, Number(latestReport?.unresolvedRegressions || 0) * 8);
@@ -920,7 +933,7 @@ function computeCollectedStatus(installed: boolean, drift: DriftState, latestRep
   if (latestReport?.status === "critical" || drift === "diverged") {
     return { status: "critical", riskScore };
   }
-  if (latestReport?.status === "warning" || drift === "outdated" || drift === "missing" || Number(latestReport?.unresolvedRegressions || 0) > 0 || Number(latestReport?.expiredDecisions || 0) > 0) {
+  if (latestReport?.status === "warning" || drift === "outdated" || drift === "missing" || Number(latestReport?.unresolvedRegressions || 0) > 0 || Number(latestReport?.expiredDecisions || 0) > 0 || (!latestReport && requiresLatestReport)) {
     return { status: "warning", riskScore };
   }
   return { status: "healthy", riskScore };
@@ -971,7 +984,8 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
     const localStatus = readLocalFleetStatus(plan.localPath);
     const latestReport = localStatus?.latestReport || latestQaReportFromRepoRoot(plan.localPath);
     const installed = Boolean(member || localStatus);
-    const computed = computeCollectedStatus(installed, plan.drift, latestReport);
+    const requiresLatestReport = localStatus?.requiresLatestReport ?? member?.status?.requiresLatestReport ?? true;
+    const computed = computeCollectedStatus(installed, plan.drift, latestReport, requiresLatestReport);
     const status = localStatus?.status || computed.status;
     const riskScore = localStatus?.riskScore ?? computed.riskScore;
     return {
@@ -993,7 +1007,8 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
   const member = readRemoteMemberConfig(plan.repo, plan.branch) || (plan.drift === "healthy" ? plan.memberConfig : null);
   const statusReport = member ? downloadLatestArtifactStatus(plan.repo, plan.branch, member.statusArtifactName || context.statusArtifactName) : null;
   const latestReport = statusReport?.latestReport || null;
-  const computed = computeCollectedStatus(Boolean(member), plan.drift, latestReport);
+  const requiresLatestReport = statusReport?.requiresLatestReport ?? member?.status?.requiresLatestReport ?? true;
+  const computed = computeCollectedStatus(Boolean(member), plan.drift, latestReport, requiresLatestReport);
   return {
     repo: plan.repo,
     repoUrl: repoUrl(plan.repo),

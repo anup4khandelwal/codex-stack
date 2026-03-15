@@ -52,6 +52,9 @@ fs.writeFileSync(path.join(policyDir, "default.json"), JSON.stringify({
     staleAfterDays: 14,
     expiringSoonDays: 7,
   },
+  status: {
+    requiresLatestReport: true,
+  },
   schedule: {
     cron: "0 9 * * 1-5",
   },
@@ -167,11 +170,13 @@ const memberConfig = JSON.parse(fs.readFileSync(path.join(repoDir, ".codex-stack
   team?: string;
   previewUrlTemplate?: string;
   requiredChecks?: string[];
+  status?: { requiresLatestReport?: boolean };
 };
 assert.equal(memberConfig.controlRepo, "acme/control-plane");
 assert.equal(memberConfig.team, "platform");
 assert.equal(memberConfig.previewUrlTemplate, "https://preview-{pr}.example.com");
 assert.deepEqual(memberConfig.requiredChecks, ["fleet-status", "preview", "qa", "review"]);
+assert.equal(memberConfig.status?.requiresLatestReport, true);
 
 const statusOut = path.join(repoDir, ".codex-stack", "fleet-status", "status.json");
 const statusJson = run([path.join(repoDir, ".github", "codex-stack", "fleet-status.js"), "--out", statusOut, "--json"], fixtureRoot);
@@ -220,6 +225,69 @@ assert.equal(collectReport.repos?.[0]?.source, "local-status");
 assert.equal(collectReport.repos?.[0]?.status, "critical");
 assert.equal(collectReport.repos?.[0]?.riskScore, 91);
 assert.equal(collectReport.repos?.[0]?.repoUrl, "https://github.com/acme/repo-a");
+
+const reviewOnlyFixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-fleet-review-only-"));
+const reviewOnlyControlDir = path.join(reviewOnlyFixtureRoot, "control");
+const reviewOnlyRepoDir = path.join(reviewOnlyFixtureRoot, "repo-b");
+const reviewOnlyManifestPath = path.join(reviewOnlyControlDir, "fleet.json");
+const reviewOnlyPolicyDir = path.join(reviewOnlyControlDir, "policies");
+fs.mkdirSync(reviewOnlyPolicyDir, { recursive: true });
+execFileSync("git", ["init", "-q", "-b", "main", reviewOnlyRepoDir]);
+fs.writeFileSync(path.join(reviewOnlyPolicyDir, "review-only.json"), JSON.stringify({
+  name: "review-only",
+  requiredChecks: ["review", "fleet-status"],
+  qa: {
+    mode: "diff-aware",
+    devices: ["desktop"],
+  },
+  preview: {
+    paths: [],
+    devices: [],
+  },
+  status: {
+    requiresLatestReport: false,
+  },
+}, null, 2));
+fs.writeFileSync(reviewOnlyManifestPath, JSON.stringify({
+  schemaVersion: 1,
+  controlRepo: "acme/control-plane",
+  policyDir: "./policies",
+  repos: [
+    {
+      repo: "acme/repo-b",
+      branch: "main",
+      localPath: "../repo-b",
+      team: "docs",
+      policyPack: "review-only",
+    },
+  ],
+}, null, 2));
+
+run([fleetScript, "sync", "--manifest", reviewOnlyManifestPath, "--json"], reviewOnlyFixtureRoot);
+const reviewOnlyStatusOut = path.join(reviewOnlyRepoDir, ".codex-stack", "fleet-status", "status.json");
+const reviewOnlyStatusJson = run([path.join(reviewOnlyRepoDir, ".github", "codex-stack", "fleet-status.js"), "--out", reviewOnlyStatusOut, "--json"], reviewOnlyFixtureRoot);
+const reviewOnlyStatus = JSON.parse(reviewOnlyStatusJson) as {
+  status?: string;
+  riskScore?: number;
+  requiresLatestReport?: boolean;
+  latestReport?: unknown;
+};
+assert.equal(reviewOnlyStatus.requiresLatestReport, false);
+assert.equal(reviewOnlyStatus.status, "healthy");
+assert.equal(reviewOnlyStatus.riskScore, 0);
+assert.equal(reviewOnlyStatus.latestReport, null);
+
+const reviewOnlyCollect = JSON.parse(run([fleetScript, "collect", "--manifest", reviewOnlyManifestPath, "--json"], reviewOnlyFixtureRoot)) as {
+  counts?: { healthy?: number; warning?: number; drifted?: number };
+  repos?: Array<{ repo?: string; status?: string; drift?: string; riskScore?: number }>;
+};
+assert.equal(reviewOnlyCollect.counts?.healthy, 1);
+assert.equal(reviewOnlyCollect.counts?.warning, 0);
+assert.equal(reviewOnlyCollect.counts?.drifted, 0);
+assert.equal(reviewOnlyCollect.repos?.[0]?.repo, "acme/repo-b");
+assert.equal(reviewOnlyCollect.repos?.[0]?.status, "healthy");
+assert.equal(reviewOnlyCollect.repos?.[0]?.drift, "healthy");
+assert.equal(reviewOnlyCollect.repos?.[0]?.riskScore, 0);
 
 run([fleetScript, "dashboard", "--manifest", manifestPath, "--out", dashboardDir], fixtureRoot);
 assert.ok(fs.existsSync(path.join(dashboardDir, "index.html")));
@@ -290,5 +358,6 @@ assert.equal(remoteDrift.drift, "healthy");
 assert.deepEqual(remoteDrift.files.filter((item) => item.changed), []);
 
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
+fs.rmSync(reviewOnlyFixtureRoot, { recursive: true, force: true });
 fs.rmSync(remoteFixtureRoot, { recursive: true, force: true });
 console.log("fleet spec passed");
