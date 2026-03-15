@@ -61,6 +61,9 @@ async function main(): Promise<void> {
   }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "landing-home",
+    capturedAt: "2025-01-01T00:00:00.000Z",
+    routePath: "/",
+    device: "desktop",
     elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
   }, null, 2));
   fs.writeFileSync(currentPath, JSON.stringify({ name: "landing-home", elements: [] }, null, 2));
@@ -171,6 +174,7 @@ async function main(): Promise<void> {
     url?: string;
     urlSource?: string;
     recommendation?: string;
+    visualRisk?: { level?: string; score?: number; staleBaselines?: number; topDrivers?: string[] };
     readiness?: { status?: string; attempts?: number };
     context?: { branchSlug?: string; shortSha?: string };
     deploy?: { screenshotManifest?: string; visualPack?: { index?: string; manifest?: string }; pathResults?: Array<{ status?: string; screenshot?: string }> };
@@ -181,6 +185,9 @@ async function main(): Promise<void> {
   assert.equal(report.url, "https://preview-42.example.com");
   assert.equal(report.urlSource, "template");
   assert.equal(report.status, "critical");
+  assert.equal(report.visualRisk?.level, "medium");
+  assert.ok(Number(report.visualRisk?.score || 0) > 0);
+  assert.equal(report.visualRisk?.staleBaselines, 1);
   assert.match(String(report.recommendation), /Do not ship|Do not merge/i);
   assert.equal(report.readiness?.status, "ready");
   assert.ok(Number(report.readiness?.attempts || 0) >= 3);
@@ -204,6 +211,7 @@ async function main(): Promise<void> {
   assert.match(markdown, /codex-stack preview verification/);
   assert.match(markdown, /Preview URL: https:\/\/preview-42\.example\.com/);
   assert.match(markdown, /Readiness: ready after 3 attempt/);
+  assert.match(markdown, /Visual risk: MEDIUM/);
   assert.match(markdown, /Workflow run: https:\/\/github.com\/anup4khandelwal\/codex-stack\/actions\/runs\/123456/);
   assert.match(markdown, /## Deploy checks/);
   assert.match(markdown, /root-desktop\.png/);

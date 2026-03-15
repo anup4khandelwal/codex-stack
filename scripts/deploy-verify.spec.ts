@@ -63,6 +63,9 @@ async function main(): Promise<void> {
   }, null, 2));
   fs.writeFileSync(baselinePath, JSON.stringify({
     name: "portal-dashboard",
+    capturedAt: "2025-01-01T00:00:00.000Z",
+    routePath: "/dashboard",
+    device: "mobile",
     elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
   }, null, 2));
   fs.writeFileSync(currentPath, JSON.stringify({
@@ -196,6 +199,7 @@ async function main(): Promise<void> {
     url?: string;
     urlSource?: string;
     recommendation?: string;
+    visualRisk?: { level?: string; score?: number; staleBaselines?: number; topDrivers?: string[] };
     readiness?: { status?: string; attempts?: number };
     checks?: { paths?: string[]; devices?: string[]; strictHttp?: boolean };
     pathResults?: Array<{ path?: string; device?: string; status?: string; httpStatus?: number | null; screenshot?: string; console?: { errors?: string[]; warnings?: string[] } }>;
@@ -212,6 +216,10 @@ async function main(): Promise<void> {
   assert.deepEqual(report.checks?.paths, ["/", "/dashboard"]);
   assert.deepEqual(report.checks?.devices, ["desktop", "mobile"]);
   assert.equal(report.status, "critical");
+  assert.equal(report.visualRisk?.level, "critical");
+  assert.ok(Number(report.visualRisk?.score || 0) >= 80);
+  assert.equal(report.visualRisk?.staleBaselines, 1);
+  assert.ok(report.visualRisk?.topDrivers?.some((entry) => String(entry).includes("critical page/device")));
   assert.match(String(report.recommendation), /Do not ship|Do not merge/i);
   assert.equal(report.pathResults?.length, 4);
   assert.ok(report.pathResults?.some((entry) => entry.path === "/dashboard" && entry.device === "mobile" && entry.status === "critical"));
@@ -224,10 +232,13 @@ async function main(): Promise<void> {
   assert.ok(String(report.visualPack?.index).includes("visual/index.html"));
   assert.ok(String(report.visualPack?.manifest).includes("visual/manifest.json"));
   const visualManifest = JSON.parse(fs.readFileSync(path.join(publishDir, "visual", "manifest.json"), "utf8")) as {
-    snapshots?: Array<{ imageDiffScore?: number; diffImage?: string }>;
+    visualRisk?: { score?: number; staleBaselines?: number };
+    snapshots?: Array<{ imageDiffScore?: number; diffImage?: string; baselineFreshness?: { stale?: boolean; routePath?: string } }>;
   };
+  assert.equal(visualManifest.visualRisk?.staleBaselines, 1);
   assert.ok(visualManifest.snapshots?.some((entry) => entry.imageDiffScore === 68.2));
   assert.ok(visualManifest.snapshots?.some((entry) => String(entry.diffImage).includes("diff.png")));
+  assert.ok(visualManifest.snapshots?.some((entry) => entry.baselineFreshness?.stale === true && entry.baselineFreshness?.routePath === "/dashboard"));
 
   assert.ok(fs.existsSync(markdownOut));
   assert.ok(fs.existsSync(jsonOut));
@@ -252,6 +263,8 @@ async function main(): Promise<void> {
   assert.match(markdown, /dashboard-mobile\.png/);
   assert.match(markdown, /portal-dashboard/);
   assert.match(markdown, /Visual pack/);
+  assert.match(markdown, /Visual risk: CRITICAL/);
+  assert.match(markdown, /baselineAge=/);
   assert.match(comment, /Deploy URL: https:\/\/preview-77\.example\.com/);
 
   console.log("deploy-verify spec passed");

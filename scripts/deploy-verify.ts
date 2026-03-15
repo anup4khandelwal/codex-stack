@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { execSync, spawnSync } from "node:child_process";
 import { readSessionBundle, type SessionStorageEntry } from "../browse/src/session-bundle.ts";
+import { computeVisualRisk, type BaselineFreshness, type VisualRiskSummary } from "./visual-risk.ts";
 
 type DeployStatus = "pass" | "warning" | "critical" | "error";
 type UrlSource = "direct" | "template";
@@ -142,6 +143,7 @@ interface QaSnapshotReport {
   status?: string;
   annotation?: string;
   screenshot?: string;
+  baselineFreshness?: BaselineFreshness | null;
   visualPack?: VisualPackRef | null;
 }
 
@@ -163,6 +165,7 @@ export interface DeploySnapshotResult {
   report: string;
   annotation: string;
   screenshot: string;
+  baselineFreshness?: BaselineFreshness | null;
   visualPack?: VisualPackRef | null;
 }
 
@@ -208,6 +211,7 @@ export interface DeployReport {
   };
   pathResults: DeployPathResult[];
   qa: DeployQaSummary;
+  visualRisk: VisualRiskSummary;
   artifactRoot: string;
   screenshotManifest: string;
   visualPack?: DeployVisualPack | null;
@@ -638,6 +642,7 @@ function renderDeployVisualIndex(manifest: {
   title: string;
   generatedAt: string;
   status: DeployStatus;
+  visualRisk?: VisualRiskSummary;
   previewUrl: string;
   screenshotManifest: string;
   screenshots: Array<Record<string, unknown>>;
@@ -659,6 +664,7 @@ function renderDeployVisualIndex(manifest: {
       <article class="card">
         <h2>${escapeHtml(String(item.name || "snapshot"))}</h2>
         <p>Status: <strong>${escapeHtml(item.status || "unknown")}</strong> • ${escapeHtml(`${item.targetPath || "/"} @ ${item.device || "desktop"}`)}</p>
+        ${item.baselineFreshness ? `<p>Baseline: <strong>${escapeHtml(`${asObject(item.baselineFreshness)?.stale ? "stale" : "fresh"}`)}</strong> • age ${escapeHtml(`${asObject(item.baselineFreshness)?.ageDays ?? "n/a"}d`)}</p>` : ""}
         ${typeof item.imageDiffScore === "number" ? `<p>Image diff score: <strong>${escapeHtml(item.imageDiffScore)}</strong> • ratio ${escapeHtml(item.imageDiffRatio ?? "n/a")}</p>` : ""}
         ${item.index ? `<p><a href="${escapeHtml(String(item.index))}">Open visual pack</a></p>` : ""}
         ${item.manifest ? `<p><a href="${escapeHtml(String(item.manifest))}">Manifest JSON</a></p>` : ""}
@@ -693,6 +699,7 @@ function renderDeployVisualIndex(manifest: {
     <div class="meta">
       <div class="card"><strong>Status</strong><div>${escapeHtml(manifest.status)}</div></div>
       <div class="card"><strong>Generated</strong><div>${escapeHtml(manifest.generatedAt)}</div></div>
+      <div class="card"><strong>Visual risk</strong><div>${escapeHtml(`${asObject(manifest.visualRisk)?.level ? String(asObject(manifest.visualRisk)?.level).toUpperCase() : "NONE"} (${asObject(manifest.visualRisk)?.score ?? 0}/100)`)}</div></div>
       <div class="card"><strong>Preview URL</strong><div>${manifest.previewUrl ? `<a href="${escapeHtml(manifest.previewUrl)}">${escapeHtml(manifest.previewUrl)}</a>` : "n/a"}</div></div>
       <div class="card"><strong>Screenshot manifest</strong><div>${manifest.screenshotManifest ? `<a href="${escapeHtml(manifest.screenshotManifest)}">Open JSON</a>` : "n/a"}</div></div>
     </div>
@@ -1121,6 +1128,7 @@ function aggregateQa({
       report: cleanSubject(entry.report.artifacts?.published?.markdown || entry.report.artifacts?.markdown || ""),
       annotation: cleanSubject(entry.report.snapshotResult?.annotation || entry.report.artifacts?.published?.annotation || entry.report.artifacts?.annotation || ""),
       screenshot: cleanSubject(entry.report.snapshotResult?.screenshot || entry.report.artifacts?.published?.screenshot || entry.report.artifacts?.screenshot || ""),
+      baselineFreshness: entry.report.snapshotResult?.baselineFreshness || null,
       visualPack: entry.report.snapshotResult?.visualPack || entry.report.artifacts?.published?.visualPack || entry.report.artifacts?.visualPack || null,
     }));
   const healthScore = reports.reduce((lowest, entry) => {
@@ -1203,6 +1211,7 @@ function renderSnapshotLines(snapshotResults: DeploySnapshotResult[]): string[] 
     const refs = [
       `${item.name} @ ${item.targetPath} (${item.device})`,
       `status=${item.status}`,
+      item.baselineFreshness ? `baselineAge=${item.baselineFreshness.ageDays}d${item.baselineFreshness.stale ? "-stale" : ""}` : "",
       item.visualPack?.imageDiff ? `imageScore=${item.visualPack.imageDiff.score}` : "",
       item.report ? `report=${item.report}` : "",
       item.annotation ? `annotation=${item.annotation}` : "",
@@ -1227,6 +1236,7 @@ export function renderDeployMarkdown(report: DeployReport): string {
     `- Readiness: ${report.readiness.status} after ${report.readiness.attempts} attempt(s)`,
     report.readiness.httpStatus ? `- Last HTTP status: ${report.readiness.httpStatus}` : "",
     `- Overall status: ${report.status}`,
+    `- Visual risk: ${report.visualRisk.level.toUpperCase()} (${report.visualRisk.score}/100)`,
     `- Devices: ${report.checks.devices.join(", ")}`,
     `- Paths: ${report.checks.paths.join(", ")}`,
     `- Strict console errors: ${report.checks.strictConsole ? "yes" : "no"}`,
@@ -1257,6 +1267,7 @@ export function renderDeployMarkdown(report: DeployReport): string {
     report.screenshotManifest ? `- Screenshot manifest: \`${report.screenshotManifest}\`` : "",
     report.visualPack?.index ? `- Visual pack: \`${report.visualPack.index}\`` : "",
     report.visualPack?.manifest ? `- Visual manifest: \`${report.visualPack.manifest}\`` : "",
+    report.visualRisk.topDrivers.length ? `- Visual risk drivers: ${report.visualRisk.topDrivers.join("; ")}` : "",
     primaryQaArtifacts.markdown ? `- QA report: \`${primaryQaArtifacts.markdown}\`` : "",
     primaryQaArtifacts.json ? `- QA json: \`${primaryQaArtifacts.json}\`` : "",
     primaryQaArtifacts.annotation ? `- QA annotation: \`${primaryQaArtifacts.annotation}\`` : "",
@@ -1305,6 +1316,7 @@ function writeVisualPack({
   snapshotResults,
   screenshotManifest,
   status,
+  visualRisk,
 }: {
   publishDir: string;
   resolvedUrl: string;
@@ -1312,6 +1324,7 @@ function writeVisualPack({
   snapshotResults: DeploySnapshotResult[];
   screenshotManifest: string;
   status: DeployStatus;
+  visualRisk: VisualRiskSummary;
 }): DeployVisualPack {
   const visualDir = path.join(publishDir, "visual");
   const screenshotDir = path.join(visualDir, "screenshots");
@@ -1355,6 +1368,7 @@ function writeVisualPack({
       annotation: copiedAnnotation ? relFrom(visualDir, path.resolve(process.cwd(), copiedAnnotation)) : (fs.existsSync(path.join(targetDir, "annotation.svg")) ? relFrom(visualDir, path.join(targetDir, "annotation.svg")) : ""),
       screenshot: copiedScreenshot ? relFrom(visualDir, path.resolve(process.cwd(), copiedScreenshot)) : (fs.existsSync(path.join(targetDir, "current.png")) ? relFrom(visualDir, path.join(targetDir, "current.png")) : ""),
       diffImage: copiedDiff ? relFrom(visualDir, path.resolve(process.cwd(), copiedDiff)) : (fs.existsSync(path.join(targetDir, "diff.png")) ? relFrom(visualDir, path.join(targetDir, "diff.png")) : ""),
+      baselineFreshness: entry.baselineFreshness || null,
       imageDiffScore: entry.visualPack?.imageDiff?.score ?? null,
       imageDiffRatio: entry.visualPack?.imageDiff?.diffRatio ?? null,
     };
@@ -1364,6 +1378,7 @@ function writeVisualPack({
     generatedAt: new Date().toISOString(),
     title: "codex-stack visual review pack",
     status,
+    visualRisk,
     previewUrl: resolvedUrl,
     screenshotManifest: screenshotManifest ? relFrom(visualDir, path.resolve(process.cwd(), screenshotManifest)) : "",
     screenshots: screenshotEntries,
@@ -1443,6 +1458,10 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     },
     pathResults,
     qa,
+    visualRisk: computeVisualRisk({
+      pathResults,
+      snapshotResults: qa.snapshotResults,
+    }),
     artifactRoot: publishDir,
     screenshotManifest: "",
     visualPack: null,
@@ -1458,6 +1477,7 @@ export async function runDeployVerification(args: DeployArgs): Promise<DeployRep
     snapshotResults: report.qa.snapshotResults,
     screenshotManifest: report.screenshotManifest,
     status: report.status,
+    visualRisk: report.visualRisk,
   });
   report.recommendation = recommendation(report);
 

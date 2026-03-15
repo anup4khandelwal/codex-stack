@@ -103,6 +103,7 @@ run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
 run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
 run_ts scripts/preview-verify.spec.ts >/tmp/codex-stack-preview-spec.log
 run_ts scripts/weekly-digest.spec.ts >/tmp/codex-stack-weekly-spec.log
+run_ts scripts/render-qa-pages.spec.ts >/tmp/codex-stack-render-qa-pages-spec.log
 grep -q '"overallStatus"' /tmp/codex-stack-upgrade.json
 grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
@@ -115,6 +116,9 @@ run_eval "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQA
 cat > .codex-stack/browse/snapshots/example.json <<'JSON'
 {
   "name": "example",
+  "capturedAt": "2025-01-01T00:00:00.000Z",
+  "routePath": "/",
+  "device": "desktop",
   "elements": [
     {
       "selector": "h1",
@@ -179,7 +183,7 @@ cat > /tmp/codex-stack-qa-fixture.json <<'JSON'
 JSON
 run_ts scripts/qa-run.ts --fixture /tmp/codex-stack-qa-fixture.json --json >/tmp/codex-stack-qa.json
 grep -q '"status": "critical"' /tmp/codex-stack-qa.json
-grep -q '"healthScore": 48' /tmp/codex-stack-qa.json
+grep -q '"healthScore": 36' /tmp/codex-stack-qa.json
 grep -q '"annotation": ".codex-stack/qa/annotations/' /tmp/codex-stack-qa.json
 rm -rf docs/qa/smoke-fixture
 run_ts scripts/qa-run.ts --fixture /tmp/codex-stack-qa-fixture.json --publish-dir docs/qa/smoke-fixture --json >/tmp/codex-stack-qa-published.json
@@ -194,10 +198,12 @@ run_ts scripts/render-qa-pages.ts --out .site >/tmp/codex-stack-qa-pages.log
 test -f .site/index.html
 test -f .site/qa/index.html
 test -f .site/qa/smoke-fixture/index.html
+test -f .site/qa/history.json
 test -f .site/manifest.json
 test -f .site/.nojekyll
 grep -q 'codex-stack QA Reports' .site/index.html
 grep -q 'Visual pack' .site/index.html
+grep -q 'Visual history' .site/index.html
 grep -q 'smoke-fixture' .site/manifest.json
 grep -q 'github.io' .site/manifest.json
 bun run build >/tmp/codex-stack-preview-build.log

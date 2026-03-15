@@ -91,6 +91,9 @@ interface SnapshotElement {
 interface SnapshotPayload {
   capturedAt: string;
   url: string;
+  origin?: string;
+  routePath?: string;
+  device?: DevicePresetName;
   title: string;
   bodyText: string;
   page: {
@@ -338,6 +341,24 @@ function defaultSnapshotName(url: string): string {
     return slugify(`${parsed.hostname}${parsed.pathname}`.replace(/\/+/g, "-"));
   } catch {
     return slugify(url);
+  }
+}
+
+function routePathFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const pathWithQuery = `${parsed.pathname || "/"}${parsed.search || ""}`;
+    return pathWithQuery || "/";
+  } catch {
+    return "/";
+  }
+}
+
+function originFromUrl(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
   }
 }
 
@@ -667,6 +688,20 @@ export function createSnapshotVisualPack({
     name,
     title: `Snapshot visual pack • ${name}`,
     status: comparison.status,
+    baseline: baselineSnapshot ? {
+      capturedAt: baselineSnapshot.capturedAt || "",
+      routePath: baselineSnapshot.routePath || routePathFromUrl(baselineSnapshot.url || ""),
+      origin: baselineSnapshot.origin || originFromUrl(baselineSnapshot.url || ""),
+      device: baselineSnapshot.device || "",
+      url: baselineSnapshot.url || "",
+    } : null,
+    current: currentSnapshot ? {
+      capturedAt: currentSnapshot.capturedAt || "",
+      routePath: currentSnapshot.routePath || routePathFromUrl(currentSnapshot.url || ""),
+      origin: currentSnapshot.origin || originFromUrl(currentSnapshot.url || ""),
+      device: currentSnapshot.device || "",
+      url: currentSnapshot.url || "",
+    } : null,
     summary: comparison.summary,
     imageDiff,
     markers: markers.map((item) => ({ selector: item.selector, label: item.label })),
@@ -2068,6 +2103,9 @@ async function main(): Promise<void> {
     const baseline = {
       ...payload,
       name: snapshotName,
+      origin: originFromUrl(payload.url || url),
+      routePath: routePathFromUrl(payload.url || url),
+      device: device?.name || "desktop",
       screenshotPath: path.relative(process.cwd(), baselineScreenshot),
       screenshotHash: fileHash(baselineScreenshot),
     };
@@ -2111,6 +2149,9 @@ async function main(): Promise<void> {
     const currentSnapshot = {
       ...current,
       name: snapshotName,
+      origin: originFromUrl(current.url || url),
+      routePath: routePathFromUrl(current.url || url),
+      device: device?.name || "desktop",
       screenshotPath: path.relative(process.cwd(), artifactScreenshot),
       screenshotHash: fileHash(artifactScreenshot),
     };

@@ -55,6 +55,12 @@ interface PreviewReport {
   url?: string;
   runUrl?: string;
   recommendation?: string;
+  visualRisk?: {
+    score?: number;
+    level?: string;
+    staleBaselines?: number;
+    topDrivers?: string[];
+  };
   readiness?: {
     status?: string;
     attempts?: number;
@@ -83,13 +89,17 @@ interface PreviewReport {
           name?: string;
           targetPath?: string;
           device?: string;
-          status?: string;
-          report?: string;
-          annotation?: string;
-          screenshot?: string;
-          visualPack?: {
-            index?: string;
-            manifest?: string;
+        status?: string;
+        report?: string;
+        annotation?: string;
+        screenshot?: string;
+        baselineFreshness?: {
+          ageDays?: number;
+          stale?: boolean;
+        } | null;
+        visualPack?: {
+          index?: string;
+          manifest?: string;
           } | null;
         }>;
       };
@@ -271,6 +281,7 @@ function deploySnapshotLines(preview: PreviewReport | null): string[] {
     const bits = [
       `${item.name || "snapshot"} @ ${item.targetPath || "/"} (${item.device || "desktop"})`,
       `status=${item.status || "unknown"}`,
+      item.baselineFreshness ? `baselineAge=${item.baselineFreshness.ageDays ?? "n/a"}d${item.baselineFreshness.stale ? "-stale" : ""}` : "",
       item.annotation ? `annotation=${item.annotation}` : "",
       item.screenshot ? `screenshot=${item.screenshot}` : "",
       item.report ? `report=${item.report}` : "",
@@ -354,6 +365,7 @@ function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSumm
 - Status: ${preview.status || "unknown"}
 - Readiness: ${preview.readiness?.status || "unknown"}${preview.readiness?.attempts ? ` after ${preview.readiness.attempts} attempt(s)` : ""}
 - Health score: ${preview.qa?.healthScore ?? "n/a"}
+- Visual risk: ${preview.visualRisk?.level ? `${String(preview.visualRisk.level).toUpperCase()} (${preview.visualRisk.score ?? "n/a"}/100)` : "n/a"}
 - Block merge: ${summary.previewBlocking ? "yes" : "no"}
 - Recommendation: ${preview.recommendation || preview.qa?.recommendation || "n/a"}
 ${preview.url ? `- Preview URL: ${preview.url}` : ""}
@@ -383,6 +395,16 @@ ${deploySnapshotLines(preview).join("\n")}
 ### Visual summary
 
 ${visualBadgeLines(preview, previewPagesRoot).join("\n")}
+
+${preview.visualRisk?.topDrivers?.length ? `### Visual risk drivers
+
+${preview.visualRisk.topDrivers.map((item) => `- ${item}`).join("\n")}
+` : ""}
+
+${preview.visualRisk?.staleBaselines ? `### Stale baselines
+
+- ${preview.visualRisk.staleBaselines} stale baseline${preview.visualRisk.staleBaselines === 1 ? "" : "s"} need review or refresh.
+` : ""}
 
 ${visualImageEmbeds(preview, previewPagesRoot).join("\n\n")}
 `;
