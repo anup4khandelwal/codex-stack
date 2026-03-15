@@ -25,6 +25,7 @@ function run(args: string[], cwd = rootDir): string {
 
 fs.mkdirSync(policyDir, { recursive: true });
 fs.mkdirSync(path.join(repoDir, "docs", "qa", "latest"), { recursive: true });
+execFileSync("git", ["init", "-q", "-b", "main", repoDir]);
 fs.writeFileSync(path.join(policyDir, "default.json"), JSON.stringify({
   name: "default",
   requiredChecks: ["review", "preview", "fleet-status"],
@@ -93,12 +94,40 @@ fs.writeFileSync(path.join(repoDir, "docs", "qa", "latest", "report.json"), JSON
 
 const validateReport = JSON.parse(run([fleetScript, "validate", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
   controlRepo?: string;
-  repos?: Array<{ repo?: string; requiredChecks?: string[]; localPath?: string; localRepoDetected?: boolean }>;
+  repos?: Array<{ repo?: string; requiredChecks?: string[]; localPath?: string; localRepoDetected?: boolean; valid?: boolean }>;
 };
 assert.equal(validateReport.controlRepo, "acme/control-plane");
 assert.deepEqual(validateReport.repos?.[0]?.requiredChecks, ["fleet-status", "preview", "qa", "review"]);
 assert.equal(validateReport.repos?.[0]?.localPath, repoDir);
-assert.equal(validateReport.repos?.[0]?.localRepoDetected, false);
+assert.equal(validateReport.repos?.[0]?.localRepoDetected, true);
+assert.equal(validateReport.repos?.[0]?.valid, true);
+
+const invalidManifestPath = path.join(controlDir, "fleet-invalid.json");
+fs.writeFileSync(invalidManifestPath, JSON.stringify({
+  schemaVersion: 1,
+  controlRepo: "acme/control-plane",
+  policyDir: "./policies",
+  repos: [
+    {
+      repo: "acme/missing-repo",
+      branch: "main",
+      localPath: "../missing-repo",
+      policyPack: "default",
+    },
+  ],
+}, null, 2));
+
+const invalidValidateReport = JSON.parse(run([fleetScript, "validate", "--manifest", invalidManifestPath, "--json"], fixtureRoot)) as {
+  repos?: Array<{ valid?: boolean; localRepoDetected?: boolean; localPath?: string }>;
+};
+assert.equal(invalidValidateReport.repos?.[0]?.localRepoDetected, false);
+assert.equal(invalidValidateReport.repos?.[0]?.valid, false);
+
+const invalidSyncReport = JSON.parse(run([fleetScript, "sync", "--manifest", invalidManifestPath, "--dry-run", "--json"], fixtureRoot)) as {
+  results?: Array<{ action?: string; notes?: string[] }>;
+};
+assert.equal(invalidSyncReport.results?.[0]?.action, "invalid");
+assert.equal(invalidSyncReport.results?.[0]?.notes?.[0], "Configured localPath is not a Git repo root.");
 
 const dryRunReport = JSON.parse(run([fleetScript, "sync", "--manifest", manifestPath, "--dry-run", "--json"], fixtureRoot)) as {
   results?: Array<{ repo?: string; action?: string; drift?: string; filesChanged?: string[] }>;
@@ -107,6 +136,14 @@ assert.equal(dryRunReport.results?.[0]?.repo, "acme/repo-a");
 assert.equal(dryRunReport.results?.[0]?.action, "planned");
 assert.equal(dryRunReport.results?.[0]?.drift, "missing");
 assert.ok(dryRunReport.results?.[0]?.filesChanged?.includes(".codex-stack/fleet-member.json"));
+
+const preSyncCollectReport = JSON.parse(run([fleetScript, "collect", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
+  counts?: { missing?: number };
+  repos?: Array<{ installed?: boolean; source?: string }>;
+};
+assert.equal(preSyncCollectReport.counts?.missing, 1);
+assert.equal(preSyncCollectReport.repos?.[0]?.installed, false);
+assert.equal(preSyncCollectReport.repos?.[0]?.source, "local");
 
 const syncReport = JSON.parse(run([fleetScript, "sync", "--manifest", manifestPath, "--json"], fixtureRoot)) as {
   results?: Array<{ action?: string; filesChanged?: string[] }>;
@@ -128,14 +165,16 @@ assert.equal(memberConfig.previewUrlTemplate, "https://preview-{pr}.example.com"
 assert.deepEqual(memberConfig.requiredChecks, ["fleet-status", "preview", "qa", "review"]);
 
 const statusOut = path.join(repoDir, ".codex-stack", "fleet-status", "status.json");
-const statusJson = run([path.join(repoDir, ".github", "codex-stack", "fleet-status.js"), "--out", statusOut, "--json"], repoDir);
+const statusJson = run([path.join(repoDir, ".github", "codex-stack", "fleet-status.js"), "--out", statusOut, "--json"], fixtureRoot);
 const statusReport = JSON.parse(statusJson) as {
   installed?: boolean;
+  repo?: string;
   status?: string;
   riskScore?: number;
   latestReport?: { unresolvedRegressions?: number } | null;
 };
 assert.equal(statusReport.installed, true);
+assert.equal(statusReport.repo, "acme/repo-a");
 assert.equal(statusReport.status, "warning");
 assert.ok(Number(statusReport.riskScore) > 0);
 assert.equal(statusReport.latestReport?.unresolvedRegressions, 2);
