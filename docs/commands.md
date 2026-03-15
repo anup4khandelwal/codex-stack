@@ -230,6 +230,8 @@ bun scripts/fleet.ts validate --manifest .codex-stack/fleet.example.json
 bun scripts/fleet.ts sync --manifest .codex-stack/fleet.example.json --dry-run --json
 bun scripts/fleet.ts collect --manifest .codex-stack/fleet.example.json --json
 bun scripts/fleet.ts dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
+bun scripts/fleet.ts validate --manifest .codex-stack/fleet.anup4khandelwal.json
+bun scripts/fleet.ts sync --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs
 ```
 
 Notes:
@@ -240,6 +242,7 @@ Notes:
 - `fleet collect` reads normalized `codex-stack-fleet-status` outputs and ranks repos by rollout drift plus unresolved QA risk.
 - `fleet dashboard` writes `index.html`, `manifest.json`, and `summary.md` so the control repo can publish an org dashboard with the same data.
 - Start from `.codex-stack/fleet.example.json` and `.codex-stack/policies/default.json` when bootstrapping a new fleet.
+- Use `.codex-stack/fleet.anup4khandelwal.json` for the current checked-in rollout targeting `autopilot-multi-agent-loop`, `awesome-codex-skills`, and the profile repo.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
 - Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
 

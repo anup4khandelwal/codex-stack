@@ -8,6 +8,7 @@ browse/dist/.cache/
 !.codex-stack/baseline-decisions/
 !.codex-stack/baseline-decisions/**
 !.codex-stack/fleet.example.json
+!.codex-stack/fleet.anup4khandelwal.json
 !.codex-stack/policies/
 !.codex-stack/policies/**
 .site/

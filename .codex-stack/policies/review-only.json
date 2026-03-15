@@ -1,0 +1,20 @@
+{
+  "name": "review-only",
+  "description": "Minimal codex-stack rollout for repos that only need review gating and fleet health reporting.",
+  "requiredChecks": ["review", "fleet-status"],
+  "qa": {
+    "mode": "diff-aware",
+    "devices": ["desktop"]
+  },
+  "preview": {
+    "paths": [],
+    "devices": []
+  },
+  "decisions": {
+    "staleAfterDays": 30,
+    "expiringSoonDays": 7
+  },
+  "schedule": {
+    "cron": "17 8 * * 1-5"
+  }
+}
