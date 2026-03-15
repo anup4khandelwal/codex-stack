@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "controlRepo": "anup4khandelwal/codex-stack",
+  "policyDir": "policies",
+  "syncBranch": "chore/codex-stack-fleet-sync",
+  "statusArtifactName": "codex-stack-fleet-status",
+  "repos": [
+    {
+      "repo": "anup4khandelwal/codex-stack",
+      "branch": "main",
+      "policyPack": "default",
+      "team": "platform",
+      "previewUrlTemplate": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-{pr}/",
+      "enabledChecks": ["qa"],
+      "qa": {
+        "flows": ["portal-full-demo"],
+        "snapshots": ["portal-dashboard"]
+      },
+      "preview": {
+        "paths": ["/login", "/dashboard"],
+        "flows": ["portal-full-demo"],
+        "snapshots": ["portal-dashboard"]
+      }
+    }
+  ]
+}

@@ -26,6 +26,10 @@ bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .g
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
+bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
+bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts retro --since "7 days ago"
 bun src/cli.ts retro --since "7 days ago" --artifact-dir .codex-stack/retros
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -218,6 +222,24 @@ Notes:
 - Flow and snapshot checks are delegated to the existing QA runtime so the deploy report reuses the same finding model and artifacts.
 - The same runtime can also run accessibility and performance checks, and deploy reports now publish those summaries into both markdown and `visual/index.html`.
 - `--session-bundle <path>` validates the bundle up front, imports it into the named deploy session when live browser checks need it, and passes it through to `qa-run.ts`.
+
+## Fleet workflow
+
+```bash
+bun scripts/fleet.ts validate --manifest .codex-stack/fleet.example.json
+bun scripts/fleet.ts sync --manifest .codex-stack/fleet.example.json --dry-run --json
+bun scripts/fleet.ts collect --manifest .codex-stack/fleet.example.json --json
+bun scripts/fleet.ts dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
+```
+
+Notes:
+
+- `fleet validate` checks the manifest, policy-pack references, and required-check configuration.
+- `fleet sync` generates a compiled member config, a self-contained fleet-status script, and a status workflow for each managed repo.
+- Use `localPath` entries in the manifest for local testing. Use `--open-prs` to clone target repos, push a rollout branch, and open or update PRs remotely.
+- `fleet collect` reads normalized `codex-stack-fleet-status` outputs and ranks repos by rollout drift plus unresolved QA risk.
+- `fleet dashboard` writes `index.html`, `manifest.json`, and `summary.md` so the control repo can publish an org dashboard with the same data.
+- Start from `.codex-stack/fleet.example.json` and `.codex-stack/policies/default.json` when bootstrapping a new fleet.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
 - Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
 

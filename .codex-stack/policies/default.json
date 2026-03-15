@@ -1,0 +1,26 @@
+{
+  "name": "default",
+  "description": "Baseline codex-stack rollout for GitHub-native review, preview, and QA workflows.",
+  "requiredChecks": ["review", "preview", "deploy", "fleet-status"],
+  "qa": {
+    "mode": "diff-aware",
+    "devices": ["desktop", "mobile"],
+    "a11y": true,
+    "perf": true,
+    "perfBudgets": ["lcp=2.5s", "cls=0.1"]
+  },
+  "preview": {
+    "paths": ["/", "/dashboard"],
+    "devices": ["desktop", "mobile"],
+    "waitTimeout": 300,
+    "strictConsole": false,
+    "strictHttp": true
+  },
+  "decisions": {
+    "staleAfterDays": 14,
+    "expiringSoonDays": 7
+  },
+  "schedule": {
+    "cron": "17 8 * * 1-5"
+  }
+}
