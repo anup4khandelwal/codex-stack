@@ -82,6 +82,7 @@ run_ts scripts/browse-semantic-device.spec.ts >/tmp/codex-stack-browse-semantic-
 run_ts scripts/browse-iframe.spec.ts >/tmp/codex-stack-browse-iframe-spec.log
 run_ts scripts/browse-network.spec.ts >/tmp/codex-stack-browse-network-spec.log
 run_ts scripts/browse-download.spec.ts >/tmp/codex-stack-browse-download-spec.log
+run_ts scripts/browse-a11y-perf.spec.ts >/tmp/codex-stack-browse-a11y-perf-spec.log
 run_ts scripts/qa-diff.spec.ts >/tmp/codex-stack-qa-diff-spec.log
 run_ts scripts/qa-run.ts --help >/tmp/codex-stack-qa-help.log
 run_ts scripts/qa-run.spec.ts >/tmp/codex-stack-qa-spec.log

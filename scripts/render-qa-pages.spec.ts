@@ -57,6 +57,22 @@ async function main(): Promise<void> {
       level: "medium",
       staleBaselines: 0,
     },
+    accessibility: {
+      enabled: true,
+      minimumImpact: "serious",
+      violationCount: 1,
+      topRules: ["color-contrast (1)"],
+    },
+    performance: {
+      enabled: true,
+      budgetViolationCount: 1,
+      topViolations: ["LCP exceeded 2000 ms"],
+      metrics: {
+        lcp: 1980,
+        cls: 0.08,
+        failedResourceCount: 0,
+      },
+    },
   });
 
   writeReport(reportB, {
@@ -90,6 +106,22 @@ async function main(): Promise<void> {
       level: "critical",
       staleBaselines: 1,
     },
+    accessibility: {
+      enabled: true,
+      minimumImpact: "serious",
+      violationCount: 4,
+      topRules: ["color-contrast (2)", "label (2)"],
+    },
+    performance: {
+      enabled: true,
+      budgetViolationCount: 2,
+      topViolations: ["LCP exceeded 2000 ms", "CLS exceeded 0.1"],
+      metrics: {
+        lcp: 2840,
+        cls: 0.19,
+        failedResourceCount: 2,
+      },
+    },
   });
 
   execFileSync(
@@ -117,29 +149,51 @@ async function main(): Promise<void> {
     imageDiffScore?: number;
     baselineAgeDays?: number;
     staleBaseline?: boolean;
+    accessibilityViolations?: number;
+    performanceBudgetViolations?: number;
+    largestContentfulPaint?: number;
+    cumulativeLayoutShift?: number;
   }>;
   const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
     historyPath?: string;
-    reports?: Array<{ visualRiskScore?: number; staleBaseline?: boolean }>;
+    reports?: Array<{ visualRiskScore?: number; staleBaseline?: boolean; accessibilityViolations?: number; performanceBudgetViolations?: number }>;
   };
 
   assert.match(indexHtml, /Visual history/);
   assert.match(indexHtml, /Visual risk score/);
   assert.match(indexHtml, /Snapshot image diff score/);
+  assert.match(indexHtml, /Accessibility violations/);
+  assert.match(indexHtml, /Performance budget violations/);
+  assert.match(indexHtml, /Largest contentful paint \(ms\)/);
   assert.match(indexHtml, /Baseline age \(days\)/);
   assert.match(indexHtml, /Latest visual risk:<\/strong> CRITICAL \(86\/100\)/);
+  assert.match(indexHtml, /Latest accessibility violations:<\/strong> 4/);
+  assert.match(indexHtml, /Latest perf budget violations:<\/strong> 2/);
   assert.match(indexHtml, /Baseline age:<\/strong> 47d • stale/);
+  assert.match(indexHtml, /A11y violations:<\/strong> 4/);
+  assert.match(indexHtml, /Perf budget violations:<\/strong> 2/);
   assert.match(reportHtml, /Route:<\/strong> \/dashboard/);
   assert.match(reportHtml, /Baseline age:<\/strong> 47d • stale/);
+  assert.match(reportHtml, /Accessibility/);
+  assert.match(reportHtml, /Violations:<\/strong> 4/);
+  assert.match(reportHtml, /Performance/);
+  assert.match(reportHtml, /Budget violations:<\/strong> 2/);
+  assert.match(reportHtml, /LCP:<\/strong> 2840 ms/);
   assert.equal(history.length, 2);
   assert.equal(history[1]?.slug, "2026-03-15-dashboard");
   assert.equal(history[1]?.visualRiskScore, 86);
   assert.equal(history[1]?.imageDiffScore, 63.7);
   assert.equal(history[1]?.baselineAgeDays, 47);
   assert.equal(history[1]?.staleBaseline, true);
+  assert.equal(history[1]?.accessibilityViolations, 4);
+  assert.equal(history[1]?.performanceBudgetViolations, 2);
+  assert.equal(history[1]?.largestContentfulPaint, 2840);
+  assert.equal(history[1]?.cumulativeLayoutShift, 0.19);
   assert.equal(manifest.historyPath, "qa/history.json");
   assert.equal(manifest.reports?.[0]?.visualRiskScore, 86);
   assert.equal(manifest.reports?.[0]?.staleBaseline, true);
+  assert.equal(manifest.reports?.[0]?.accessibilityViolations, 4);
+  assert.equal(manifest.reports?.[0]?.performanceBudgetViolations, 2);
 
   console.log("render-qa-pages spec passed");
 }

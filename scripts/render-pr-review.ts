@@ -30,6 +30,24 @@ interface PreviewQaReport {
   healthScore?: number;
   recommendation?: string;
   findings?: PreviewFinding[];
+  accessibility?: {
+    enabled?: boolean;
+    violationCount?: number;
+    minimumImpact?: string;
+    topRules?: string[];
+    artifactMarkdown?: string;
+  } | null;
+  performance?: {
+    enabled?: boolean;
+    budgetViolationCount?: number;
+    topViolations?: string[];
+    metrics?: {
+      lcp?: number | null;
+      cls?: number | null;
+      failedResourceCount?: number;
+    };
+    artifactMarkdown?: string;
+  } | null;
   snapshotResult?: {
     name?: string;
     status?: string;
@@ -358,6 +376,8 @@ function renderPreviewSection(preview: PreviewReport | null, summary: ReviewSumm
   const hostedVisualPack = absoluteLink(previewPagesRoot, "visual/index.html");
   const hostedVisualManifest = absoluteLink(previewPagesRoot, "visual/manifest.json");
   const hostedScreenshotManifest = absoluteLink(previewPagesRoot, "screenshots.json");
+  const a11y = preview.qa?.accessibility;
+  const perf = preview.qa?.performance;
   return `
 ## Preview QA
 
@@ -379,6 +399,8 @@ ${preview.deploy?.screenshotManifest ? `- Screenshot manifest: \`${preview.deplo
 ${hostedScreenshotManifest ? `- Hosted screenshot manifest: ${hostedScreenshotManifest}` : ""}
 ${preview.deploy?.visualPack?.index ? `- Local visual pack: \`${preview.deploy.visualPack.index}\`` : ""}
 ${snapshot?.status ? `- Snapshot: ${snapshot.status}${snapshot.name ? ` (${snapshot.name})` : ""}` : ""}
+${a11y?.enabled ? `- Accessibility: ${a11y.violationCount ?? 0} violations${a11y.minimumImpact ? ` (min impact ${a11y.minimumImpact})` : ""}` : ""}
+${perf?.enabled ? `- Performance: ${perf.budgetViolationCount ?? 0} budget violations${typeof perf.metrics?.failedResourceCount === "number" ? `, ${perf.metrics.failedResourceCount} failed resources` : ""}` : ""}
 
 ### Preview findings
 
@@ -395,6 +417,23 @@ ${deploySnapshotLines(preview).join("\n")}
 ### Visual summary
 
 ${visualBadgeLines(preview, previewPagesRoot).join("\n")}
+
+${a11y?.enabled ? `### Accessibility summary
+
+- Violations: ${a11y.violationCount ?? 0}
+${a11y.topRules?.length ? `- Top rules: ${a11y.topRules.join(", ")}` : "- Top rules: none"}
+${a11y.artifactMarkdown ? `- Report: \`${a11y.artifactMarkdown}\`` : ""}
+` : ""}
+
+${perf?.enabled ? `### Performance summary
+
+- Budget violations: ${perf.budgetViolationCount ?? 0}
+${perf.topViolations?.length ? `- Top violations: ${perf.topViolations.join("; ")}` : "- Top violations: none"}
+- LCP: ${perf.metrics?.lcp ?? "n/a"}
+- CLS: ${perf.metrics?.cls ?? "n/a"}
+- Failed resources: ${perf.metrics?.failedResourceCount ?? 0}
+${perf.artifactMarkdown ? `- Report: \`${perf.artifactMarkdown}\`` : ""}
+` : ""}
 
 ${preview.visualRisk?.topDrivers?.length ? `### Visual risk drivers
 

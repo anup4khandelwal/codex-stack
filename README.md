@@ -50,6 +50,7 @@ Use the repo in this order:
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts with self-contained visual packs, diff heatmaps, and image-diff scores
 - QA reports with typed categories, severity, health score, diff-aware route inference, stale-baseline detection, visual-risk scoring, saved evidence, annotated screenshots, and published visual packs for snapshot failures
+- Opt-in accessibility scans and performance budget checks that feed the same QA, preview, deploy, ship, PR review, and Pages report surfaces
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
 - Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs with ranked regressions plus a consolidated visual-risk score
@@ -166,15 +167,18 @@ bun src/cli.ts list
 bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
 bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun src/cli.ts qa https://preview.example.com/dashboard --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
 bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
 bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
 bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
 bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
@@ -242,6 +246,7 @@ Use `qa` when you want a decision-ready report:
 - findings with category + evidence
 - diff-aware route inference from changed files
 - annotated SVG evidence for snapshot-based failures
+- optional accessibility and performance findings with dedicated artifacts and markdown summaries
 - saved markdown/json report under `.codex-stack/qa/`
 - automatic trend summaries across saved QA runs
 
@@ -261,7 +266,11 @@ bun src/cli.ts preview \
   --path /dashboard \
   --device desktop \
   --device mobile \
-  --flow portal-full-demo
+  --flow portal-full-demo \
+  --a11y \
+  --a11y-scope main \
+  --perf \
+  --perf-budget lcp=2s
 ```
 
 For same-repo PRs, `pr-review.yml` publishes this preview site automatically to GitHub Pages before it verifies the deployment. `preview-verify.yml` remains available as a manual rerun or for external preview URLs.
@@ -298,7 +307,11 @@ bun src/cli.ts ship \
   --pr \
   --verify-url https://staging.example.com/dashboard \
   --verify-flow landing-smoke \
-  --verify-snapshot landing-home
+  --verify-snapshot landing-home \
+  --verify-a11y \
+  --verify-a11y-scope main \
+  --verify-perf \
+  --verify-perf-budget lcp=2s
 ```
 
 This keeps QA in the shipping path instead of as a manual follow-up.
@@ -347,6 +360,7 @@ On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` report
 When a published QA report includes snapshot evidence, the Pages site now surfaces `visual/index.html` as the primary review-evidence entrypoint alongside the raw markdown, JSON, annotation, and screenshot files.
 Those visual packs now include a diff heatmap and an image-diff score so regressions can be ranked instead of treated as binary drift only.
 The merged QA Pages site also renders visual history charts for risk score, image-diff score, and baseline age so drift over time is visible without opening each report one by one.
+When a report includes accessibility or performance data, the Pages site also exposes the latest violation counts, perf-budget failures, LCP/CLS summaries, and matching history charts.
 Snapshot baselines now carry route and device metadata, and QA/deploy/preview runs flag stale baselines automatically when the saved reference is too old.
 
 The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:

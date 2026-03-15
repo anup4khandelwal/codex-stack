@@ -21,14 +21,16 @@ Resolve the live deploy URL, wait for readiness, verify the important paths acro
 3. Wait for the target to become ready before running browser checks.
 4. Verify each configured path across the requested device presets.
 5. Capture screenshots and collect HTTP plus console evidence for each page check.
-6. Run any configured QA flows and snapshot comparisons.
-7. Publish markdown/json/comment artifacts plus a screenshot manifest under the publish directory.
-8. Mark the run as `critical`, `warning`, or `pass` based on HTTP failures, console drift, and QA findings.
+6. Add `--a11y` and `--perf` when the deploy also needs accessibility or performance evidence.
+7. Run any configured QA flows and snapshot comparisons.
+8. Publish markdown/json/comment artifacts plus a screenshot manifest under the publish directory.
+9. Mark the run as `critical`, `warning`, or `pass` based on HTTP failures, console drift, and QA findings.
 
 ## CLI
 
 ```bash
 bun src/cli.ts deploy --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
 bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
 bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device desktop --publish-dir docs/qa/local-demo/deploy --strict-console --json
 ```
@@ -40,6 +42,7 @@ bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device des
 - Page/device matrix with console counts and screenshot paths
 - QA status, health score, recommendation, and findings
 - Snapshot results and artifact paths
+- Accessibility and performance summaries when enabled
 - Screenshot manifest and workflow run link when available
 
 ## Guardrails

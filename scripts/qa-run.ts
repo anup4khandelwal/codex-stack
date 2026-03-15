@@ -13,6 +13,7 @@ type FindingSeverity = "critical" | "high" | "medium" | "low";
 type FindingCategory = "functional" | "visual" | "ux" | "content" | "console" | "performance" | "accessibility" | "qa-system";
 type ReportStatus = "critical" | "warning" | "pass";
 type SnapshotCommand = "snapshot" | "compare-snapshot";
+type AccessibilityImpact = "critical" | "serious" | "moderate" | "minor";
 
 interface QaArgs {
   url: string;
@@ -20,9 +21,16 @@ interface QaArgs {
   snapshot: string;
   updateSnapshot: boolean;
   session: string;
+  device: string;
   sessionBundle: string;
   mode: QaMode;
   baseRef: string;
+  a11y: boolean;
+  a11yScopes: string[];
+  a11yImpact: AccessibilityImpact;
+  perf: boolean;
+  perfBudgets: string[];
+  perfWaitMs: number;
   json: boolean;
   fixture: string;
   publishDir: string;
@@ -154,6 +162,64 @@ interface QaSnapshotSummary {
   visualPack?: VisualPackRef | null;
 }
 
+interface AccessibilityViolation {
+  id: string;
+  impact: string;
+  description: string;
+  help: string;
+  helpUrl: string;
+  selectors: string[];
+  nodeCount: number;
+}
+
+interface QaAccessibilitySummary {
+  enabled: boolean;
+  minimumImpact: AccessibilityImpact;
+  scopeSelectors: string[];
+  violationCount: number;
+  passCount: number;
+  incompleteCount: number;
+  topRules: string[];
+  violations: AccessibilityViolation[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
+}
+
+interface PerformanceMetrics {
+  ttfb: number | null;
+  domContentLoaded: number | null;
+  loadEvent: number | null;
+  fcp: number | null;
+  lcp: number | null;
+  cls: number | null;
+  jsHeapUsed: number | null;
+  resourceCount: number;
+  failedResourceCount: number;
+}
+
+interface PerformanceBudgetResult {
+  metric: string;
+  label: string;
+  threshold: number;
+  unit: string;
+  severity: "high" | "medium";
+  raw: string;
+  value: number | null;
+  passed: boolean;
+  detail: string;
+}
+
+interface QaPerformanceSummary {
+  enabled: boolean;
+  waitMs: number;
+  metrics: PerformanceMetrics;
+  budgets: PerformanceBudgetResult[];
+  budgetViolationCount: number;
+  topViolations: string[];
+  artifactJson?: string;
+  artifactMarkdown?: string;
+}
+
 interface PublishedArtifacts {
   dir: string;
   json: string;
@@ -162,6 +228,10 @@ interface PublishedArtifacts {
   screenshot: string;
   current: string;
   baseline: string;
+  accessibilityJson?: string;
+  accessibilityMarkdown?: string;
+  performanceJson?: string;
+  performanceMarkdown?: string;
   visualPack?: VisualPackRef | null;
 }
 
@@ -171,6 +241,10 @@ interface QaArtifacts {
   latestJson?: string;
   latestMarkdown?: string;
   annotation?: string;
+  accessibilityJson?: string;
+  accessibilityMarkdown?: string;
+  performanceJson?: string;
+  performanceMarkdown?: string;
   visualPack?: VisualPackRef | null;
   trendsJson?: string;
   trendsMarkdown?: string;
@@ -215,6 +289,8 @@ interface QaReport {
   routeResults: QaRouteResult[];
   diffSummary: QaDiffSummary | null;
   snapshotResult: QaSnapshotSummary | null;
+  accessibility: QaAccessibilitySummary | null;
+  performance: QaPerformanceSummary | null;
   visualRisk: VisualRiskSummary;
   artifacts: QaArtifacts;
 }
@@ -250,6 +326,32 @@ interface ProbeCommandResult {
   bodyLength?: number;
 }
 
+interface AccessibilityCommandResult {
+  url?: string;
+  finalUrl?: string;
+  title?: string;
+  minimumImpact?: string;
+  scopeSelectors?: string[];
+  violationCount?: number;
+  passCount?: number;
+  incompleteCount?: number;
+  topRules?: string[];
+  violations?: AccessibilityViolation[];
+  status?: string;
+}
+
+interface PerformanceCommandResult {
+  url?: string;
+  finalUrl?: string;
+  title?: string;
+  waitMs?: number;
+  metrics?: Partial<PerformanceMetrics>;
+  budgets?: PerformanceBudgetResult[];
+  budgetViolationCount?: number;
+  topViolations?: string[];
+  status?: string;
+}
+
 interface QaFixtureSnapshot extends SnapshotCommandResult {
   name?: string;
   ok?: boolean;
@@ -269,6 +371,8 @@ interface QaFixture {
   url?: string;
   snapshot?: QaFixtureSnapshot;
   flows?: QaFixtureFlow[];
+  accessibility?: QaAccessibilitySummary | null;
+  performance?: QaPerformanceSummary | null;
 }
 
 const QA_DIR = path.resolve(process.cwd(), ".codex-stack", "qa");
@@ -280,7 +384,7 @@ function usage(): never {
   console.log(`qa-run
 
 Usage:
-  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--session-bundle <path>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--publish-dir <path>] [--json]
+  bun scripts/qa-run.ts <url> [--flow <name>] [--snapshot <name>] [--update-snapshot] [--session <name>] [--device <desktop|tablet|mobile>] [--session-bundle <path>] [--mode <quick|full|regression|diff-aware>] [--base-ref <ref>] [--a11y] [--a11y-scope <selector>] [--a11y-impact <critical|serious|moderate|minor>] [--perf] [--perf-budget <metric=value>] [--perf-wait-ms <n>] [--publish-dir <path>] [--json]
   bun scripts/qa-run.ts --fixture <path> [--publish-dir <path>] [--json]
 `);
   process.exit(0);
@@ -293,9 +397,16 @@ function parseArgs(argv: string[]): QaArgs {
     snapshot: "",
     updateSnapshot: false,
     session: "qa",
+    device: "desktop",
     sessionBundle: "",
     mode: "full",
     baseRef: process.env.CODEX_STACK_QA_BASE_REF || "origin/main",
+    a11y: false,
+    a11yScopes: [],
+    a11yImpact: "serious",
+    perf: false,
+    perfBudgets: [],
+    perfWaitMs: 250,
     json: false,
     fixture: "",
     publishDir: "",
@@ -316,12 +427,30 @@ function parseArgs(argv: string[]): QaArgs {
       out.updateSnapshot = true;
     } else if (arg === "--session") {
       out.session = copy.shift() || out.session;
+    } else if (arg === "--device") {
+      out.device = copy.shift() || out.device;
     } else if (arg === "--session-bundle") {
       out.sessionBundle = copy.shift() || "";
     } else if (arg === "--mode") {
       out.mode = copy.shift() || out.mode;
     } else if (arg === "--base-ref") {
       out.baseRef = copy.shift() || out.baseRef;
+    } else if (arg === "--a11y") {
+      out.a11y = true;
+    } else if (arg === "--a11y-scope") {
+      out.a11yScopes.push(copy.shift() || "");
+    } else if (arg === "--a11y-impact") {
+      const raw = String(copy.shift() || out.a11yImpact).trim().toLowerCase();
+      if (raw === "critical" || raw === "serious" || raw === "moderate" || raw === "minor") {
+        out.a11yImpact = raw;
+      }
+    } else if (arg === "--perf") {
+      out.perf = true;
+    } else if (arg === "--perf-budget") {
+      out.perfBudgets.push(copy.shift() || "");
+    } else if (arg === "--perf-wait-ms") {
+      const raw = Number.parseInt(copy.shift() || "", 10);
+      out.perfWaitMs = Number.isFinite(raw) && raw >= 0 ? raw : out.perfWaitMs;
     } else if (arg === "--json") {
       out.json = true;
     } else if (arg === "--fixture") {
@@ -334,6 +463,8 @@ function parseArgs(argv: string[]): QaArgs {
   }
 
   out.flows = [...new Set(out.flows.filter(Boolean))];
+  out.a11yScopes = [...new Set(out.a11yScopes.filter(Boolean))];
+  out.perfBudgets = [...new Set(out.perfBudgets.filter(Boolean))];
   if (!out.fixture && !out.url) {
     usage();
   }
@@ -372,6 +503,10 @@ function asString(value: unknown, fallback = ""): string {
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -456,6 +591,97 @@ function asProbeCommandResult(value: unknown): ProbeCommandResult {
     status: typeof obj?.status === "number" ? obj.status : null,
     ok: obj?.ok === undefined ? true : Boolean(obj?.ok),
     bodyLength: typeof obj?.bodyLength === "number" ? obj.bodyLength : 0,
+  };
+}
+
+function asAccessibilityViolation(value: unknown): AccessibilityViolation | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+  const id = asString(obj.id);
+  const help = asString(obj.help);
+  if (!id && !help) return null;
+  return {
+    id,
+    impact: asString(obj.impact),
+    description: asString(obj.description),
+    help,
+    helpUrl: asString(obj.helpUrl),
+    selectors: asStringArray(obj.selectors),
+    nodeCount: asNumber(obj.nodeCount),
+  };
+}
+
+function asAccessibilityResult(value: unknown): QaAccessibilitySummary | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+  const violations = Array.isArray(obj.violations)
+    ? obj.violations.map(asAccessibilityViolation).filter((item): item is AccessibilityViolation => Boolean(item))
+    : [];
+  return {
+    enabled: true,
+    minimumImpact: (() => {
+      const raw = asString(obj.minimumImpact).toLowerCase();
+      if (raw === "critical" || raw === "serious" || raw === "moderate" || raw === "minor") return raw;
+      return "serious";
+    })(),
+    scopeSelectors: asStringArray(obj.scopeSelectors),
+    violationCount: typeof obj.violationCount === "number" ? obj.violationCount : violations.length,
+    passCount: asNumber(obj.passCount),
+    incompleteCount: asNumber(obj.incompleteCount),
+    topRules: asStringArray(obj.topRules),
+    violations,
+  };
+}
+
+function asPerformanceMetrics(value: unknown): PerformanceMetrics {
+  const obj = asObject(value);
+  return {
+    ttfb: asNullableNumber(obj?.ttfb),
+    domContentLoaded: asNullableNumber(obj?.domContentLoaded),
+    loadEvent: asNullableNumber(obj?.loadEvent),
+    fcp: asNullableNumber(obj?.fcp),
+    lcp: asNullableNumber(obj?.lcp),
+    cls: asNullableNumber(obj?.cls),
+    jsHeapUsed: asNullableNumber(obj?.jsHeapUsed),
+    resourceCount: typeof obj?.resourceCount === "number" ? obj.resourceCount : 0,
+    failedResourceCount: typeof obj?.failedResourceCount === "number" ? obj.failedResourceCount : 0,
+  };
+}
+
+function asPerformanceBudgetResult(value: unknown): PerformanceBudgetResult | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+  const metric = asString(obj.metric);
+  if (!metric) return null;
+  const severity = asString(obj.severity) === "high" ? "high" : "medium";
+  return {
+    metric,
+    label: asString(obj.label) || metric,
+    threshold: typeof obj.threshold === "number" ? obj.threshold : 0,
+    unit: asString(obj.unit),
+    severity,
+    raw: asString(obj.raw) || metric,
+    value: asNullableNumber(obj.value),
+    passed: obj.passed !== false,
+    detail: asString(obj.detail),
+  };
+}
+
+function asPerformanceResult(value: unknown): QaPerformanceSummary | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+  const budgets = Array.isArray(obj.budgets)
+    ? obj.budgets.map(asPerformanceBudgetResult).filter((item): item is PerformanceBudgetResult => Boolean(item))
+    : [];
+  return {
+    enabled: true,
+    waitMs: typeof obj.waitMs === "number" ? obj.waitMs : 250,
+    metrics: asPerformanceMetrics(obj.metrics),
+    budgets,
+    budgetViolationCount: typeof obj.budgetViolationCount === "number"
+      ? obj.budgetViolationCount
+      : budgets.filter((item) => !item.passed).length,
+    topViolations: asStringArray(obj.topViolations),
   };
 }
 
@@ -551,6 +777,99 @@ function recommendation(status: ReportStatus, healthScore: number): string {
   return "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.";
 }
 
+function formatMetric(metric: string, value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "n/a";
+  if (metric === "cls") return String(Number(value.toFixed(3)));
+  if (metric === "jsHeapUsed") {
+    if (value >= 1024 ** 2) return `${Number((value / (1024 ** 2)).toFixed(2))} MB`;
+    if (value >= 1024) return `${Number((value / 1024).toFixed(1))} KB`;
+    return `${Math.round(value)} B`;
+  }
+  if (metric === "resourceCount" || metric === "failedResourceCount") return String(Math.round(value));
+  return `${Math.round(value)} ms`;
+}
+
+function buildAccessibilityMarkdown(accessibility: QaAccessibilitySummary | null): string {
+  if (!accessibility?.enabled) {
+    return "# Accessibility Audit\n\nAccessibility checks were not enabled for this run.\n";
+  }
+  const violationLines = accessibility.violations.length
+    ? accessibility.violations.map((item) => (
+      `- ${String(item.impact || "unknown").toUpperCase()} ${item.id || item.help}: ${item.description || item.help}${item.selectors.length ? ` | selectors: ${item.selectors.join(", ")}` : ""}${item.helpUrl ? ` | help: ${item.helpUrl}` : ""}`
+    )).join("\n")
+    : "- No accessibility violations above the configured impact threshold.";
+  return `# Accessibility Audit
+
+- Minimum impact: ${accessibility.minimumImpact}
+- Scope selectors: ${accessibility.scopeSelectors.length ? accessibility.scopeSelectors.join(", ") : "document"}
+- Violations: ${accessibility.violationCount}
+- Passes: ${accessibility.passCount}
+- Incomplete: ${accessibility.incompleteCount}
+- Top rules: ${accessibility.topRules.length ? accessibility.topRules.join(", ") : "none"}
+
+## Violations
+
+${violationLines}
+`;
+}
+
+function buildPerformanceMarkdown(performance: QaPerformanceSummary | null): string {
+  if (!performance?.enabled) {
+    return "# Performance Audit\n\nPerformance checks were not enabled for this run.\n";
+  }
+  const metrics = performance.metrics;
+  const budgetLines = performance.budgets.length
+    ? performance.budgets.map((item) => (
+      `- ${item.label}: ${formatMetric(item.metric, item.value)} vs ${formatMetric(item.metric, item.threshold)} (${item.passed ? "pass" : item.severity})`
+    )).join("\n")
+    : "- No performance budgets were configured.";
+  return `# Performance Audit
+
+- Wait after load: ${performance.waitMs} ms
+- Budget violations: ${performance.budgetViolationCount}
+- Top violations: ${performance.topViolations.length ? performance.topViolations.join("; ") : "none"}
+- TTFB: ${formatMetric("ttfb", metrics.ttfb)}
+- DOMContentLoaded: ${formatMetric("domContentLoaded", metrics.domContentLoaded)}
+- Load event: ${formatMetric("loadEvent", metrics.loadEvent)}
+- FCP: ${formatMetric("fcp", metrics.fcp)}
+- LCP: ${formatMetric("lcp", metrics.lcp)}
+- CLS: ${formatMetric("cls", metrics.cls)}
+- JS heap used: ${formatMetric("jsHeapUsed", metrics.jsHeapUsed)}
+- Resource count: ${formatMetric("resourceCount", metrics.resourceCount)}
+- Failed resource count: ${formatMetric("failedResourceCount", metrics.failedResourceCount)}
+
+## Budgets
+
+${budgetLines}
+`;
+}
+
+function collectAccessibilityEvidence(args: QaArgs): QaAccessibilitySummary | null {
+  if (!args.a11y) return null;
+  const commandArgs = ["a11y", args.url, "--session", args.session, "--device", args.device, "--impact", args.a11yImpact];
+  for (const selector of args.a11yScopes) {
+    commandArgs.push("--scope", selector);
+  }
+  const result = runBrowse(commandArgs);
+  if (!result.ok || !result.parsed) {
+    throw new Error(cleanSubject(result.stderr || result.stdout || "browse a11y did not produce a JSON report."));
+  }
+  return asAccessibilityResult(result.parsed);
+}
+
+function collectPerformanceEvidence(args: QaArgs): QaPerformanceSummary | null {
+  if (!args.perf) return null;
+  const commandArgs = ["perf", args.url, "--session", args.session, "--device", args.device, "--wait-ms", String(args.perfWaitMs)];
+  for (const budget of args.perfBudgets) {
+    commandArgs.push("--budget", budget);
+  }
+  const result = runBrowse(commandArgs);
+  if (!result.ok || !result.parsed) {
+    throw new Error(cleanSubject(result.stderr || result.stdout || "browse perf did not produce a JSON report."));
+  }
+  return asPerformanceResult(result.parsed);
+}
+
 function routePathForSnapshot(snapshot: SnapshotDocument | null, fallbackUrl: string): string {
   const explicit = String(snapshot?.routePath || "").trim();
   if (explicit) return explicit;
@@ -617,6 +936,36 @@ function buildMarkdown(report: QaReport): string {
         .filter(Boolean)
         .join("\n")
     : "- Snapshot: none";
+  const accessibilityLines = report.accessibility?.enabled
+    ? [
+        `- Minimum impact: ${report.accessibility.minimumImpact}`,
+        `- Scope selectors: ${report.accessibility.scopeSelectors.length ? report.accessibility.scopeSelectors.join(", ") : "document"}`,
+        `- Violations: ${report.accessibility.violationCount}`,
+        `- Passes: ${report.accessibility.passCount}`,
+        `- Incomplete: ${report.accessibility.incompleteCount}`,
+        report.accessibility.topRules.length ? `- Top rules: ${report.accessibility.topRules.join(", ")}` : "",
+        report.artifacts.accessibilityJson ? `- Accessibility JSON: ${report.artifacts.accessibilityJson}` : "",
+        report.artifacts.accessibilityMarkdown ? `- Accessibility Markdown: ${report.artifacts.accessibilityMarkdown}` : "",
+      ].filter(Boolean).join("\n")
+    : "- Accessibility: not enabled";
+  const performanceLines = report.performance?.enabled
+    ? [
+        `- Wait after load: ${report.performance.waitMs} ms`,
+        `- Budget violations: ${report.performance.budgetViolationCount}`,
+        `- Top violations: ${report.performance.topViolations.length ? report.performance.topViolations.join("; ") : "none"}`,
+        `- TTFB: ${formatMetric("ttfb", report.performance.metrics.ttfb)}`,
+        `- DOMContentLoaded: ${formatMetric("domContentLoaded", report.performance.metrics.domContentLoaded)}`,
+        `- Load event: ${formatMetric("loadEvent", report.performance.metrics.loadEvent)}`,
+        `- FCP: ${formatMetric("fcp", report.performance.metrics.fcp)}`,
+        `- LCP: ${formatMetric("lcp", report.performance.metrics.lcp)}`,
+        `- CLS: ${formatMetric("cls", report.performance.metrics.cls)}`,
+        `- JS heap used: ${formatMetric("jsHeapUsed", report.performance.metrics.jsHeapUsed)}`,
+        `- Resource count: ${formatMetric("resourceCount", report.performance.metrics.resourceCount)}`,
+        `- Failed resource count: ${formatMetric("failedResourceCount", report.performance.metrics.failedResourceCount)}`,
+        report.artifacts.performanceJson ? `- Performance JSON: ${report.artifacts.performanceJson}` : "",
+        report.artifacts.performanceMarkdown ? `- Performance Markdown: ${report.artifacts.performanceMarkdown}` : "",
+      ].filter(Boolean).join("\n")
+    : "- Performance: not enabled";
 
   return `# QA Report
 
@@ -648,6 +997,14 @@ ${diffLines}
 ## Snapshot
 
 ${snapshotLine}
+
+## Accessibility
+
+${accessibilityLines}
+
+## Performance
+
+${performanceLines}
 `;
 }
 
@@ -836,7 +1193,7 @@ function createAnnotatedSnapshotArtifact(report: QaReport, snapshotEvidence: Sna
 function collectSnapshotEvidence(args: QaArgs): SnapshotEvidence | null {
   if (!args.snapshot) return null;
   if (args.updateSnapshot) {
-    const saved = runBrowse(["snapshot", args.url, args.snapshot, "--session", args.session]);
+    const saved = runBrowse(["snapshot", args.url, args.snapshot, "--session", args.session, "--device", args.device]);
     return {
       kind: "snapshot",
       command: "snapshot",
@@ -846,7 +1203,7 @@ function collectSnapshotEvidence(args: QaArgs): SnapshotEvidence | null {
     };
   }
 
-  const compared = runBrowse(["compare-snapshot", args.url, args.snapshot, "--session", args.session]);
+  const compared = runBrowse(["compare-snapshot", args.url, args.snapshot, "--session", args.session, "--device", args.device]);
   return {
     kind: "snapshot",
     command: "compare-snapshot",
@@ -858,7 +1215,7 @@ function collectSnapshotEvidence(args: QaArgs): SnapshotEvidence | null {
 
 function collectFlowEvidence(args: QaArgs): FlowEvidence[] {
   return args.flows.map((flowName) => {
-    const result = runBrowse(["run-flow", args.url, flowName, "--session", args.session]);
+    const result = runBrowse(["run-flow", args.url, flowName, "--session", args.session, "--device", args.device]);
     return {
       name: flowName,
       ok: result.ok,
@@ -910,7 +1267,7 @@ function collectRouteEvidence(args: QaArgs): { routeEvidence: RouteProbeEvidence
 
   for (const item of routeEvidence) {
     if (!item.url || item.dynamic) continue;
-    const result = runBrowse(["probe", item.url, "--session", args.session]);
+    const result = runBrowse(["probe", item.url, "--session", args.session, "--device", args.device]);
     if (!result.ok) {
       item.ok = false;
       item.status = "failed";
@@ -951,12 +1308,16 @@ function buildReport({
   flowEvidence,
   routeEvidence,
   diffSummary,
+  accessibility,
+  performance,
 }: {
   args: QaArgs;
   snapshotEvidence: SnapshotEvidence | null;
   flowEvidence: FlowEvidence[];
   routeEvidence: RouteProbeEvidence[];
   diffSummary: QaDiffSummary | null;
+  accessibility: QaAccessibilitySummary | null;
+  performance: QaPerformanceSummary | null;
 }): QaReport {
   const findings: QaFinding[] = [];
   const baselineDocument = snapshotEvidence
@@ -1090,6 +1451,61 @@ function buildReport({
     }
   }
 
+  if (accessibility?.enabled) {
+    for (const violation of accessibility.violations) {
+      const severity: FindingSeverity = violation.impact === "critical" || violation.impact === "serious"
+        ? "high"
+        : violation.impact === "moderate"
+          ? "medium"
+          : "low";
+      findings.push(
+        finding(
+          severity,
+          "accessibility",
+          `Accessibility violation: ${violation.id || violation.help}`,
+          `${violation.help || violation.description}${violation.nodeCount ? ` (${violation.nodeCount} affected node${violation.nodeCount === 1 ? "" : "s"})` : ""}`,
+          {
+            rule: violation.id,
+            impact: violation.impact,
+            selectors: violation.selectors.join(", "),
+            helpUrl: violation.helpUrl,
+          },
+        ),
+      );
+    }
+  }
+
+  if (performance?.enabled) {
+    for (const budget of performance.budgets.filter((item) => !item.passed)) {
+      findings.push(
+        finding(
+          budget.severity,
+          "performance",
+          `Performance budget exceeded: ${budget.label}`,
+          budget.detail,
+          {
+            metric: budget.metric,
+            threshold: String(budget.threshold),
+            value: budget.value === null ? "n/a" : String(budget.value),
+          },
+        ),
+      );
+    }
+    if (!performance.budgets.length && performance.metrics.failedResourceCount > 0) {
+      findings.push(
+        finding(
+          "medium",
+          "performance",
+          "Page failed to load resources",
+          `${performance.metrics.failedResourceCount} resource request(s) failed during the performance capture.`,
+          {
+            failedResourceCount: String(performance.metrics.failedResourceCount),
+          },
+        ),
+      );
+    }
+  }
+
   const healthScore = scoreFindings(findings);
   const status = statusFromFindings(findings);
   const generatedAt = new Date().toISOString();
@@ -1131,6 +1547,8 @@ function buildReport({
     })),
     diffSummary,
     snapshotResult,
+    accessibility,
+    performance,
     visualRisk,
     artifacts: snapshotEvidence?.result.visualPack ? { visualPack: snapshotEvidence.result.visualPack } : {},
   };
@@ -1221,6 +1639,15 @@ function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>)
       }
     }
   }
+
+  if (report.accessibility) {
+    if (report.accessibility.artifactJson && pathMap[report.accessibility.artifactJson]) report.accessibility.artifactJson = pathMap[report.accessibility.artifactJson];
+    if (report.accessibility.artifactMarkdown && pathMap[report.accessibility.artifactMarkdown]) report.accessibility.artifactMarkdown = pathMap[report.accessibility.artifactMarkdown];
+  }
+  if (report.performance) {
+    if (report.performance.artifactJson && pathMap[report.performance.artifactJson]) report.performance.artifactJson = pathMap[report.performance.artifactJson];
+    if (report.performance.artifactMarkdown && pathMap[report.performance.artifactMarkdown]) report.performance.artifactMarkdown = pathMap[report.performance.artifactMarkdown];
+  }
 }
 
 function publishArtifacts(report: QaReport, publishDir: string): QaReport {
@@ -1237,6 +1664,10 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
     [report.snapshotResult?.screenshot || "", path.join(outputDir, "screenshot.png")],
     [report.snapshotResult?.current || "", path.join(outputDir, "current.json")],
     [report.snapshotResult?.baseline || "", path.join(outputDir, "baseline.json")],
+    [report.artifacts.accessibilityJson || "", path.join(outputDir, "a11y.json")],
+    [report.artifacts.accessibilityMarkdown || "", path.join(outputDir, "a11y.md")],
+    [report.artifacts.performanceJson || "", path.join(outputDir, "performance.json")],
+    [report.artifacts.performanceMarkdown || "", path.join(outputDir, "performance.md")],
   ];
 
   for (const [source, target] of copyTargets) {
@@ -1288,6 +1719,10 @@ function publishArtifacts(report: QaReport, publishDir: string): QaReport {
       screenshot: pathMap[report.snapshotResult?.screenshot || ""] || "",
       current: pathMap[report.snapshotResult?.current || ""] || "",
       baseline: pathMap[report.snapshotResult?.baseline || ""] || "",
+      accessibilityJson: pathMap[report.artifacts.accessibilityJson || ""] || "",
+      accessibilityMarkdown: pathMap[report.artifacts.accessibilityMarkdown || ""] || "",
+      performanceJson: pathMap[report.artifacts.performanceJson || ""] || "",
+      performanceMarkdown: pathMap[report.artifacts.performanceMarkdown || ""] || "",
       visualPack: publishedVisualPack,
     },
   };
@@ -1312,6 +1747,26 @@ function writeArtifacts(report: QaReport): QaReport {
     latestJson: relative(latestJsonPath),
     latestMarkdown: relative(latestMarkdownPath),
   };
+  if (report.accessibility?.enabled) {
+    const accessibilityJsonPath = path.join(QA_DIR, `${stamp}-a11y.json`);
+    const accessibilityMarkdownPath = path.join(QA_DIR, `${stamp}-a11y.md`);
+    report.artifacts.accessibilityJson = relative(accessibilityJsonPath);
+    report.artifacts.accessibilityMarkdown = relative(accessibilityMarkdownPath);
+    report.accessibility.artifactJson = report.artifacts.accessibilityJson;
+    report.accessibility.artifactMarkdown = report.artifacts.accessibilityMarkdown;
+    writeFile(accessibilityJsonPath, JSON.stringify(report.accessibility, null, 2));
+    writeFile(accessibilityMarkdownPath, buildAccessibilityMarkdown(report.accessibility));
+  }
+  if (report.performance?.enabled) {
+    const performanceJsonPath = path.join(QA_DIR, `${stamp}-performance.json`);
+    const performanceMarkdownPath = path.join(QA_DIR, `${stamp}-performance.md`);
+    report.artifacts.performanceJson = relative(performanceJsonPath);
+    report.artifacts.performanceMarkdown = relative(performanceMarkdownPath);
+    report.performance.artifactJson = report.artifacts.performanceJson;
+    report.performance.artifactMarkdown = report.artifacts.performanceMarkdown;
+    writeFile(performanceJsonPath, JSON.stringify(report.performance, null, 2));
+    writeFile(performanceMarkdownPath, buildPerformanceMarkdown(report.performance));
+  }
 
   const markdown = buildMarkdown(report);
   writeFile(jsonPath, JSON.stringify(report, null, 2));
@@ -1362,12 +1817,16 @@ if (args.fixture) {
       : [],
     routeEvidence: [],
     diffSummary: null,
+    accessibility: fixture.accessibility || null,
+    performance: fixture.performance || null,
   });
 } else {
   const snapshotEvidence = collectSnapshotEvidence(args);
   const flowEvidence = collectFlowEvidence(args);
   const { routeEvidence, diffSummary } = collectRouteEvidence(args);
-  report = buildReport({ args, snapshotEvidence, flowEvidence, routeEvidence, diffSummary });
+  const accessibility = collectAccessibilityEvidence(args);
+  const performance = collectPerformanceEvidence(args);
+  report = buildReport({ args, snapshotEvidence, flowEvidence, routeEvidence, diffSummary, accessibility, performance });
   report = attachSnapshotAnnotation(report, snapshotEvidence);
 }
 

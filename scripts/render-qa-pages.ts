@@ -56,6 +56,24 @@ interface QaVisualRisk {
   topDrivers?: string[];
 }
 
+interface QaAccessibilitySummary {
+  enabled?: boolean;
+  minimumImpact?: string;
+  violationCount?: string | number;
+  topRules?: string[];
+}
+
+interface QaPerformanceSummary {
+  enabled?: boolean;
+  budgetViolationCount?: string | number;
+  topViolations?: string[];
+  metrics?: {
+    lcp?: string | number | null;
+    cls?: string | number | null;
+    failedResourceCount?: string | number;
+  };
+}
+
 interface QaReportData extends Record<string, unknown> {
   status?: string;
   recommendation?: string;
@@ -68,6 +86,8 @@ interface QaReportData extends Record<string, unknown> {
   flowResults?: QaFlowResult[];
   snapshotResult?: QaSnapshotResult;
   visualRisk?: QaVisualRisk;
+  accessibility?: QaAccessibilitySummary | null;
+  performance?: QaPerformanceSummary | null;
 }
 
 interface CollectedReport {
@@ -91,6 +111,10 @@ interface CollectedReport {
   imageDiffScore: number | null;
   baselineAgeDays: number | null;
   staleBaseline: boolean;
+  accessibilityViolations: number | null;
+  performanceBudgetViolations: number | null;
+  largestContentfulPaint: number | null;
+  cumulativeLayoutShift: number | null;
 }
 
 interface VisualHistoryPoint {
@@ -103,6 +127,10 @@ interface VisualHistoryPoint {
   imageDiffScore: number | null;
   baselineAgeDays: number | null;
   staleBaseline: boolean;
+  accessibilityViolations: number | null;
+  performanceBudgetViolations: number | null;
+  largestContentfulPaint: number | null;
+  cumulativeLayoutShift: number | null;
   stableUrl: string;
 }
 
@@ -304,6 +332,10 @@ function buildVisualHistory(reports: CollectedReport[]): VisualHistoryPoint[] {
       imageDiffScore: report.imageDiffScore,
       baselineAgeDays: report.baselineAgeDays,
       staleBaseline: report.staleBaseline,
+      accessibilityViolations: report.accessibilityViolations,
+      performanceBudgetViolations: report.performanceBudgetViolations,
+      largestContentfulPaint: report.largestContentfulPaint,
+      cumulativeLayoutShift: report.cumulativeLayoutShift,
       stableUrl: report.stableUrl,
     }))
     .sort((left, right) => (Date.parse(left.generatedAt || "0") || 0) - (Date.parse(right.generatedAt || "0") || 0));
@@ -365,6 +397,8 @@ function renderHistorySection(reports: CollectedReport[]): string {
   const summary = [
     `<span><strong>Reports:</strong> ${points.length}</span>`,
     latest.visualRiskScore !== null ? `<span><strong>Latest visual risk:</strong> ${latest.visualRiskLevel.toUpperCase()} (${latest.visualRiskScore}/100)</span>` : "",
+    latest.accessibilityViolations !== null ? `<span><strong>Latest accessibility violations:</strong> ${latest.accessibilityViolations}</span>` : "",
+    latest.performanceBudgetViolations !== null ? `<span><strong>Latest perf budget violations:</strong> ${latest.performanceBudgetViolations}</span>` : "",
     latest.imageDiffScore !== null ? `<span><strong>Latest image diff score:</strong> ${latest.imageDiffScore}</span>` : "",
     `<span><strong>Stale baselines:</strong> ${staleCount}</span>`,
   ].filter(Boolean).join("");
@@ -383,6 +417,24 @@ function renderHistorySection(reports: CollectedReport[]): string {
       title: "Snapshot image diff score",
       accessor: (point) => point.imageDiffScore,
       color: "#1d4ed8",
+    })}
+    ${renderHistoryChart(points, {
+      title: "Accessibility violations",
+      accessor: (point) => point.accessibilityViolations,
+      color: "#7c3aed",
+      maxValue: Math.max(10, ...points.map((item) => item.accessibilityViolations || 0)),
+    })}
+    ${renderHistoryChart(points, {
+      title: "Performance budget violations",
+      accessor: (point) => point.performanceBudgetViolations,
+      color: "#0f766e",
+      maxValue: Math.max(5, ...points.map((item) => item.performanceBudgetViolations || 0)),
+    })}
+    ${renderHistoryChart(points, {
+      title: "Largest contentful paint (ms)",
+      accessor: (point) => point.largestContentfulPaint,
+      color: "#9333ea",
+      maxValue: Math.max(2500, ...points.map((item) => item.largestContentfulPaint || 0)),
     })}
     ${renderHistoryChart(points, {
       title: "Baseline age (days)",
@@ -614,6 +666,9 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
         <div class="meta">
           <span><strong>Health score:</strong> ${escapeHtml(report.data.healthScore)}</span>
           ${report.visualRiskScore !== null ? `<span><strong>Visual risk:</strong> ${escapeHtml(`${report.visualRiskLevel.toUpperCase()} (${report.visualRiskScore}/100)`)}</span>` : ""}
+          ${report.accessibilityViolations !== null ? `<span><strong>A11y violations:</strong> ${escapeHtml(report.accessibilityViolations)}</span>` : ""}
+          ${report.performanceBudgetViolations !== null ? `<span><strong>Perf budget violations:</strong> ${escapeHtml(report.performanceBudgetViolations)}</span>` : ""}
+          ${report.largestContentfulPaint !== null ? `<span><strong>LCP:</strong> ${escapeHtml(`${report.largestContentfulPaint} ms`)}</span>` : ""}
           ${report.imageDiffScore !== null ? `<span><strong>Image diff:</strong> ${escapeHtml(report.imageDiffScore)}</span>` : ""}
           ${report.baselineAgeDays !== null ? `<span><strong>Baseline age:</strong> ${escapeHtml(`${report.baselineAgeDays}d${report.staleBaseline ? " • stale" : ""}`)}</span>` : ""}
           <span><strong>Generated:</strong> ${escapeHtml(formatDate(report.data.generatedAt))}</span>
@@ -675,6 +730,10 @@ function renderReport(report: CollectedReport, baseUrl: string): string {
             <span><strong>Session:</strong> ${escapeHtml(report.data.session || "n/a")}</span>
             <span><strong>Mode:</strong> ${escapeHtml(report.data.mode || "n/a")}</span>
             <span><strong>URL:</strong> ${escapeHtml(report.data.url || "fixture")}</span>
+            ${report.accessibilityViolations !== null ? `<span><strong>A11y violations:</strong> ${escapeHtml(report.accessibilityViolations)}</span>` : ""}
+            ${report.performanceBudgetViolations !== null ? `<span><strong>Perf budget violations:</strong> ${escapeHtml(report.performanceBudgetViolations)}</span>` : ""}
+            ${report.largestContentfulPaint !== null ? `<span><strong>LCP:</strong> ${escapeHtml(`${report.largestContentfulPaint} ms`)}</span>` : ""}
+            ${report.cumulativeLayoutShift !== null ? `<span><strong>CLS:</strong> ${escapeHtml(report.cumulativeLayoutShift)}</span>` : ""}
           </div>
           <div class="detail-links">${detailLinks.join("\n") || '<span class="empty">No report assets recorded.</span>'}</div>
         </article>
@@ -700,6 +759,27 @@ function renderReport(report: CollectedReport, baseUrl: string): string {
         <article class="card section">
           <h2>Flow results</h2>
           <ul class="clean">${flowRows(report)}</ul>
+        </article>
+      </section>
+      <section class="grid two" style="margin-top: 18px;">
+        <article class="card section">
+          <h2>Accessibility</h2>
+          <div class="meta">
+            <span><strong>Enabled:</strong> ${escapeHtml(report.data.accessibility?.enabled ? "yes" : "no")}</span>
+            ${report.accessibilityViolations !== null ? `<span><strong>Violations:</strong> ${escapeHtml(report.accessibilityViolations)}</span>` : ""}
+            ${report.data.accessibility?.minimumImpact ? `<span><strong>Minimum impact:</strong> ${escapeHtml(report.data.accessibility.minimumImpact)}</span>` : ""}
+          </div>
+          ${Array.isArray(report.data.accessibility?.topRules) && report.data.accessibility.topRules.length ? `<ul class="clean">${report.data.accessibility.topRules.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<p class="empty">No accessibility summary recorded.</p>'}
+        </article>
+        <article class="card section">
+          <h2>Performance</h2>
+          <div class="meta">
+            <span><strong>Enabled:</strong> ${escapeHtml(report.data.performance?.enabled ? "yes" : "no")}</span>
+            ${report.performanceBudgetViolations !== null ? `<span><strong>Budget violations:</strong> ${escapeHtml(report.performanceBudgetViolations)}</span>` : ""}
+            ${report.largestContentfulPaint !== null ? `<span><strong>LCP:</strong> ${escapeHtml(`${report.largestContentfulPaint} ms`)}</span>` : ""}
+            ${report.cumulativeLayoutShift !== null ? `<span><strong>CLS:</strong> ${escapeHtml(report.cumulativeLayoutShift)}</span>` : ""}
+          </div>
+          ${Array.isArray(report.data.performance?.topViolations) && report.data.performance.topViolations.length ? `<ul class="clean">${report.data.performance.topViolations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<p class="empty">No performance summary recorded.</p>'}
         </article>
       </section>
       <section class="card section" style="margin-top: 18px;">
@@ -740,6 +820,10 @@ function collectReports(sourceDir: string, baseUrl: string): CollectedReport[] {
         imageDiffScore: asNumber(data.snapshotResult?.visualPack?.imageDiff?.score),
         baselineAgeDays: asNumber(data.snapshotResult?.baselineFreshness?.ageDays),
         staleBaseline: Boolean(data.snapshotResult?.baselineFreshness?.stale),
+        accessibilityViolations: asNumber(data.accessibility?.violationCount),
+        performanceBudgetViolations: asNumber(data.performance?.budgetViolationCount),
+        largestContentfulPaint: asNumber(data.performance?.metrics?.lcp),
+        cumulativeLayoutShift: asNumber(data.performance?.metrics?.cls),
       };
       report.stableUrl = reportLink(baseUrl, report);
       report.stableAnnotationUrl = report.annotationPath ? assetLink(baseUrl, report, "annotation.svg") : "";
@@ -800,6 +884,10 @@ function main(): void {
       imageDiffScore: report.imageDiffScore,
       baselineAgeDays: report.baselineAgeDays,
       staleBaseline: report.staleBaseline,
+      accessibilityViolations: report.accessibilityViolations,
+      performanceBudgetViolations: report.performanceBudgetViolations,
+      largestContentfulPaint: report.largestContentfulPaint,
+      cumulativeLayoutShift: report.cumulativeLayoutShift,
     })),
   };
   fs.writeFileSync(path.join(args.out, "qa", "history.json"), JSON.stringify(buildVisualHistory(reports), null, 2));

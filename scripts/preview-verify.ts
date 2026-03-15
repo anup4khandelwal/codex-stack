@@ -30,6 +30,8 @@ interface PreviewQaCompat {
   recommendation?: string;
   findings?: DeployReport["qa"]["findings"];
   flowResults?: DeployReport["qa"]["flowResults"];
+  accessibility?: DeployReport["qa"]["accessibility"];
+  performance?: DeployReport["qa"]["performance"];
   snapshotResult?: {
     name?: string;
     status?: string;
@@ -61,7 +63,7 @@ function usage(): never {
   console.log(`preview-verify
 
 Usage:
-  bun scripts/preview-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--strict-console] [--strict-http] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
+  bun scripts/preview-verify.ts [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--a11y] [--a11y-scope <selector>] [--a11y-impact <critical|serious|moderate|minor>] [--perf] [--perf-budget <metric=value>] [--perf-wait-ms <n>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--strict-console] [--strict-http] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
 `);
   process.exit(0);
 }
@@ -95,6 +97,8 @@ function buildCompatQa(report: DeployReport): PreviewQaCompat {
     recommendation: report.qa.recommendation,
     findings: report.qa.findings,
     flowResults: report.qa.flowResults,
+    accessibility: report.qa.accessibility,
+    performance: report.qa.performance,
     snapshotResult: firstSnapshot
       ? {
           name: firstSnapshot.name,
@@ -148,6 +152,30 @@ function renderSnapshotLines(report: DeployReport): string[] {
   });
 }
 
+function renderAccessibilityLines(report: PreviewReport): string[] {
+  const summary = report.qa.accessibility;
+  if (!summary?.enabled) return ["- Accessibility checks were not enabled."];
+  return [
+    `- Violations: ${summary.violationCount ?? 0}`,
+    `- Minimum impact: ${summary.minimumImpact || "serious"}`,
+    summary.topRules?.length ? `- Top rules: ${summary.topRules.join(", ")}` : "",
+    summary.artifactMarkdown ? `- Accessibility Markdown: \`${summary.artifactMarkdown}\`` : "",
+  ].filter(Boolean);
+}
+
+function renderPerformanceLines(report: PreviewReport): string[] {
+  const summary = report.qa.performance;
+  if (!summary?.enabled) return ["- Performance checks were not enabled."];
+  return [
+    `- Budget violations: ${summary.budgetViolationCount ?? 0}`,
+    summary.topViolations?.length ? `- Top violations: ${summary.topViolations.join("; ")}` : "",
+    `- LCP: ${summary.metrics?.lcp ?? "n/a"}`,
+    `- CLS: ${summary.metrics?.cls ?? "n/a"}`,
+    `- Failed resources: ${summary.metrics?.failedResourceCount ?? 0}`,
+    summary.artifactMarkdown ? `- Performance Markdown: \`${summary.artifactMarkdown}\`` : "",
+  ].filter(Boolean);
+}
+
 function renderMarkdown(report: PreviewReport): string {
   const published = report.qa.artifacts?.published || {};
   const snapshot = report.qa.snapshotResult;
@@ -184,6 +212,14 @@ function renderMarkdown(report: PreviewReport): string {
     "## Snapshot results",
     "",
     ...renderSnapshotLines(report.deploy),
+    "",
+    "## Accessibility",
+    "",
+    ...renderAccessibilityLines(report),
+    "",
+    "## Performance",
+    "",
+    ...renderPerformanceLines(report),
     "",
     "## Artifacts",
     "",

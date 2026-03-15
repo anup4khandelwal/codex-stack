@@ -23,7 +23,7 @@ Run the shipping checklist with minimal back-and-forth.
 4. Summarize failures or proceed.
 5. Build a PR title/body from the branch diff or merge the diff summary into a PR template if present.
 6. Infer labels from branch/files and reviewers from `CODEOWNERS` unless disabled.
-7. Run deploy verification first when the operator provides a verification URL, path, device, flow, or snapshot.
+7. Run deploy verification first when the operator provides a verification URL, path, device, flow, snapshot, accessibility, or performance flags.
 8. Apply assignee and project metadata when the operator requests it.
 9. If the branch follows `<prefix>/<issue-number>-slug`, include `Closes #<issue-number>` in the generated PR body.
 10. Create missing labels in GitHub if required, then stage, commit, push, open PR, apply metadata, publish tracked deploy evidence, and post the deploy summary comment with branch and post-merge Pages links when verification ran.
@@ -39,6 +39,7 @@ bun src/cli.ts ship --message "feat: ready for review" --push --pr
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
 bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow landing-smoke --verify-snapshot landing-home
+bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --verify-path /dashboard --verify-device mobile --verify-flow landing-smoke --verify-snapshot landing-home --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 ```
 
 ## Output format
@@ -47,6 +48,7 @@ bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --ve
 - Validation results
 - Shipping action taken
 - PR details
+- Deploy verification status including visual, accessibility, and performance evidence when enabled
 - Risks or blockers
 
 ## Guardrails
