@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { readSessionBundle } from "../browse/src/session-bundle.ts";
 import { inferChangedRoutes, type RouteCandidate } from "./qa-diff.ts";
 import { writeQaTrendArtifacts } from "./qa-trends.ts";
+import { computeBaselineFreshness, computeVisualRisk, type BaselineFreshness, type VisualRiskSummary } from "./visual-risk.ts";
 
 type QaMode = "quick" | "full" | "regression" | string;
 type FindingSeverity = "critical" | "high" | "medium" | "low";
@@ -41,6 +42,15 @@ interface SnapshotElement {
 
 interface SnapshotDocument {
   name?: string;
+  capturedAt?: string;
+  url?: string;
+  origin?: string;
+  routePath?: string;
+  device?: string;
+  page?: {
+    width?: number;
+    height?: number;
+  };
   elements?: SnapshotElement[];
   screenshotPath?: string;
 }
@@ -140,6 +150,7 @@ interface QaSnapshotSummary {
   current: string;
   screenshot: string;
   annotation: string;
+  baselineFreshness?: BaselineFreshness | null;
   visualPack?: VisualPackRef | null;
 }
 
@@ -204,6 +215,7 @@ interface QaReport {
   routeResults: QaRouteResult[];
   diffSummary: QaDiffSummary | null;
   snapshotResult: QaSnapshotSummary | null;
+  visualRisk: VisualRiskSummary;
   artifacts: QaArtifacts;
 }
 
@@ -539,6 +551,19 @@ function recommendation(status: ReportStatus, healthScore: number): string {
   return "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.";
 }
 
+function routePathForSnapshot(snapshot: SnapshotDocument | null, fallbackUrl: string): string {
+  const explicit = String(snapshot?.routePath || "").trim();
+  if (explicit) return explicit;
+  const rawUrl = String(snapshot?.url || fallbackUrl || "").trim();
+  if (!rawUrl) return "/";
+  try {
+    const parsed = new URL(rawUrl);
+    return `${parsed.pathname || "/"}${parsed.search || ""}` || "/";
+  } catch {
+    return "/";
+  }
+}
+
 function buildMarkdown(report: QaReport): string {
   const findingLines = report.findings.length
     ? report.findings
@@ -580,6 +605,9 @@ function buildMarkdown(report: QaReport): string {
   const snapshotLine = report.snapshotResult
     ? [
         `- Snapshot: ${report.snapshotResult.status} (${report.snapshotResult.name})`,
+        report.snapshotResult.baselineFreshness
+          ? `- Baseline freshness: ${report.snapshotResult.baselineFreshness.stale ? "stale" : "fresh"} (${report.snapshotResult.baselineFreshness.ageDays}d old at ${report.snapshotResult.baselineFreshness.routePath} on ${report.snapshotResult.baselineFreshness.device})`
+          : "",
         report.snapshotResult.screenshot ? `- Screenshot: ${report.snapshotResult.screenshot}` : "",
         report.snapshotResult.annotation ? `- Annotation: ${report.snapshotResult.annotation}` : "",
         report.snapshotResult.visualPack?.index ? `- Visual pack: ${report.snapshotResult.visualPack.index}` : "",
@@ -599,6 +627,7 @@ function buildMarkdown(report: QaReport): string {
 - Status: ${report.status}
 - Health score: ${report.healthScore}
 - Recommendation: ${report.recommendation}
+- Visual risk: ${report.visualRisk.level.toUpperCase()} (${report.visualRisk.score}/100)
 
 ## Findings
 
@@ -930,6 +959,17 @@ function buildReport({
   diffSummary: QaDiffSummary | null;
 }): QaReport {
   const findings: QaFinding[] = [];
+  const baselineDocument = snapshotEvidence
+    ? loadSnapshotDocument(snapshotEvidence.result.baseline || snapshotEvidence.result.snapshot || "")
+    : null;
+  const baselineFreshness = snapshotEvidence
+    ? computeBaselineFreshness({
+        snapshot: args.snapshot || baselineDocument?.name || "snapshot",
+        routePath: routePathForSnapshot(baselineDocument, args.url),
+        device: String(baselineDocument?.device || "desktop"),
+        capturedAt: baselineDocument?.capturedAt,
+      })
+    : null;
 
   for (const flow of flowEvidence) {
     if (!flow.ok) {
@@ -998,6 +1038,24 @@ function buildReport({
     }
   }
 
+  if (baselineFreshness?.stale) {
+    const severity: FindingSeverity = baselineFreshness.ageDays >= baselineFreshness.staleAfterDays * 2 ? "medium" : "low";
+    findings.push(
+      finding(
+        severity,
+        "visual",
+        "Snapshot baseline is stale",
+        `The saved baseline for ${baselineFreshness.snapshot} is ${baselineFreshness.ageDays} days old. Refresh it intentionally if the current UI is now the expected state.`,
+        {
+          snapshot: baselineFreshness.snapshot,
+          route: baselineFreshness.routePath,
+          device: baselineFreshness.device,
+          capturedAt: baselineFreshness.capturedAt,
+        },
+      ),
+    );
+  }
+
   for (const route of routeEvidence) {
     if (route.dynamic) {
       findings.push(
@@ -1035,6 +1093,21 @@ function buildReport({
   const healthScore = scoreFindings(findings);
   const status = statusFromFindings(findings);
   const generatedAt = new Date().toISOString();
+  const snapshotResult = snapshotEvidence
+    ? {
+        name: args.snapshot,
+        status: snapshotEvidence.result.status || (snapshotEvidence.ok ? "ok" : "failed"),
+        baseline: snapshotEvidence.result.baseline || snapshotEvidence.result.snapshot || "",
+        current: snapshotEvidence.result.current || "",
+        screenshot: snapshotEvidence.result.screenshot || "",
+        annotation: "",
+        baselineFreshness,
+        visualPack: snapshotEvidence.result.visualPack || null,
+      }
+    : null;
+  const visualRisk = computeVisualRisk({
+    snapshotResults: snapshotResult ? [snapshotResult] : [],
+  });
   return {
     generatedAt,
     url: args.url,
@@ -1057,17 +1130,8 @@ function buildReport({
       reason: item.reason,
     })),
     diffSummary,
-    snapshotResult: snapshotEvidence
-      ? {
-          name: args.snapshot,
-          status: snapshotEvidence.result.status || (snapshotEvidence.ok ? "ok" : "failed"),
-          baseline: snapshotEvidence.result.baseline || snapshotEvidence.result.snapshot || "",
-          current: snapshotEvidence.result.current || "",
-          screenshot: snapshotEvidence.result.screenshot || "",
-          annotation: "",
-          visualPack: snapshotEvidence.result.visualPack || null,
-        }
-      : null,
+    snapshotResult,
+    visualRisk,
     artifacts: snapshotEvidence?.result.visualPack ? { visualPack: snapshotEvidence.result.visualPack } : {},
   };
 }

@@ -142,6 +142,8 @@ Notes:
 - Snapshot-based failures also emit annotated SVG evidence under `.codex-stack/qa/annotations/`.
 - `compare-snapshot` now emits a self-contained visual pack, and `qa --publish-dir ...` copies that pack into `visual/index.html` and `visual/manifest.json`.
 - Every `qa-run` also refreshes `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md` so you can compare the latest run against prior QA history.
+- Snapshot baselines now store route/device metadata and QA flags stale baselines automatically when the saved reference ages out.
+- `qa-run` also emits a consolidated visual-risk score so preview, deploy, and Pages rendering rank the same evidence consistently.
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.
@@ -173,6 +175,7 @@ Notes:
 - Template placeholders support `{repo}`, `{owner}`, `{repo_name}`, `{pr}`, `{branch}`, `{branch_slug}`, `{sha}`, and `{short_sha}`.
 - The script polls preview readiness before it delegates to `deploy-verify.ts`.
 - `--session-bundle <path>` imports an exported browser session into the named preview session before live checks run.
+- Preview reports now expose the deploy visual-risk score, including stale-baseline counts and top drivers.
 - `preview-verify.yml` is the manual rerun path. `pr-review.yml` is the automatic PR-time path and publishes the GitHub Pages preview before verification.
 - For same-repo PRs, preview evidence is republished into the same Pages subtree under `__codex/visual/index.html`.
 - Both preview workflows can consume the repo secret `CODEX_STACK_PREVIEW_SESSION_BUNDLE_B64` and decode it to a temp bundle file without exposing the contents in logs.
@@ -193,6 +196,7 @@ Notes:
 - Flow and snapshot checks are delegated to the existing QA runtime so the deploy report reuses the same finding model and artifacts.
 - `--session-bundle <path>` validates the bundle up front, imports it into the named deploy session when live browser checks need it, and passes it through to `qa-run.ts`.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
+- Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
 
 ## Retro workflow
 
@@ -262,6 +266,7 @@ Notes:
 - Session bundles capture cookies plus origin storage so authenticated QA setups can move between named sessions.
 - `import-browser-cookies` is the local macOS path for Chrome, Arc, Brave, and Edge profiles when you need to bootstrap an authenticated session without replaying login flows manually.
 - `compare-snapshot` creates a portable visual pack with baseline/current screenshots, diff heatmap, image-diff score, annotation SVG, manifest JSON, and an HTML index page.
+- Snapshot baselines now record captured route/device metadata so later QA runs can detect stale or mismatched references more reliably.
 - `upload`, `dialog`, and the expanded assertion set are available both as direct commands and as flow actions.
 - `wait` supports `load:<state>` plus `state:<visible|hidden|attached|detached>:<selector>` for richer synchronization.
 - Selector arguments accept semantic prefixes as well as CSS: `role:<role>[:<name>]`, `label:<text>`, `placeholder:<text>`, `text:<text>`, and `testid:<value>`.

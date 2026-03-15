@@ -210,6 +210,12 @@ interface DeployReportSummary {
   recommendation?: string;
   artifactRoot?: string;
   screenshotManifest?: string;
+  visualRisk?: {
+    score?: number;
+    level?: string;
+    staleBaselines?: number;
+    topDrivers?: string[];
+  };
   pathResults?: DeployPathResult[];
   qa?: DeployQaReport;
 }
@@ -235,6 +241,9 @@ interface VerificationSummary {
   session: string;
   status: string;
   healthScore: number | null;
+  visualRiskScore: number | null;
+  visualRiskLevel: string;
+  staleBaselines: number;
   consoleErrors: number;
   reportPath: string;
   stableReportUrl: string;
@@ -1143,6 +1152,7 @@ function buildDeployPrComment({
     "",
     `- Status: ${report.status}`,
     `- Health score: ${report.qa?.healthScore ?? "n/a"}`,
+    report.visualRisk?.level ? `- Visual risk: ${String(report.visualRisk.level).toUpperCase()} (${report.visualRisk?.score ?? "n/a"}/100)` : "",
     `- Recommendation: ${report.recommendation || report.qa?.recommendation || "n/a"}`,
     "",
     "### Findings",
@@ -1157,6 +1167,15 @@ function buildDeployPrComment({
     "",
     ...flowLines,
   ];
+
+  if (report.visualRisk?.topDrivers?.length) {
+    sections.push(
+      "",
+      "### Visual risk drivers",
+      "",
+      ...report.visualRisk.topDrivers.map((item) => `- ${item}`),
+    );
+  }
 
   if (report.qa?.snapshotResults?.length) {
     sections.push(
@@ -1244,6 +1263,12 @@ function printText(result: ShipResult): void {
   if (result.verification.healthScore !== null) {
     console.log(`- Verification health score: ${result.verification.healthScore}`);
   }
+  if (result.verification.visualRiskLevel) {
+    console.log(`- Verification visual risk: ${result.verification.visualRiskLevel.toUpperCase()} (${result.verification.visualRiskScore ?? "n/a"}/100)`);
+  }
+  if (result.verification.staleBaselines) {
+    console.log(`- Verification stale baselines: ${result.verification.staleBaselines}`);
+  }
   if (result.verification.consoleErrors) {
     console.log(`- Verification console errors: ${result.verification.consoleErrors}`);
   }
@@ -1297,6 +1322,9 @@ const result: ShipResult = {
     session: cleanSubject(args.verifySession),
     status: "",
     healthScore: null,
+    visualRiskScore: null,
+    visualRiskLevel: "",
+    staleBaselines: 0,
     consoleErrors: 0,
     reportPath: "",
     stableReportUrl: "",
@@ -1409,6 +1437,9 @@ if (shouldRunVerification(args)) {
     }
     result.verification.status = verification.report.status || "";
     result.verification.healthScore = verification.report.qa?.healthScore ?? null;
+    result.verification.visualRiskScore = typeof verification.report.visualRisk?.score === "number" ? verification.report.visualRisk.score : null;
+    result.verification.visualRiskLevel = String(verification.report.visualRisk?.level || "");
+    result.verification.staleBaselines = Number(verification.report.visualRisk?.staleBaselines || 0);
     result.verification.consoleErrors = (verification.report.pathResults || []).reduce((count: number, entry: DeployPathResult) => (
       count + (Array.isArray(entry.console?.errors) ? entry.console?.errors.length : 0)
     ), 0);

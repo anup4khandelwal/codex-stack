@@ -49,10 +49,10 @@ Use the repo in this order:
 - Portable session import/export with cookie and storage-state bundles
 - Checked-in and local browser flows with import/export for JSON, YAML, and Markdown
 - Page snapshots and snapshot comparison artifacts with self-contained visual packs, diff heatmaps, and image-diff scores
-- QA reports with typed categories, severity, health score, diff-aware route inference, saved evidence, annotated screenshots, and published visual packs for snapshot failures
+- QA reports with typed categories, severity, health score, diff-aware route inference, stale-baseline detection, visual-risk scoring, saved evidence, annotated screenshots, and published visual packs for snapshot failures
 - Historical QA trend artifacts under `.codex-stack/qa/trends.json` and `.codex-stack/qa/trends.md`
 - Preview verification with URL template resolution, readiness polling, deploy/page verification, QA execution, and PR comment output for preview deployments
-- Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs with ranked regressions
+- Deploy verification with page and device matrices, screenshot manifests, console capture, tracked evidence, and `visual/index.html` review packs with ranked regressions plus a consolidated visual-risk score
 - Shipping automation with PR body generation, labels, reviewers, assignees, projects, and optional deploy verification
 - PR comments with deploy verification summaries and artifact references after `ship --pr`
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
@@ -346,6 +346,8 @@ On GitHub, `.github/workflows/qa-pages.yml` deploys the merged `docs/qa/` report
 
 When a published QA report includes snapshot evidence, the Pages site now surfaces `visual/index.html` as the primary review-evidence entrypoint alongside the raw markdown, JSON, annotation, and screenshot files.
 Those visual packs now include a diff heatmap and an image-diff score so regressions can be ranked instead of treated as binary drift only.
+The merged QA Pages site also renders visual history charts for risk score, image-diff score, and baseline age so drift over time is visible without opening each report one by one.
+Snapshot baselines now carry route and device metadata, and QA/deploy/preview runs flag stale baselines automatically when the saved reference is too old.
 
 The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:
 

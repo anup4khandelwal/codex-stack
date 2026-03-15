@@ -33,6 +33,9 @@ const importMarker = path.join(fixtureRoot, "imported-session.json");
     JSON.stringify(
       {
         name: "landing-home",
+        capturedAt: "2025-01-01T00:00:00.000Z",
+        routePath: "/login",
+        device: "desktop",
         elements: [{ selector: "h1", bounds: { x: 0, y: 0, width: 1, height: 1 } }],
       },
       null,
@@ -154,14 +157,18 @@ process.exit(1);
   const report = JSON.parse(raw) as {
     status?: string;
     healthScore?: number;
+    visualRisk?: { level?: string; score?: number; staleBaselines?: number };
     flowResults?: Array<{ name?: string; status?: string; steps?: number }>;
-    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string; visualPack?: { index?: string; manifest?: string; diffImage?: string; imageDiff?: { score?: number } } | null };
+    snapshotResult?: { name?: string; status?: string; annotation?: string; screenshot?: string; baselineFreshness?: { routePath?: string; device?: string; ageDays?: number; stale?: boolean } | null; visualPack?: { index?: string; manifest?: string; diffImage?: string; imageDiff?: { score?: number } } | null };
     findings?: Array<{ severity?: string; category?: string; title?: string; evidence?: { annotation?: string } }>;
     artifacts?: { annotation?: string; visualPack?: { index?: string; manifest?: string } | null };
   };
 
   assert.equal(report.status, "critical");
-  assert.equal(report.healthScore, 48);
+  assert.equal(report.healthScore, 36);
+  assert.equal(report.visualRisk?.level, "low");
+  assert.ok(Number(report.visualRisk?.score || 0) > 0);
+  assert.equal(report.visualRisk?.staleBaselines, 1);
   assert.equal(report.flowResults?.[0]?.name, "login-smoke");
   assert.equal(report.flowResults?.[0]?.status, "pass");
   assert.equal(report.flowResults?.[0]?.steps, 2);
@@ -173,8 +180,12 @@ process.exit(1);
   assert.ok(String(report.snapshotResult?.visualPack?.manifest).includes("visual/manifest.json"));
   assert.ok(String(report.snapshotResult?.visualPack?.diffImage).includes("visual/diff.png"));
   assert.equal(report.snapshotResult?.visualPack?.imageDiff?.score, 72.4);
+  assert.equal(report.snapshotResult?.baselineFreshness?.routePath, "/login");
+  assert.equal(report.snapshotResult?.baselineFreshness?.device, "desktop");
+  assert.equal(report.snapshotResult?.baselineFreshness?.stale, true);
   assert.ok(report.findings?.some((item) => item.severity === "critical" && item.category === "visual" && item.title === "Expected UI selectors are missing"));
   assert.ok(report.findings?.some((item) => item.severity === "medium" && item.category === "visual" && item.title === "Snapshot drift detected"));
+  assert.ok(report.findings?.some((item) => item.title === "Snapshot baseline is stale"));
   assert.ok(report.findings?.some((item) => item.evidence?.annotation));
   assert.ok(report.artifacts?.annotation);
   assert.ok(report.artifacts?.visualPack?.index);

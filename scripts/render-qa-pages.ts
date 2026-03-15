@@ -32,6 +32,28 @@ interface QaSnapshotResult {
   status?: string;
   baseline?: string;
   current?: string;
+  baselineFreshness?: {
+    snapshot?: string;
+    routePath?: string;
+    device?: string;
+    capturedAt?: string;
+    ageDays?: number;
+    stale?: boolean;
+    staleAfterDays?: number;
+  } | null;
+  visualPack?: {
+    imageDiff?: {
+      score?: number;
+      diffRatio?: number;
+    } | null;
+  } | null;
+}
+
+interface QaVisualRisk {
+  score?: string | number;
+  level?: string;
+  staleBaselines?: string | number;
+  topDrivers?: string[];
 }
 
 interface QaReportData extends Record<string, unknown> {
@@ -45,6 +67,7 @@ interface QaReportData extends Record<string, unknown> {
   findings?: QaFinding[];
   flowResults?: QaFlowResult[];
   snapshotResult?: QaSnapshotResult;
+  visualRisk?: QaVisualRisk;
 }
 
 interface CollectedReport {
@@ -63,6 +86,24 @@ interface CollectedReport {
   stableAnnotationUrl: string;
   stableScreenshotUrl: string;
   stableVisualUrl: string;
+  visualRiskScore: number | null;
+  visualRiskLevel: string;
+  imageDiffScore: number | null;
+  baselineAgeDays: number | null;
+  staleBaseline: boolean;
+}
+
+interface VisualHistoryPoint {
+  slug: string;
+  generatedAt: string;
+  status: string;
+  healthScore: number | null;
+  visualRiskScore: number | null;
+  visualRiskLevel: string;
+  imageDiffScore: number | null;
+  baselineAgeDays: number | null;
+  staleBaseline: boolean;
+  stableUrl: string;
 }
 
 interface LayoutProps {
@@ -202,6 +243,15 @@ function formatDate(value: unknown): string {
   }
 }
 
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function severityClass(status: unknown): string {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "critical") return "critical";
@@ -240,6 +290,107 @@ function reportRows(report: CollectedReport): string {
       ${evidence ? `<div class="evidence">${evidence}</div>` : ""}
     </li>`;
   }).join("\n");
+}
+
+function buildVisualHistory(reports: CollectedReport[]): VisualHistoryPoint[] {
+  return [...reports]
+    .map((report) => ({
+      slug: report.slug,
+      generatedAt: String(report.data.generatedAt || ""),
+      status: String(report.data.status || "pass"),
+      healthScore: asNumber(report.data.healthScore),
+      visualRiskScore: report.visualRiskScore,
+      visualRiskLevel: report.visualRiskLevel,
+      imageDiffScore: report.imageDiffScore,
+      baselineAgeDays: report.baselineAgeDays,
+      staleBaseline: report.staleBaseline,
+      stableUrl: report.stableUrl,
+    }))
+    .sort((left, right) => (Date.parse(left.generatedAt || "0") || 0) - (Date.parse(right.generatedAt || "0") || 0));
+}
+
+function renderHistoryChart(points: VisualHistoryPoint[], {
+  title,
+  accessor,
+  color,
+  maxValue = 100,
+}: {
+  title: string;
+  accessor: (point: VisualHistoryPoint) => number | null;
+  color: string;
+  maxValue?: number;
+}): string {
+  const values = points.map(accessor);
+  const numeric = values.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
+  if (!numeric.length) {
+    return `<article class="card section"><h2>${escapeHtml(title)}</h2><p class="empty">No chart data yet.</p></article>`;
+  }
+  const width = 720;
+  const height = 220;
+  const padding = 22;
+  const usableWidth = width - (padding * 2);
+  const usableHeight = height - (padding * 2);
+  const max = Math.max(maxValue, ...numeric);
+  const step = points.length > 1 ? usableWidth / (points.length - 1) : 0;
+  const coords = points.map((point, index) => {
+    const value = accessor(point);
+    if (value === null || !Number.isFinite(value)) return null;
+    const x = padding + (index * step);
+    const y = padding + usableHeight - ((value / max) * usableHeight);
+    return { x, y, value, point };
+  }).filter((item): item is { x: number; y: number; value: number; point: VisualHistoryPoint } => Boolean(item));
+  const polyline = coords.map((item) => `${item.x},${item.y}`).join(" ");
+  const markers = coords.map((item) => `<a xlink:href="${escapeHtml(item.point.stableUrl || "#")}"><circle cx="${item.x}" cy="${item.y}" r="4.5" fill="${escapeHtml(color)}"><title>${escapeHtml(`${item.point.slug}: ${item.value}`)}</title></circle></a>`).join("");
+  const labels = coords.length
+    ? `<div class="chart-legend"><span>Oldest: ${escapeHtml(coords[0].point.slug)}</span><span>Newest: ${escapeHtml(coords[coords.length - 1].point.slug)}</span></div>`
+    : "";
+  return `<article class="card section">
+    <h2>${escapeHtml(title)}</h2>
+    <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+      <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="#fffaf2"></rect>
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="${escapeHtml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${escapeHtml(polyline)}"></polyline>
+      ${markers}
+    </svg>
+    ${labels}
+  </article>`;
+}
+
+function renderHistorySection(reports: CollectedReport[]): string {
+  const points = buildVisualHistory(reports);
+  if (!points.length) return "";
+  const staleCount = points.filter((item) => item.staleBaseline).length;
+  const latest = points[points.length - 1];
+  const summary = [
+    `<span><strong>Reports:</strong> ${points.length}</span>`,
+    latest.visualRiskScore !== null ? `<span><strong>Latest visual risk:</strong> ${latest.visualRiskLevel.toUpperCase()} (${latest.visualRiskScore}/100)</span>` : "",
+    latest.imageDiffScore !== null ? `<span><strong>Latest image diff score:</strong> ${latest.imageDiffScore}</span>` : "",
+    `<span><strong>Stale baselines:</strong> ${staleCount}</span>`,
+  ].filter(Boolean).join("");
+  return `<section class="grid two" style="margin-top: 24px;">
+    <article class="card section">
+      <h2>Visual history</h2>
+      <p>Track risk, drift, and baseline age across published QA reports.</p>
+      <div class="meta">${summary}</div>
+    </article>
+    ${renderHistoryChart(points, {
+      title: "Visual risk score",
+      accessor: (point) => point.visualRiskScore,
+      color: "#b42318",
+    })}
+    ${renderHistoryChart(points, {
+      title: "Snapshot image diff score",
+      accessor: (point) => point.imageDiffScore,
+      color: "#1d4ed8",
+    })}
+    ${renderHistoryChart(points, {
+      title: "Baseline age (days)",
+      accessor: (point) => point.baselineAgeDays,
+      color: "#b45308",
+      maxValue: Math.max(30, ...points.map((item) => item.baselineAgeDays || 0)),
+    })}
+  </section>`;
 }
 
 function flowRows(report: CollectedReport): string {
@@ -412,6 +563,22 @@ function layout({ title, body, baseUrl, heading, subheading }: LayoutProps): str
       object-fit: contain;
       background: #f8f5ee;
     }
+    .chart {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffaf2;
+      margin-top: 14px;
+    }
+    .chart-legend {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
     .empty { color: var(--muted); }
     footer {
       margin-top: 32px;
@@ -446,6 +613,9 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
         <p>${escapeHtml(report.data.recommendation || "No recommendation recorded.")}</p>
         <div class="meta">
           <span><strong>Health score:</strong> ${escapeHtml(report.data.healthScore)}</span>
+          ${report.visualRiskScore !== null ? `<span><strong>Visual risk:</strong> ${escapeHtml(`${report.visualRiskLevel.toUpperCase()} (${report.visualRiskScore}/100)`)}</span>` : ""}
+          ${report.imageDiffScore !== null ? `<span><strong>Image diff:</strong> ${escapeHtml(report.imageDiffScore)}</span>` : ""}
+          ${report.baselineAgeDays !== null ? `<span><strong>Baseline age:</strong> ${escapeHtml(`${report.baselineAgeDays}d${report.staleBaseline ? " • stale" : ""}`)}</span>` : ""}
           <span><strong>Generated:</strong> ${escapeHtml(formatDate(report.data.generatedAt))}</span>
           <span><strong>URL:</strong> ${escapeHtml(report.data.url || "fixture")}</span>
         </div>
@@ -469,7 +639,7 @@ function renderIndex({ reports, baseUrl }: { reports: CollectedReport[]; baseUrl
     heading: "codex-stack QA Reports",
     subheading: "Stable GitHub Pages view for tracked QA evidence generated during shipping.",
     baseUrl,
-    body: `<section class="report-grid">${content}</section>`,
+    body: `${renderHistorySection(reports)}<section class="report-grid">${content}</section>`,
   });
 }
 
@@ -513,6 +683,10 @@ function renderReport(report: CollectedReport, baseUrl: string): string {
           <div class="meta">
             <span><strong>Name:</strong> ${escapeHtml(snapshot.name || "n/a")}</span>
             <span><strong>Status:</strong> ${escapeHtml(snapshot.status || "n/a")}</span>
+            ${report.visualRiskScore !== null ? `<span><strong>Visual risk:</strong> ${escapeHtml(`${report.visualRiskLevel.toUpperCase()} (${report.visualRiskScore}/100)`)}</span>` : ""}
+            ${snapshot.baselineFreshness?.routePath ? `<span><strong>Route:</strong> ${escapeHtml(snapshot.baselineFreshness.routePath)}</span>` : ""}
+            ${snapshot.baselineFreshness?.device ? `<span><strong>Device:</strong> ${escapeHtml(snapshot.baselineFreshness.device)}</span>` : ""}
+            ${snapshot.baselineFreshness?.ageDays !== undefined ? `<span><strong>Baseline age:</strong> ${escapeHtml(`${snapshot.baselineFreshness.ageDays}d${snapshot.baselineFreshness.stale ? " • stale" : ""}`)}</span>` : ""}
             ${snapshot.baseline ? `<span><strong>Baseline:</strong> ${escapeHtml(snapshot.baseline)}</span>` : ""}
             ${snapshot.current ? `<span><strong>Current:</strong> ${escapeHtml(snapshot.current)}</span>` : ""}
           </div>
@@ -561,6 +735,11 @@ function collectReports(sourceDir: string, baseUrl: string): CollectedReport[] {
         stableAnnotationUrl: "",
         stableScreenshotUrl: "",
         stableVisualUrl: "",
+        visualRiskScore: asNumber(data.visualRisk?.score),
+        visualRiskLevel: cleanSubject(data.visualRisk?.level || "none") || "none",
+        imageDiffScore: asNumber(data.snapshotResult?.visualPack?.imageDiff?.score),
+        baselineAgeDays: asNumber(data.snapshotResult?.baselineFreshness?.ageDays),
+        staleBaseline: Boolean(data.snapshotResult?.baselineFreshness?.stale),
       };
       report.stableUrl = reportLink(baseUrl, report);
       report.stableAnnotationUrl = report.annotationPath ? assetLink(baseUrl, report, "annotation.svg") : "";
@@ -605,6 +784,7 @@ function main(): void {
     baseUrl,
     sourceDir: relativeFile(args.source),
     outDir: relativeFile(args.out),
+    historyPath: "qa/history.json",
     reports: reports.map((report) => ({
       slug: report.slug,
       status: report.data.status,
@@ -615,8 +795,14 @@ function main(): void {
       stableAnnotationUrl: report.stableAnnotationUrl,
       stableScreenshotUrl: report.stableScreenshotUrl,
       stableVisualUrl: report.stableVisualUrl,
+      visualRiskScore: report.visualRiskScore,
+      visualRiskLevel: report.visualRiskLevel,
+      imageDiffScore: report.imageDiffScore,
+      baselineAgeDays: report.baselineAgeDays,
+      staleBaseline: report.staleBaseline,
     })),
   };
+  fs.writeFileSync(path.join(args.out, "qa", "history.json"), JSON.stringify(buildVisualHistory(reports), null, 2));
   fs.writeFileSync(path.join(args.out, "manifest.json"), JSON.stringify(manifest, null, 2));
   fs.writeFileSync(path.join(args.out, ".nojekyll"), "");
 

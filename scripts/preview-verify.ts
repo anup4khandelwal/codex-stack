@@ -12,6 +12,7 @@ import {
   type DeployReport,
   type ReadinessResult,
 } from "./deploy-verify.ts";
+import type { VisualRiskSummary } from "./visual-risk.ts";
 
 type PreviewStatus = "pass" | "warning" | "critical" | "error";
 
@@ -48,6 +49,7 @@ interface PreviewReport {
   context: DeployContext;
   readiness: ReadinessResult;
   qa: PreviewQaCompat;
+  visualRisk: VisualRiskSummary;
   artifactRoot: string;
   visualPack?: DeployReport["visualPack"];
   runUrl: string;
@@ -162,6 +164,7 @@ function renderMarkdown(report: PreviewReport): string {
     `- Readiness: ${report.readiness.status} after ${report.readiness.attempts} attempt(s)`,
     report.readiness.httpStatus ? `- Last HTTP status: ${report.readiness.httpStatus}` : "",
     `- Overall status: ${report.status}`,
+    `- Visual risk: ${report.visualRisk.level.toUpperCase()} (${report.visualRisk.score}/100)`,
     `- Health score: ${report.qa.healthScore ?? "n/a"}`,
     `- Recommendation: ${report.recommendation}`,
     report.runUrl ? `- Workflow run: ${report.runUrl}` : "",
@@ -188,6 +191,7 @@ function renderMarkdown(report: PreviewReport): string {
     report.deploy.screenshotManifest ? `- Screenshot manifest: \`${report.deploy.screenshotManifest}\`` : "",
     report.visualPack?.index ? `- Visual pack: \`${report.visualPack.index}\`` : "",
     report.visualPack?.manifest ? `- Visual manifest: \`${report.visualPack.manifest}\`` : "",
+    report.visualRisk.topDrivers.length ? `- Visual risk drivers: ${report.visualRisk.topDrivers.join("; ")}` : "",
     published.markdown ? `- QA report: \`${published.markdown}\`` : "",
     published.json ? `- QA json: \`${published.json}\`` : "",
     published.annotation ? `- Annotation: \`${published.annotation}\`` : "",
@@ -223,6 +227,7 @@ async function main(): Promise<void> {
     context,
     readiness: deploy.readiness,
     qa: buildCompatQa(deploy),
+    visualRisk: deploy.visualRisk,
     artifactRoot: deploy.artifactRoot,
     visualPack: deploy.visualPack,
     runUrl: deploy.runUrl,
