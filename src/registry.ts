@@ -98,6 +98,18 @@ export const modeRegistry: ModeDefinition[] = [
     skillPath: path.join(rootDir, "skills", "goals", "SKILL.md"),
   },
   {
+    name: "heartbeat",
+    role: "Loop operator",
+    summary: "Schedule agent wakeups, record heartbeat runs, and preserve continuity state.",
+    skillPath: path.join(rootDir, "skills", "heartbeat", "SKILL.md"),
+  },
+  {
+    name: "approvals",
+    role: "Governance lead",
+    summary: "Manage approval requests and gate high-risk autonomous actions.",
+    skillPath: path.join(rootDir, "skills", "approvals", "SKILL.md"),
+  },
+  {
     name: "mcp",
     role: "Interop engineer",
     summary: "Expose codex-stack workflows and evidence to MCP-capable clients over stdio.",

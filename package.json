@@ -27,6 +27,8 @@
     "fleet": "bun scripts/fleet.ts",
     "agents": "bun scripts/agents.ts",
     "goals": "bun scripts/goals.ts",
+    "heartbeat": "bun scripts/heartbeat.ts",
+    "approvals": "bun scripts/approvals.ts",
     "mcp": "bun scripts/mcp-server.ts",
     "ship:dry": "bun scripts/ship-branch.ts --dry-run",
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",

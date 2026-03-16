@@ -29,6 +29,8 @@ Usage:
   codex-stack fleet <validate|sync|collect|dashboard> --manifest <path> [args...]
   codex-stack agents <list|show|add|update|dashboard> [args...]
   codex-stack goals <list|show|add|queue|task> [args...]
+  codex-stack heartbeat <list|show|schedule|beat|dashboard> [args...]
+  codex-stack approvals <request|list|show|approve|reject|cancel|gate> [args...]
   codex-stack mcp <serve|inspect> [args...]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]
   codex-stack upgrade [--json] [--json-out <path>] [--markdown-out <path>] [--repo <owner/name>] [--offline] [--apply]
@@ -133,6 +135,14 @@ if (command === "agents") {
 
 if (command === "goals") {
   runScript(path.join("scripts", "goals.ts"), rest);
+}
+
+if (command === "heartbeat") {
+  runScript(path.join("scripts", "heartbeat.ts"), rest);
+}
+
+if (command === "approvals") {
+  runScript(path.join("scripts", "approvals.ts"), rest);
 }
 
 if (command === "mcp") {

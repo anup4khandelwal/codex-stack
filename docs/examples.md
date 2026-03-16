@@ -183,6 +183,34 @@ bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "R
 bun src/cli.ts goals queue --json
 ```
 
+## Heartbeat mode
+
+```text
+Use codex-stack-heartbeat to schedule this agent on a loop, preserve its continuity state, and tell me what it should do next.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Run QA after approval" --json
+bun src/cli.ts heartbeat show reviewer-1 --json
+```
+
+## Approvals mode
+
+```text
+Use codex-stack-approvals when an agent needs an explicit gate before shipping, merging, updating snapshots, or exceeding its budget.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts approvals request --agent reviewer-1 --kind ship-pr --target review-contracts --summary "Open release PR"
+bun src/cli.ts approvals approve <approval-id> --by lead-1 --note "Approved release work"
+bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
+```
+
 ## MCP mode
 
 ```text

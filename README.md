@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Sixteen opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, fleet rollout plus auto-remediation control, local agent staffing, goal and queue tracking, and local MCP interoperability.
+Eighteen opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, fleet rollout plus auto-remediation control, local agent staffing, goal and queue tracking, heartbeat scheduling, approval gates, and local MCP interoperability.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -33,6 +33,8 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `fleet` | Control plane operator | Pushes shared policy packs across repos, collects normalized health, and renders a GitHub-native rollout dashboard. |
 | `agents` | Agent manager | Registers named engineering agents, reporting lines, and staffing status for local orchestration. |
 | `goals` | Program lead | Tracks goal hierarchy and assignable work queues for multiple agents. |
+| `heartbeat` | Loop operator | Schedules agent wakeups, records heartbeat runs, and preserves per-agent continuity state. |
+| `approvals` | Governance lead | Manages approval requests and gates high-risk autonomous actions. |
 | `mcp` | Interop engineer | Exposes read-only codex-stack tools and evidence resources to MCP-capable clients over local stdio. |
 
 ## Default workflow
@@ -66,7 +68,7 @@ Use the repo in this order:
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, auto-remediation issues, and org-level dashboard rendering
-- Local control-plane state under `.codex-stack/control-plane/` with named agents, goals, task queues, and a static dashboard view
+- Local control-plane state under `.codex-stack/control-plane/` with named agents, goals, task queues, schedules, continuity sessions, budget policies, and approval queues
 - Local stdio MCP server with read-only and dry-run wrappers for review, QA, preview, deploy, ship planning, fleet planning, retro, and upgrade workflows
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
@@ -100,6 +102,8 @@ bun src/cli.ts list
 - `fleet`
 - `agents`
 - `goals`
+- `heartbeat`
+- `approvals`
 - `mcp`
 
 If you want shell-level commands, link those wrappers into your `PATH`:
@@ -210,6 +214,10 @@ bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
 bun src/cli.ts goals queue --json
+bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review new queue items"
+bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed current diff" --next-action "Run QA after approval"
+bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -250,6 +258,8 @@ bun run deploy -- --url https://staging.example.com --path /dashboard --device d
 bun run ship:dry
 bun run agents -- list --json
 bun run goals -- queue --json
+bun run heartbeat -- list --json
+bun run approvals -- list --json
 bun run mcp -- inspect --json
 bun run retro
 bun run upgrade
@@ -266,6 +276,8 @@ Core ideas:
 - register named agents with roles, runtimes, teams, and managers
 - track initiative and repo goals explicitly
 - assign persistent queued work instead of only running one-shot commands
+- schedule heartbeats with continuity state per agent
+- enforce budget limits and explicit approvals for high-risk actions
 - render a static dashboard under `.codex-stack/control-plane/dashboard/`
 
 Useful commands:
@@ -275,6 +287,10 @@ bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team pl
 bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval" --require-approval ship-pr --approval-target review-contracts
+bun src/cli.ts approvals approve <id> --by lead-1 --note "Approved release work"
 bun src/cli.ts goals queue --assignee reviewer-1
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 ```
