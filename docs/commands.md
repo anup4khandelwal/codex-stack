@@ -36,6 +36,10 @@ bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
 bun src/cli.ts goals queue --json
+bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval"
+bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago"
@@ -277,6 +281,25 @@ Notes:
 - `agents` manages roster metadata such as runtime, role, team, manager, and staffing status.
 - `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, and complete actions.
 - `agents dashboard` writes `index.html`, `manifest.json`, and `summary.md` so you can inspect the local control plane without needing a server.
+
+## Heartbeat and governance workflow
+
+```bash
+bun src/cli.ts agents budget set --agent ship-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
+bun src/cli.ts heartbeat schedule add --agent ship-1 --task ship-pr --trigger cron --expression "*/15 * * * *" --summary "Check release branch"
+bun src/cli.ts heartbeat beat --agent ship-1 --task ship-pr --summary "Ready to open PR" --next-action "Open PR after approval" --require-approval ship-pr --approval-target ship-pr --json
+bun src/cli.ts approvals list --agent ship-1 --status pending --json
+bun src/cli.ts approvals approve <approval-id> --by lead-1 --note "Approved release PR"
+bun src/cli.ts heartbeat show ship-1 --json
+```
+
+Notes:
+
+- `heartbeat schedule` records named wakeups using `manual`, `cron`, or `event` triggers.
+- `heartbeat beat` records a run, updates per-agent continuity state, and can automatically request approvals when the action needs a gate.
+- Budget policies are attached per agent and checked against heartbeat runs in a daily, weekly, or monthly window.
+- When a beat would exceed budget without a `budget-override` approval, it is recorded as blocked and the pending approval is created automatically.
+- `approvals gate` gives a cheap allow/block answer for a specific kind plus target pair.
 
 ## MCP workflow
 
