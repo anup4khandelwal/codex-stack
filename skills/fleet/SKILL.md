@@ -26,6 +26,7 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent fleet-1 --control-state .codex-stack/control-plane/state.json --json
 ```
 
 ## Output format
@@ -35,6 +36,7 @@ bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-
 - `collect`: normalized multi-repo health report with ranked risks
 - `dashboard`: static HTML + JSON summary for Pages or local review
 - `remediate`: planned or executed rollout PR / remediation issue actions per repo
+- `remediate`: can also surface control-plane approval gates before rollout PRs open
 
 ## Guardrails
 

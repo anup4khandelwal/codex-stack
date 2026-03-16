@@ -55,4 +55,31 @@ assert.ok(fs.existsSync(dashboard.markdownPath));
 assert.match(fs.readFileSync(dashboard.htmlPath, "utf8"), /control plane/i);
 assert.match(fs.readFileSync(dashboard.htmlPath, "utf8"), /reviewer-1/);
 
+run(["src/cli.ts", "goals", "task", "add", "--id", "task-release", "--goal", "repo-codex-stack", "--title", "Coordinate release", "--assignee", "lead-1", "--status", "claimed", "--state", statePath, "--json"]);
+const delegated = JSON.parse(run([
+  "src/cli.ts", "goals", "task", "delegate", "task-release",
+  "--id", "task-release-qa",
+  "--title", "Run delegated QA",
+  "--assignee", "reviewer-1",
+  "--summary", "Delegate QA follow-up",
+  "--state", statePath,
+  "--json",
+])) as {
+  parent: { id: string; status: string; blockedReason: string; blockedBy: string[] };
+  child: { id: string; parentTaskId: string; delegatedBy: string };
+};
+assert.equal(delegated.parent.id, "task-release");
+assert.equal(delegated.parent.status, "blocked");
+assert.match(delegated.parent.blockedReason, /delegated task task-release-qa/i);
+assert.deepEqual(delegated.parent.blockedBy, ["task-release-qa"]);
+assert.equal(delegated.child.parentTaskId, "task-release");
+assert.equal(delegated.child.delegatedBy, "lead-1");
+
+run(["src/cli.ts", "goals", "task", "complete", "task-release-qa", "--state", statePath, "--json"]);
+const delegatedTasks = JSON.parse(run(["src/cli.ts", "goals", "task", "list", "--goal", "repo-codex-stack", "--state", statePath, "--json"])) as Array<{ id: string; status: string; parentTaskId: string; blockedReason: string }>;
+const parentTask = delegatedTasks.find((task) => task.id === "task-release");
+assert.equal(parentTask?.status, "claimed");
+assert.equal(parentTask?.blockedReason, "");
+assert.equal(parentTask?.parentTaskId, "");
+
 console.log("control-plane spec passed");

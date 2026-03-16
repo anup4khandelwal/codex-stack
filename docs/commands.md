@@ -35,11 +35,15 @@ bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team pl
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
 bun src/cli.ts goals queue --json
 bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
-bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
+bun src/cli.ts heartbeat due --agent reviewer-1 --json
 bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval"
 bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
+bun src/cli.ts ship --dry-run --pr --control-agent reviewer-1 --control-state .codex-stack/control-plane/state.json
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent lead-1 --control-state .codex-stack/control-plane/state.json --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago"
@@ -132,6 +136,7 @@ bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --temp
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
 bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-console-errors --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
 bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun scripts/ship-branch.ts --dry-run --pr --control-agent ship-1 --control-state .codex-stack/control-plane/state.json
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --draft
 ```
 
@@ -145,6 +150,7 @@ Notes:
 - `ship` can also assign users and attach projects with `--assignee`, `--assign-self`, and `--project`.
 - `ship` can call the deploy verification workflow before push/PR creation with `--verify-url`, `--verify-path`, `--verify-device`, `--verify-flow`, and `--verify-snapshot`.
 - `ship` can also pass through accessibility and performance verification with `--verify-a11y`, `--verify-a11y-scope`, `--verify-a11y-impact`, `--verify-perf`, `--verify-perf-budget`, and `--verify-perf-wait-ms`.
+- `ship` can require an approval gate from the local control-plane with `--control-agent`, `--control-state`, and optional `--control-target`.
 - `--verify-console-errors` upgrades captured console errors from warnings to merge-blocking failures.
 - When `ship --pr` runs with deploy verification, it also posts a PR comment with the deploy summary and any available artifact references.
 - During verification, `ship` publishes tracked evidence under `docs/qa/<branch>/deploy/` before push/PR creation.
@@ -244,6 +250,7 @@ bun scripts/fleet.ts sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun scripts/fleet.ts collect --manifest .codex-stack/fleet.example.json --json
 bun scripts/fleet.ts dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun scripts/fleet.ts remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun scripts/fleet.ts remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent fleet-1 --control-state .codex-stack/control-plane/state.json --json
 bun scripts/fleet.ts validate --manifest .codex-stack/fleet.anup4khandelwal.json
 bun scripts/fleet.ts sync --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs
 bun scripts/fleet.ts remediate --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs --issue-repo anup4khandelwal/codex-stack
@@ -257,7 +264,7 @@ Notes:
 - `fleet collect` reads normalized `codex-stack-fleet-status` outputs and ranks repos by rollout drift plus unresolved QA risk.
 - Policy packs define whether a repo must publish a latest codex-stack QA/deploy report. Review-only repos can still be healthy without `docs/qa/` artifacts when rollout drift is zero.
 - `fleet dashboard` writes `index.html`, `manifest.json`, and `summary.md` so the control repo can publish an org dashboard with the same data.
-- `fleet remediate` consumes the collected health state, opens rollout PRs for config drift when requested, and creates or closes stable remediation issues in the control repo for runtime warnings and criticals.
+- `fleet remediate` consumes the collected health state, opens rollout PRs for config drift when requested, creates or closes stable remediation issues in the control repo for runtime warnings and criticals, and can require a local control-plane approval gate before rollout PRs open.
 - Start from `.codex-stack/fleet.example.json` and `.codex-stack/policies/default.json` when bootstrapping a new fleet.
 - Use `.codex-stack/fleet.anup4khandelwal.json` for the current checked-in rollout targeting `autopilot-multi-agent-loop`, `awesome-codex-skills`, and the profile repo.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
@@ -271,6 +278,7 @@ bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team pl
 bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
 bun src/cli.ts goals queue --assignee reviewer-1 --json
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 ```
@@ -279,23 +287,26 @@ Notes:
 
 - The local state file defaults to `.codex-stack/control-plane/state.json`.
 - `agents` manages roster metadata such as runtime, role, team, manager, and staffing status.
-- `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, and complete actions.
+- `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, complete, and delegate actions.
 - `agents dashboard` writes `index.html`, `manifest.json`, and `summary.md` so you can inspect the local control plane without needing a server.
 
 ## Heartbeat and governance workflow
 
 ```bash
 bun src/cli.ts agents budget set --agent ship-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
-bun src/cli.ts heartbeat schedule add --agent ship-1 --task ship-pr --trigger cron --expression "*/15 * * * *" --summary "Check release branch"
+bun src/cli.ts heartbeat schedule add --agent ship-1 --task ship-pr --trigger cron --expression "*/15 * * * *" --summary "Check release branch" --retry-limit 2 --cooldown-minutes 30
+bun src/cli.ts heartbeat due --agent ship-1 --json
 bun src/cli.ts heartbeat beat --agent ship-1 --task ship-pr --summary "Ready to open PR" --next-action "Open PR after approval" --require-approval ship-pr --approval-target ship-pr --json
 bun src/cli.ts approvals list --agent ship-1 --status pending --json
 bun src/cli.ts approvals approve <approval-id> --by lead-1 --note "Approved release PR"
+bun src/cli.ts ship --dry-run --pr --control-agent ship-1 --control-state .codex-stack/control-plane/state.json
 bun src/cli.ts heartbeat show ship-1 --json
 ```
 
 Notes:
 
 - `heartbeat schedule` records named wakeups using `manual`, `cron`, or `event` triggers.
+- `heartbeat schedule` also tracks retry limits and cooloff windows, and `heartbeat due` only returns schedules whose cooloff has expired.
 - `heartbeat beat` records a run, updates per-agent continuity state, and can automatically request approvals when the action needs a gate.
 - Budget policies are attached per agent and checked against heartbeat runs in a daily, weekly, or monthly window.
 - When a beat would exceed budget without a `budget-override` approval, it is recorded as blocked and the pending approval is created automatically.

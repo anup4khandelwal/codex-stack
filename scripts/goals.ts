@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import process from "node:process";
 import {
+  delegateTask,
   findGoal,
   listQueue,
   normalizeGoalStatus,
@@ -9,6 +10,7 @@ import {
   readState,
   requireTask,
   resolveStatePath,
+  syncDelegatedParent,
   upsertGoal,
   upsertTask,
   writeState,
@@ -17,9 +19,9 @@ import {
 } from "./control-plane.ts";
 
 type GoalCommand = "list" | "show" | "add" | "queue";
-type TaskCommand = "add" | "list" | "claim" | "reassign" | "block" | "unblock" | "complete";
+type TaskCommand = "add" | "list" | "claim" | "reassign" | "block" | "unblock" | "complete" | "delegate";
 
-type ParsedArgs = GoalListArgs | GoalShowArgs | GoalWriteArgs | QueueArgs | TaskWriteArgs | TaskListArgs | TaskSingleArgs;
+type ParsedArgs = GoalListArgs | GoalShowArgs | GoalWriteArgs | QueueArgs | TaskWriteArgs | TaskListArgs | TaskSingleArgs | TaskDelegateArgs;
 
 interface BaseArgs {
   json: boolean;
@@ -88,6 +90,19 @@ interface TaskSingleArgs extends BaseArgs {
   reason: string;
 }
 
+interface TaskDelegateArgs extends BaseArgs {
+  mode: "task";
+  command: "delegate";
+  parentId: string;
+  id: string;
+  title: string;
+  assignee: string;
+  goalId: string;
+  summary: string;
+  blockedReason: string;
+  blockedBy: string[];
+}
+
 function usage(): never {
   console.log(`goals
 
@@ -98,6 +113,7 @@ Usage:
   bun src/cli.ts goals queue [--assignee <agent>] [--state <path>] [--json]
   bun src/cli.ts goals task add --id <id> --goal <goal-id> --title <title> [--assignee <agent>] [--status <queued|claimed|working|blocked|done>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--state <path>] [--json]
   bun src/cli.ts goals task list [--goal <goal-id>] [--assignee <agent>] [--status <queued|claimed|working|blocked|done>] [--state <path>] [--json]
+  bun src/cli.ts goals task delegate <parent-id> --id <id> --title <title> [--assignee <agent>] [--goal <goal-id>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--state <path>] [--json]
   bun src/cli.ts goals task claim <id> [--assignee <agent>] [--state <path>] [--json]
   bun src/cli.ts goals task reassign <id> --assignee <agent> [--state <path>] [--json]
   bun src/cli.ts goals task block <id> --reason <text> [--state <path>] [--json]
@@ -234,6 +250,39 @@ function parseTaskArgs(argv: string[]): ParsedArgs {
     }
     return out;
   }
+  if (command === "delegate") {
+    const parentId = clean(argv[1]);
+    if (!parentId) throw new Error("Pass the parent task id.");
+    const out: TaskDelegateArgs = {
+      mode: "task",
+      command,
+      json: false,
+      statePath: "",
+      parentId,
+      id: "",
+      title: "",
+      assignee: "",
+      goalId: "",
+      summary: "",
+      blockedReason: "",
+      blockedBy: [],
+    };
+    for (let i = 2; i < argv.length; i += 1) {
+      const arg = argv[i];
+      if (arg === "--json") out.json = true;
+      else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else if (arg === "--id") out.id = clean(argv[++i]);
+      else if (arg === "--title") out.title = clean(argv[++i]);
+      else if (arg === "--assignee") out.assignee = clean(argv[++i]);
+      else if (arg === "--goal") out.goalId = clean(argv[++i]);
+      else if (arg === "--summary") out.summary = clean(argv[++i]);
+      else if (arg === "--blocked-reason") out.blockedReason = clean(argv[++i]);
+      else if (arg === "--blocked-by") out.blockedBy.push(clean(argv[++i]));
+      else throw new Error(`Unknown argument: ${arg}`);
+    }
+    if (!out.id || !out.title) throw new Error("--id and --title are required for delegate.");
+    return out;
+  }
   if (command === "claim" || command === "reassign" || command === "block" || command === "unblock" || command === "complete") {
     const id = clean(argv[1]);
     if (!id) throw new Error("Pass the task id.");
@@ -350,6 +399,8 @@ function handleTaskAdd(args: TaskWriteArgs): void {
     goalId: args.goalId,
     title: args.title,
     assignee: args.assignee,
+    parentTaskId: "",
+    delegatedBy: "",
     status: normalizeTaskStatus(args.status || "queued"),
     summary: args.summary,
     blockedReason: args.blockedReason,
@@ -361,6 +412,26 @@ function handleTaskAdd(args: TaskWriteArgs): void {
     return;
   }
   console.log(`Recorded task ${task.id} in ${resolveStatePath(args.statePath)}`);
+}
+
+function handleTaskDelegate(args: TaskDelegateArgs): void {
+  const state = readState(args.statePath);
+  const delegated = delegateTask(state, {
+    parentTaskId: args.parentId,
+    id: args.id,
+    title: args.title,
+    assignee: args.assignee,
+    goalId: args.goalId,
+    summary: args.summary,
+    blockedReason: args.blockedReason,
+    blockedBy: args.blockedBy,
+  });
+  const statePath = writeState(state, args.statePath);
+  if (args.json) {
+    console.log(JSON.stringify({ statePath, ...delegated }, null, 2));
+    return;
+  }
+  console.log(`Delegated task ${delegated.child.id} from ${delegated.parent.id} in ${resolveStatePath(args.statePath)}`);
 }
 
 function handleTaskList(args: TaskListArgs): void {
@@ -411,6 +482,7 @@ function handleTaskSingle(args: TaskSingleArgs): void {
   task.updatedAt = new Date().toISOString();
   if (args.command === "claim" && !task.claimedAt) task.claimedAt = task.updatedAt;
   if (args.command === "complete") task.completedAt = task.updatedAt;
+  if (task.parentTaskId) syncDelegatedParent(state, task.parentTaskId);
   const statePath = writeState(state, args.statePath);
   if (args.json) {
     console.log(JSON.stringify({ statePath, task }, null, 2));
@@ -429,6 +501,7 @@ function main(): void {
     return;
   }
   if (args.command === "add") handleTaskAdd(args);
+  else if (args.command === "delegate") handleTaskDelegate(args);
   else if (args.command === "list") handleTaskList(args);
   else handleTaskSingle(args);
 }

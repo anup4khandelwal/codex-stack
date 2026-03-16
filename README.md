@@ -68,7 +68,7 @@ Use the repo in this order:
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, auto-remediation issues, and org-level dashboard rendering
-- Local control-plane state under `.codex-stack/control-plane/` with named agents, goals, task queues, schedules, continuity sessions, budget policies, and approval queues
+- Local control-plane state under `.codex-stack/control-plane/` with named agents, goals, delegated task queues, schedules with retry and cooloff policy, continuity sessions, budget policies, and approval queues
 - Local stdio MCP server with read-only and dry-run wrappers for review, QA, preview, deploy, ship planning, fleet planning, retro, and upgrade workflows
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
@@ -275,9 +275,9 @@ Core ideas:
 
 - register named agents with roles, runtimes, teams, and managers
 - track initiative and repo goals explicitly
-- assign persistent queued work instead of only running one-shot commands
-- schedule heartbeats with continuity state per agent
-- enforce budget limits and explicit approvals for high-risk actions
+- assign persistent queued work and delegate parent tasks into child tasks instead of only running one-shot commands
+- schedule heartbeats with continuity state, retry limits, and cooloff windows per agent
+- enforce budget limits and explicit approvals for high-risk actions, including `ship` and rollout remediation preflight
 - render a static dashboard under `.codex-stack/control-plane/dashboard/`
 
 Useful commands:
@@ -287,10 +287,14 @@ bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team pl
 bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
 bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
-bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
+bun src/cli.ts heartbeat due --agent reviewer-1 --json
 bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval" --require-approval ship-pr --approval-target review-contracts
 bun src/cli.ts approvals approve <id> --by lead-1 --note "Approved release work"
+bun src/cli.ts ship --dry-run --pr --control-agent reviewer-1 --control-state .codex-stack/control-plane/state.json
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent lead-1 --control-state .codex-stack/control-plane/state.json --json
 bun src/cli.ts goals queue --assignee reviewer-1
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 ```
@@ -350,6 +354,7 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --d
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.anup4khandelwal.json --dry-run --json
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs --issue-repo anup4khandelwal/codex-stack
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.anup4khandelwal.json --dry-run --open-prs --control-agent fleet-1 --control-state .codex-stack/control-plane/state.json --json
 ```
 
 The control repo owns:
@@ -365,7 +370,7 @@ The control repo owns:
 - `.github/codex-stack/fleet-status.js`
 - `.github/workflows/codex-stack-fleet-status.yml`
 
-That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend. `fleet remediate` builds on the same status feed to open rollout PRs for drifted repos and maintain one stable remediation issue per unhealthy repo in the control plane.
+That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend. `fleet remediate` builds on the same status feed to open rollout PRs for drifted repos, maintain one stable remediation issue per unhealthy repo in the control plane, and optionally require an approval gate before rollout PRs open.
 
 Policy packs also define whether a repo is expected to publish a codex-stack QA/deploy report. `review-only` repos are considered healthy when they are installed and in sync even if they do not publish `docs/qa/` artifacts. Full rollout packs can still require a latest report before fleet health turns green.
 

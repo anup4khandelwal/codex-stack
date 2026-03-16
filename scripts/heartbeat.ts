@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 import process from "node:process";
 import {
+  applyHeartbeatScheduleResult,
   buildDashboardReport,
   findSchedule,
   findSession,
+  listDueSchedules,
   listRecentHeartbeats,
   normalizeApprovalKind,
   normalizeHeartbeatStatus,
@@ -16,9 +18,9 @@ import {
   writeState,
 } from "./control-plane.ts";
 
-type Command = "list" | "show" | "schedule" | "beat" | "dashboard";
+type Command = "list" | "show" | "schedule" | "beat" | "due" | "dashboard";
 
-type ParsedArgs = ListArgs | ShowArgs | ScheduleArgs | BeatArgs | DashboardArgs;
+type ParsedArgs = ListArgs | ShowArgs | ScheduleArgs | BeatArgs | DueArgs | DashboardArgs;
 
 interface BaseArgs {
   command: Command;
@@ -45,11 +47,14 @@ interface ScheduleArgs extends BaseArgs {
   trigger: string;
   expression: string;
   summary: string;
+  retryLimit: number;
+  cooldownMinutes: number;
 }
 
 interface BeatArgs extends BaseArgs {
   command: "beat";
   agent: string;
+  scheduleId: string;
   taskId: string;
   trigger: string;
   status: string;
@@ -64,6 +69,11 @@ interface BeatArgs extends BaseArgs {
   requireApproval: string;
   approvalTarget: string;
   requestedBy: string;
+}
+
+interface DueArgs extends BaseArgs {
+  command: "due";
+  agent: string;
 }
 
 interface DashboardArgs extends BaseArgs {
@@ -81,7 +91,8 @@ Usage:
   bun src/cli.ts heartbeat schedule list [--agent <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule pause <id> [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule resume <id> [--state <path>] [--json]
-  bun src/cli.ts heartbeat beat --agent <name> [--task <id>] [--trigger <manual|cron|event>] [--status <ok|warning|blocked|error>] [--summary <text>] [--next-action <text>] [--output <text>] [--branch <name>] [--pr-url <url>] [--duration-minutes <n>] [--cost-units <n>] [--scheduled-by <name>] [--require-approval <ship-pr|merge-pr|update-snapshot|fleet-remediate|budget-override|custom>] [--approval-target <id>] [--requested-by <name>] [--state <path>] [--json]
+  bun src/cli.ts heartbeat due [--agent <name>] [--state <path>] [--json]
+  bun src/cli.ts heartbeat beat [--agent <name>] [--schedule <id>] [--task <id>] [--trigger <manual|cron|event>] [--status <ok|warning|blocked|error>] [--summary <text>] [--next-action <text>] [--output <text>] [--branch <name>] [--pr-url <url>] [--duration-minutes <n>] [--cost-units <n>] [--scheduled-by <name>] [--require-approval <ship-pr|merge-pr|update-snapshot|fleet-remediate|budget-override|custom>] [--approval-target <id>] [--requested-by <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat dashboard [--out <dir>] [--state <path>] [--json]
 `);
   process.exit(0);
@@ -135,6 +146,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       trigger: "cron",
       expression: "0 * * * *",
       summary: "",
+      retryLimit: 0,
+      cooldownMinutes: 0,
     };
     const startIndex = scheduleCommand === "pause" || scheduleCommand === "resume" ? 3 : 2;
     for (let i = startIndex; i < argv.length; i += 1) {
@@ -147,6 +160,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       else if (arg === "--trigger") out.trigger = clean(argv[++i]);
       else if (arg === "--expression") out.expression = clean(argv[++i]);
       else if (arg === "--summary") out.summary = clean(argv[++i]);
+      else if (arg === "--retry-limit") out.retryLimit = parseNumber(argv[++i], 0);
+      else if (arg === "--cooldown-minutes") out.cooldownMinutes = parseNumber(argv[++i], 0);
       else throw new Error(`Unknown argument: ${arg}`);
     }
     if (scheduleCommand === "add" && !out.agent) throw new Error("--agent is required for schedule add.");
@@ -159,8 +174,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       json: false,
       statePath: "",
       agent: "",
+      scheduleId: "",
       taskId: "",
-      trigger: "manual",
+      trigger: "",
       status: "ok",
       summary: "",
       nextAction: "",
@@ -179,6 +195,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (arg === "--json") out.json = true;
       else if (arg === "--state") out.statePath = clean(argv[++i]);
       else if (arg === "--agent") out.agent = clean(argv[++i]);
+      else if (arg === "--schedule") out.scheduleId = clean(argv[++i]);
       else if (arg === "--task") out.taskId = clean(argv[++i]);
       else if (arg === "--trigger") out.trigger = clean(argv[++i]);
       else if (arg === "--status") out.status = clean(argv[++i]);
@@ -195,7 +212,18 @@ function parseArgs(argv: string[]): ParsedArgs {
       else if (arg === "--requested-by") out.requestedBy = clean(argv[++i]);
       else throw new Error(`Unknown argument: ${arg}`);
     }
-    if (!out.agent) throw new Error("--agent is required.");
+    if (!out.agent && !out.scheduleId) throw new Error("--agent or --schedule is required.");
+    return out;
+  }
+  if (command === "due") {
+    const out: DueArgs = { command, json: false, statePath: "", agent: "" };
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      if (arg === "--json") out.json = true;
+      else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else if (arg === "--agent") out.agent = clean(argv[++i]);
+      else throw new Error(`Unknown argument: ${arg}`);
+    }
     return out;
   }
   if (command === "dashboard") {
@@ -275,6 +303,11 @@ function scheduleHeartbeat(args: ScheduleArgs): void {
       expression: args.expression,
       summary: args.summary,
       active: true,
+      retryLimit: Math.max(0, args.retryLimit || 0),
+      cooldownMinutes: Math.max(0, args.cooldownMinutes || 0),
+      failureCount: 0,
+      lastAttemptAt: "",
+      nextRunAfter: "",
     });
     const statePath = writeState(state, args.statePath);
     if (args.json) {
@@ -287,6 +320,10 @@ function scheduleHeartbeat(args: ScheduleArgs): void {
   const record = findSchedule(state, args.id);
   if (!record) throw new Error(`Unknown schedule: ${JSON.stringify(args.id)}`);
   record.active = args.scheduleCommand === "resume";
+  if (args.scheduleCommand === "resume") {
+    record.failureCount = 0;
+    record.nextRunAfter = "";
+  }
   record.updatedAt = new Date().toISOString();
   const statePath = writeState(state, args.statePath);
   if (args.json) {
@@ -298,10 +335,15 @@ function scheduleHeartbeat(args: ScheduleArgs): void {
 
 function beat(args: BeatArgs): void {
   const state = readState(args.statePath);
+  const schedule = args.scheduleId ? findSchedule(state, args.scheduleId) : undefined;
+  if (args.scheduleId && !schedule) throw new Error(`Unknown schedule: ${JSON.stringify(args.scheduleId)}`);
+  const agent = args.agent || schedule?.agent || "";
+  const taskId = args.taskId || schedule?.taskId || "";
+  const trigger = args.trigger || schedule?.trigger || "manual";
   const outcome = recordHeartbeat(state, {
-    agent: args.agent,
-    taskId: args.taskId,
-    trigger: normalizeHeartbeatTrigger(args.trigger || "manual"),
+    agent,
+    taskId,
+    trigger: normalizeHeartbeatTrigger(trigger),
     status: normalizeHeartbeatStatus(args.status || "ok"),
     summary: args.summary,
     nextAction: args.nextAction,
@@ -315,13 +357,32 @@ function beat(args: BeatArgs): void {
     approvalTarget: args.approvalTarget,
     requestedBy: args.requestedBy,
   });
+  const scheduleResult = schedule
+    ? applyHeartbeatScheduleResult(state, schedule.id, outcome.heartbeat.status)
+    : null;
   const statePath = writeState(state, args.statePath);
-  const payload = { statePath, ...outcome };
+  const payload = { statePath, schedule: scheduleResult, ...outcome };
   if (args.json) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
   console.log(`${outcome.blocked ? "Blocked" : "Recorded"} heartbeat ${outcome.heartbeat.id} for ${outcome.heartbeat.agent}`);
+}
+
+function due(args: DueArgs): void {
+  const state = readState(args.statePath);
+  const rows = listDueSchedules(state, args.agent);
+  if (args.json) {
+    console.log(JSON.stringify(rows, null, 2));
+    return;
+  }
+  if (!rows.length) {
+    console.log("No schedules are due.");
+    return;
+  }
+  for (const row of rows) {
+    console.log(`${row.id}\t${row.agent}\t${row.trigger}\t${row.expression || "-"}\t${row.nextRunAfter || "now"}`);
+  }
 }
 
 function dashboard(args: DashboardArgs): void {
@@ -341,6 +402,7 @@ function main(): void {
   else if (args.command === "show") showHeartbeat(args);
   else if (args.command === "schedule") scheduleHeartbeat(args);
   else if (args.command === "beat") beat(args);
+  else if (args.command === "due") due(args);
   else if (args.command === "dashboard") dashboard(args);
 }
 
