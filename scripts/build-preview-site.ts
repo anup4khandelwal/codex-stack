@@ -12,10 +12,10 @@ export interface BuildPreviewArgs {
 interface BuildPreviewResult {
   source: string;
   out: string;
-  rootIndex: string;
-  loginIndex: string;
-  dashboardIndex: string;
+  pages: Record<string, string>;
 }
+
+const ROUTES = ["login", "dashboard", "changes"];
 
 function usage(): never {
   console.log(`build-preview-site
@@ -83,47 +83,50 @@ function readRequired(filePath: string): string {
 }
 
 function rewriteRootIndex(html: string): string {
-  return html
+  let output = html
     .replace(/href="\/app\.css"/g, 'href="./app.css"')
-    .replace(/src="\/app\.js"/g, 'src="./app.js"')
-    .replace(/href="\/login"/g, 'href="./login/"')
-    .replace(/href="\/dashboard"/g, 'href="./dashboard/"');
+    .replace(/src="\/app\.js"/g, 'src="./app.js"');
+  for (const route of ROUTES) {
+    const pattern = new RegExp(`href="/${route}"`, "g");
+    output = output.replace(pattern, `href="./${route}/"`);
+  }
+  return output;
 }
 
 function rewriteRoutePage(html: string): string {
-  return html
+  let output = html
     .replace(/href="\/app\.css"/g, 'href="../app.css"')
-    .replace(/src="\/app\.js"/g, 'src="../app.js"')
-    .replace(/href="\/login"/g, 'href="../login/"')
-    .replace(/href="\/dashboard"/g, 'href="../dashboard/"');
+    .replace(/src="\/app\.js"/g, 'src="../app.js"');
+  for (const route of ROUTES) {
+    const pattern = new RegExp(`href="/${route}"`, "g");
+    output = output.replace(pattern, `href="../${route}/"`);
+  }
+  return output;
 }
 
 export function buildPreviewSite(args: BuildPreviewArgs): BuildPreviewResult {
   cleanDir(args.out);
-
-  const sourceIndex = path.join(args.source, "index.html");
-  const sourceLogin = path.join(args.source, "login.html");
-  const sourceDashboard = path.join(args.source, "dashboard.html");
-
   copyTree(args.source, args.out, (filePath) => filePath.endsWith(".html"));
 
-  const rootIndex = path.join(args.out, "index.html");
-  const loginIndex = path.join(args.out, "login", "index.html");
-  const dashboardIndex = path.join(args.out, "dashboard", "index.html");
+  const pages: Record<string, string> = {
+    root: path.join(args.out, "index.html"),
+  };
 
-  fs.writeFileSync(rootIndex, rewriteRootIndex(readRequired(sourceIndex)));
-  ensureDir(path.dirname(loginIndex));
-  fs.writeFileSync(loginIndex, rewriteRoutePage(readRequired(sourceLogin)));
-  ensureDir(path.dirname(dashboardIndex));
-  fs.writeFileSync(dashboardIndex, rewriteRoutePage(readRequired(sourceDashboard)));
+  fs.writeFileSync(pages.root, rewriteRootIndex(readRequired(path.join(args.source, "index.html"))));
+
+  for (const route of ROUTES) {
+    const targetPath = path.join(args.out, route, "index.html");
+    ensureDir(path.dirname(targetPath));
+    fs.writeFileSync(targetPath, rewriteRoutePage(readRequired(path.join(args.source, `${route}.html`))));
+    pages[route] = targetPath;
+  }
+
   fs.writeFileSync(path.join(args.out, ".nojekyll"), "");
 
   return {
     source: args.source,
     out: args.out,
-    rootIndex,
-    loginIndex,
-    dashboardIndex,
+    pages,
   };
 }
 
@@ -135,8 +138,8 @@ if (import.meta.main) {
   } else {
     console.log(`Preview site source: ${result.source}`);
     console.log(`Preview site output: ${result.out}`);
-    console.log(`Root page: ${result.rootIndex}`);
-    console.log(`Login page: ${result.loginIndex}`);
-    console.log(`Dashboard page: ${result.dashboardIndex}`);
+    for (const [route, filePath] of Object.entries(result.pages)) {
+      console.log(`${route}: ${filePath}`);
+    }
   }
 }

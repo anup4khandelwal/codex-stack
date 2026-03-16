@@ -1,0 +1,21 @@
+[
+  {
+    "action": "assert-visible",
+    "selector": "h1"
+  },
+  {
+    "action": "assert-text",
+    "selector": "h1",
+    "value": "Change impact and preview evidence"
+  },
+  {
+    "action": "assert-count",
+    "selector": "[data-qa=impact-row]",
+    "count": 3
+  },
+  {
+    "action": "assert-count",
+    "selector": "[data-qa=device-card]",
+    "count": 3
+  }
+]

@@ -31,17 +31,19 @@ assert.ok(fs.existsSync(path.join(outDir, "app.js")));
 assert.ok(fs.existsSync(path.join(outDir, "index.html")));
 assert.ok(fs.existsSync(path.join(outDir, "login", "index.html")));
 assert.ok(fs.existsSync(path.join(outDir, "dashboard", "index.html")));
+assert.ok(fs.existsSync(path.join(outDir, "changes", "index.html")));
 
 const rootHtml = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
 const loginHtml = fs.readFileSync(path.join(outDir, "login", "index.html"), "utf8");
 const dashboardHtml = fs.readFileSync(path.join(outDir, "dashboard", "index.html"), "utf8");
+const changesHtml = fs.readFileSync(path.join(outDir, "changes", "index.html"), "utf8");
 
-assert.match(rootHtml, /href="\.\//);
-assert.match(rootHtml, /href="\.\.\/login\/"|href="\.\/login\/"/);
+assert.match(rootHtml, /href="\.\/login\/"/);
+assert.match(rootHtml, /href="\.\/changes\/"/);
 assert.match(loginHtml, /href="\.\.\/app\.css"/);
 assert.match(loginHtml, /src="\.\.\/app\.js"/);
-assert.match(dashboardHtml, /href="\.\.\/app\.css"/);
-assert.match(dashboardHtml, /src="\.\.\/app\.js"/);
+assert.match(dashboardHtml, /href="\.\.\/changes\/"/);
+assert.match(changesHtml, /href="\.\.\/dashboard\/"/);
 
 fs.rmSync(outDir, { recursive: true, force: true });
 console.log("build-preview-site spec passed");

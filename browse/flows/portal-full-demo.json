@@ -1,10 +1,6 @@
 [
   {
     "action": "use-flow",
-    "name": "portal-login"
-  },
-  {
-    "action": "use-flow",
-    "name": "portal-dashboard"
+    "name": "release-full-demo"
   }
 ]

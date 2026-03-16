@@ -17,6 +17,8 @@ const ROUTES: Record<string, string> = {
   "/login/": "login.html",
   "/dashboard": "dashboard.html",
   "/dashboard/": "dashboard.html",
+  "/changes": "changes.html",
+  "/changes/": "changes.html",
 };
 
 const REQUIRED_FILES = [...Object.values(ROUTES), "app.css", "app.js"];
@@ -37,7 +39,7 @@ function checkRoutes(): void {
     console.error(`Missing demo files: ${missing.join(", ")}`);
     process.exit(1);
   }
-  console.log("[customer-portal-demo] route map ok");
+  console.log("[release-readiness-demo] route map ok");
 }
 
 function send(
@@ -70,7 +72,7 @@ const server = http.createServer((req: IncomingMessage, res: ServerResponse<Inco
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
 
   if (url.pathname === "/api/health") {
-    send(res, 200, JSON.stringify({ ok: true, service: "customer-portal-demo" }), CONTENT_TYPES[".json"]);
+    send(res, 200, JSON.stringify({ ok: true, service: "release-readiness-demo" }), CONTENT_TYPES[".json"]);
     return;
   }
 
@@ -96,5 +98,5 @@ if (process.argv.includes("--check")) {
 checkRoutes();
 
 server.listen(PORT, HOST, () => {
-  console.log(`[customer-portal-demo] http://${HOST}:${PORT}`);
+  console.log(`[release-readiness-demo] http://${HOST}:${PORT}`);
 });

@@ -5,7 +5,7 @@ interface DemoSession {
 }
 
 const SESSION_KEY = "codexStackDemoSession";
-const PAGE_SEGMENTS = new Set(["login", "dashboard", "index.html", "login.html", "dashboard.html"]);
+const PAGE_SEGMENTS = new Set(["login", "dashboard", "changes", "index.html", "login.html", "dashboard.html", "changes.html"]);
 
 function getSession(): DemoSession | null {
   try {
@@ -68,6 +68,38 @@ function dashboardPath(): string {
   return new URL(appPath("dashboard"), window.location.origin).toString();
 }
 
+function changesPath(): string {
+  return new URL(appPath("changes"), window.location.origin).toString();
+}
+
+function currentRole(email: string): string {
+  if (email.includes("release") || email.includes("ops")) return "Release manager";
+  if (email.includes("design")) return "Design reviewer";
+  return "Engineering lead";
+}
+
+function hydrateSessionFields(session: DemoSession): void {
+  for (const element of document.querySelectorAll<HTMLElement>("[data-user-email]")) {
+    element.replaceChildren(document.createTextNode(session.email));
+  }
+  for (const element of document.querySelectorAll<HTMLElement>("[data-user-role]")) {
+    element.replaceChildren(document.createTextNode(session.role));
+  }
+  for (const element of document.querySelectorAll<HTMLElement>("[data-signed-in-at]")) {
+    element.replaceChildren(document.createTextNode(session.signedInAt));
+  }
+}
+
+function guardProtectedPage(targetPath: string): DemoSession | null {
+  const session = getSession();
+  if (!session) {
+    window.location.href = loginPath(targetPath);
+    return null;
+  }
+  hydrateSessionFields(session);
+  return session;
+}
+
 if (document.body.dataset.page === "login") {
   const form = document.querySelector<HTMLFormElement>("form[data-login-form]");
   const emailField = document.querySelector<HTMLInputElement>("input[name=email]");
@@ -86,14 +118,14 @@ if (document.body.dataset.page === "login") {
 
     if (!email || !password) {
       if (notice) {
-        notice.textContent = "Use any email and password to continue the demo.";
+        notice.textContent = "Use any email and password to continue the release-readiness demo.";
       }
       return;
     }
 
     setSession({
       email,
-      role: email.includes("ops") ? "Operations lead" : "Customer success",
+      role: currentRole(email),
       signedInAt: formatDate(),
     });
     window.location.href = next;
@@ -101,16 +133,20 @@ if (document.body.dataset.page === "login") {
 }
 
 if (document.body.dataset.page === "dashboard") {
-  const session = getSession();
-  if (!session) {
-    window.location.href = loginPath(dashboardPath());
-  } else {
-    document.querySelector<HTMLElement>("[data-user-email]")?.replaceChildren(document.createTextNode(session.email));
-    document.querySelector<HTMLElement>("[data-user-role]")?.replaceChildren(document.createTextNode(session.role));
-    document.querySelector<HTMLElement>("[data-signed-in-at]")?.replaceChildren(document.createTextNode(session.signedInAt));
-  }
+  guardProtectedPage(dashboardPath());
+  document.querySelector<HTMLElement>("[data-open-evidence]")?.addEventListener("click", (event) => {
+    if (!(event.currentTarget instanceof HTMLAnchorElement)) return;
+    event.preventDefault();
+    window.location.href = changesPath();
+  });
+}
 
-  document.querySelector<HTMLElement>("[data-signout]")?.addEventListener("click", () => {
+if (document.body.dataset.page === "changes") {
+  guardProtectedPage(changesPath());
+}
+
+for (const button of document.querySelectorAll<HTMLElement>("[data-signout]")) {
+  button.addEventListener("click", () => {
     clearSession();
     window.location.href = loginPath();
   });

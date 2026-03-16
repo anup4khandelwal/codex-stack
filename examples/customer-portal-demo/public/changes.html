@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Change Impact and Preview Evidence</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body class="release-dashboard" data-page="changes">
+    <div class="page">
+      <header class="dashboard-header">
+        <div>
+          <div class="kicker">Preview verification</div>
+          <h1>Change impact and preview evidence</h1>
+          <div class="inline-meta">
+            <span>User: <strong data-user-email>loading</strong></span>
+            <span>Role: <strong data-user-role>loading</strong></span>
+            <span>Session started: <strong data-signed-in-at>loading</strong></span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <a class="button secondary" href="/dashboard">Back to dashboard</a>
+          <button class="secondary" type="button" data-signout>Sign out</button>
+        </div>
+      </header>
+
+      <section class="panel stack-card impact-summary">
+        <h2>What changed in this release candidate</h2>
+        <p>
+          The candidate updates the onboarding trial-plan selection flow. That makes it a good demo target because it creates copy changes,
+          layout changes, and a device-sensitive area for preview verification.
+        </p>
+      </section>
+
+      <section class="section-grid impact-grid">
+        <article class="panel stack-card">
+          <h2>Changed surfaces</h2>
+          <ul class="task-list compact-list">
+            <li data-qa="impact-row"><span>`/dashboard` merge recommendation copy and summary badges</span><span class="badge good">Desktop stable</span></li>
+            <li data-qa="impact-row"><span>`/changes` mobile CTA stack and evidence summary layout</span><span class="badge warn">Needs fix</span></li>
+            <li data-qa="impact-row"><span>`/login` release-operator copy and auth helper text</span><span class="badge good">Low risk</span></li>
+          </ul>
+        </article>
+
+        <article class="panel stack-card">
+          <h2>Device matrix</h2>
+          <ul class="task-list compact-list">
+            <li data-qa="device-card"><span>Desktop</span><span class="badge good">Pass</span></li>
+            <li data-qa="device-card"><span>Tablet</span><span class="badge good">Pass</span></li>
+            <li data-qa="device-card"><span>Mobile</span><span class="badge warn">CTA wraps</span></li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="section-grid">
+        <article class="panel stack-card">
+          <h2>Known exceptions</h2>
+          <ul class="task-list compact-list">
+            <li><span>Approved: headline copy drift on dashboard after PM review.</span><span class="badge good">Approved</span></li>
+            <li><span>Unresolved: stale mobile baseline for `/changes` preview pack.</span><span class="badge warn">Refresh required</span></li>
+          </ul>
+        </article>
+
+        <article class="panel stack-card">
+          <h2>How to talk through it live</h2>
+          <p>
+            This page gives the evaluator a believable bridge between raw screenshots and a merge decision. It shows which route changed,
+            which device failed, and why `codex-stack` should block or downgrade confidence.
+          </p>
+        </article>
+      </section>
+    </div>
+  </body>
+</html>

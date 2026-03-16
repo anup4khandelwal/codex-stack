@@ -1,0 +1,25 @@
+[
+  {
+    "action": "assert-visible",
+    "selector": "h1"
+  },
+  {
+    "action": "assert-text",
+    "selector": "h1",
+    "value": "Release readiness dashboard"
+  },
+  {
+    "action": "assert-text",
+    "selector": "[data-merge-status]",
+    "value": "Hold merge"
+  },
+  {
+    "action": "assert-count",
+    "selector": "[data-qa=gate-card]",
+    "count": 4
+  },
+  {
+    "action": "assert-visible",
+    "selector": "[data-open-evidence]"
+  }
+]

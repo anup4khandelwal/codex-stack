@@ -29,9 +29,9 @@ Resolve the live deploy URL, wait for readiness, verify the important paths acro
 ## CLI
 
 ```bash
-bun src/cli.ts deploy --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
-bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
-bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
+bun src/cli.ts deploy --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
 bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device desktop --publish-dir docs/qa/local-demo/deploy --strict-console --json
 ```
 

@@ -1,34 +1,6 @@
 [
   {
-    "action": "clear-storage",
-    "scope": "local",
-    "key": "codexStackDemoSession"
-  },
-  {
-    "action": "fill",
-    "selector": "input[name=email]",
-    "value": "ops-demo@acme.dev"
-  },
-  {
-    "action": "fill",
-    "selector": "input[name=password]",
-    "value": "demo-password"
-  },
-  {
-    "action": "click",
-    "selector": "button[type=submit]"
-  },
-  {
-    "action": "wait",
-    "loadState": "load"
-  },
-  {
-    "action": "assert-url",
-    "value": "/dashboard"
-  },
-  {
-    "action": "assert-text",
-    "selector": "[data-user-email]",
-    "value": "ops-demo@acme.dev"
+    "action": "use-flow",
+    "name": "release-login"
   }
 ]

@@ -225,9 +225,12 @@ run_ts scripts/build-preview-site.ts --out .preview-site >/tmp/codex-stack-previ
 test -f .preview-site/index.html
 test -f .preview-site/login/index.html
 test -f .preview-site/dashboard/index.html
+test -f .preview-site/changes/index.html
 test -f .preview-site/.nojekyll
 grep -q '\./login/' .preview-site/index.html
+grep -q '\./changes/' .preview-site/index.html
 grep -q '\.\./app.css' .preview-site/login/index.html
+grep -q '\.\./dashboard/' .preview-site/changes/index.html
 rm -rf docs/qa/smoke-fixture
 rm -rf .site
 rm -rf .preview-site
@@ -328,6 +331,11 @@ test -f examples/customer-portal-demo/README.md
 test -f examples/customer-portal-demo/server.ts
 test -f examples/customer-portal-demo/src/app.ts
 test -f examples/customer-portal-demo/public/app.js
+test -f examples/customer-portal-demo/public/changes.html
+test -f browse/flows/release-login.json
+test -f browse/flows/release-dashboard.json
+test -f browse/flows/release-changes.json
+test -f browse/flows/release-full-demo.json
 test -f browse/flows/portal-login.json
 test -f browse/flows/portal-dashboard.json
 test -f browse/flows/portal-full-demo.json

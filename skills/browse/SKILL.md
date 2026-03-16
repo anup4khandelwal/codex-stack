@@ -78,7 +78,7 @@ bun src/cli.ts browse text https://example.com --session staging
 bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"}]'
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
-bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.yaml
+bun src/cli.ts browse export-flow release-full-demo ./docs/release-full-demo.yaml
 bun src/cli.ts browse export-session ./tmp/staging-session.json --session staging
 bun src/cli.ts browse import-session ./tmp/staging-session.json --session staging-copy
 bun src/cli.ts browse import-browser-cookies chrome --session staging --profile Default
