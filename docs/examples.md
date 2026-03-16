@@ -155,6 +155,34 @@ bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```
 
+## Agents mode
+
+```text
+Use codex-stack-agents to register the active engineering agents, define who reports to whom, and show me the current local staffing view.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
+bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
+bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
+```
+
+## Goals mode
+
+```text
+Use codex-stack-goals to turn this initiative into a tracked goal tree with a real task queue for the assigned agents.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals queue --json
+```
+
 ## MCP mode
 
 ```text

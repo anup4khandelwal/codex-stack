@@ -25,6 +25,8 @@ grep -q '^qa-decide' /tmp/codex-stack-list.log
 grep -q '^preview' /tmp/codex-stack-list.log
 grep -q '^deploy' /tmp/codex-stack-list.log
 grep -q '^upgrade' /tmp/codex-stack-list.log
+grep -q '^agents' /tmp/codex-stack-list.log
+grep -q '^goals' /tmp/codex-stack-list.log
 
 echo "[2/8] root CLI show/path"
 run_ts src/cli.ts show review >/tmp/codex-stack-show.log
@@ -34,6 +36,8 @@ run_ts src/cli.ts show qa-decide >/tmp/codex-stack-show-qa-decide.log
 run_ts src/cli.ts show preview >/tmp/codex-stack-show-preview.log
 run_ts src/cli.ts show deploy >/tmp/codex-stack-show-deploy.log
 run_ts src/cli.ts show upgrade >/tmp/codex-stack-show-upgrade.log
+run_ts src/cli.ts show agents >/tmp/codex-stack-show-agents.log
+run_ts src/cli.ts show goals >/tmp/codex-stack-show-goals.log
 run_ts src/cli.ts issue --help >/tmp/codex-stack-issue-help.log
 
 echo "[3/8] doctor checks"
@@ -74,6 +78,8 @@ test -x .codex-stack/bin/ship
 test -x .codex-stack/bin/browse
 test -x .codex-stack/bin/setup-browser-cookies
 test -x .codex-stack/bin/upgrade
+test -x .codex-stack/bin/agents
+test -x .codex-stack/bin/goals
 
 echo "[5/8] review, ship, retro, and demo interfaces"
 run_ts scripts/review-diff.ts --help >/tmp/codex-stack-review-help.log
@@ -110,6 +116,7 @@ run_ts scripts/retro-report.ts --help >/tmp/codex-stack-retro-help.log
 run_ts scripts/retro-report.spec.ts >/tmp/codex-stack-retro-spec.log
 run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
 run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
+run_ts scripts/control-plane.spec.ts >/tmp/codex-stack-control-plane-spec.log
 run_ts scripts/fleet.ts validate --manifest .codex-stack/fleet.example.json --json >/tmp/codex-stack-fleet-validate.json
 run_ts scripts/fleet.ts sync --manifest .codex-stack/fleet.example.json --dry-run --json >/tmp/codex-stack-fleet-sync.json
 run_ts scripts/fleet.ts remediate --manifest .codex-stack/fleet.example.json --dry-run --json >/tmp/codex-stack-fleet-remediate.json

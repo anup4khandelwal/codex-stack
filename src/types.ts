@@ -1,4 +1,4 @@
-export type ModeName = "product" | "tech" | "review" | "qa" | "qa-decide" | "preview" | "deploy" | "ship" | "browse" | "setup-browser-cookies" | "retro" | "upgrade" | "fleet" | "mcp";
+export type ModeName = "product" | "tech" | "review" | "qa" | "qa-decide" | "preview" | "deploy" | "ship" | "browse" | "setup-browser-cookies" | "retro" | "upgrade" | "fleet" | "agents" | "goals" | "mcp";
 
 export interface ModeDefinition {
   name: ModeName;

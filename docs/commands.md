@@ -31,6 +31,11 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
+bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
+bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals queue --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago"
@@ -253,6 +258,25 @@ Notes:
 - Use `.codex-stack/fleet.anup4khandelwal.json` for the current checked-in rollout targeting `autopilot-multi-agent-loop`, `awesome-codex-skills`, and the profile repo.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
 - Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
+
+## Control-plane workflow
+
+```bash
+bun src/cli.ts agents list --json
+bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
+bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
+bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals queue --assignee reviewer-1 --json
+bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
+```
+
+Notes:
+
+- The local state file defaults to `.codex-stack/control-plane/state.json`.
+- `agents` manages roster metadata such as runtime, role, team, manager, and staffing status.
+- `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, and complete actions.
+- `agents dashboard` writes `index.html`, `manifest.json`, and `summary.md` so you can inspect the local control plane without needing a server.
 
 ## MCP workflow
 

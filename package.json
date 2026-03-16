@@ -25,6 +25,8 @@
     "preview": "bun scripts/preview-verify.ts",
     "deploy": "bun scripts/deploy-verify.ts",
     "fleet": "bun scripts/fleet.ts",
+    "agents": "bun scripts/agents.ts",
+    "goals": "bun scripts/goals.ts",
     "mcp": "bun scripts/mcp-server.ts",
     "ship:dry": "bun scripts/ship-branch.ts --dry-run",
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",
