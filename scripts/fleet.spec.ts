@@ -289,6 +289,227 @@ assert.equal(reviewOnlyCollect.repos?.[0]?.status, "healthy");
 assert.equal(reviewOnlyCollect.repos?.[0]?.drift, "healthy");
 assert.equal(reviewOnlyCollect.repos?.[0]?.riskScore, 0);
 
+const reviewOnlyRemediation = JSON.parse(run([fleetScript, "remediate", "--manifest", reviewOnlyManifestPath, "--dry-run", "--json"], reviewOnlyFixtureRoot)) as {
+  results?: Array<{ bucket?: string; action?: string }>;
+};
+assert.equal(reviewOnlyRemediation.results?.[0]?.bucket, "healthy");
+assert.equal(reviewOnlyRemediation.results?.[0]?.action, "noop");
+
+const remediationFixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-fleet-remediation-"));
+const remediationControlDir = path.join(remediationFixtureRoot, "control");
+const remediationRepoDir = path.join(remediationFixtureRoot, "repo-c");
+const remediationManifestPath = path.join(remediationControlDir, "fleet.json");
+const remediationPolicyDir = path.join(remediationControlDir, "policies");
+const remediationGhBinDir = path.join(remediationFixtureRoot, "bin");
+const remediationDbPath = path.join(remediationFixtureRoot, "gh-db.json");
+fs.mkdirSync(remediationPolicyDir, { recursive: true });
+fs.mkdirSync(remediationGhBinDir, { recursive: true });
+execFileSync("git", ["init", "-q", "-b", "main", remediationRepoDir]);
+fs.writeFileSync(path.join(remediationPolicyDir, "default.json"), JSON.stringify({
+  name: "default",
+  requiredChecks: ["review", "fleet-status"],
+  remediation: {
+    autoOpenPrs: true,
+    issueOnWarning: true,
+    issueOnCritical: true,
+    closeIssueWhenHealthy: true,
+  },
+  status: {
+    requiresLatestReport: true,
+  },
+}, null, 2));
+fs.writeFileSync(remediationManifestPath, JSON.stringify({
+  schemaVersion: 1,
+  controlRepo: "acme/control-plane",
+  policyDir: "./policies",
+  repos: [
+    {
+      repo: "acme/repo-c",
+      branch: "main",
+      localPath: "../repo-c",
+      team: "platform",
+      policyPack: "default",
+    },
+  ],
+}, null, 2));
+run([fleetScript, "sync", "--manifest", remediationManifestPath, "--json"], remediationFixtureRoot);
+fs.mkdirSync(path.join(remediationRepoDir, ".codex-stack", "fleet-status"), { recursive: true });
+fs.writeFileSync(path.join(remediationRepoDir, ".codex-stack", "fleet-status", "status.json"), JSON.stringify({
+  marker: "<!-- codex-stack:fleet-status -->",
+  generatedAt: "2026-03-16T00:00:00.000Z",
+  repo: "acme/repo-c",
+  branch: "main",
+  installed: true,
+  controlRepo: "acme/control-plane",
+  team: "platform",
+  policyPack: "default",
+  requiredChecks: ["fleet-status", "review"],
+  status: "warning",
+  riskScore: 55,
+  latestReport: {
+    generatedAt: "2026-03-16T00:00:00.000Z",
+    status: "warning",
+    unresolvedRegressions: 2,
+  },
+}, null, 2));
+fs.writeFileSync(remediationDbPath, JSON.stringify({
+  nextIssueNumber: 1,
+  issues: [],
+  prs: [],
+}, null, 2));
+const remediationGhScript = `#!/usr/bin/env bun
+import fs from "node:fs";
+
+const dbPath = ${JSON.stringify(remediationDbPath)};
+const args = process.argv.slice(2);
+
+function loadDb() {
+  return JSON.parse(fs.readFileSync(dbPath, "utf8"));
+}
+
+function saveDb(db) {
+  fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+}
+
+function argValue(flag) {
+  const index = args.indexOf(flag);
+  return index >= 0 ? String(args[index + 1] || "") : "";
+}
+
+if (args[0] === "api" && args[1] === "user" && args[2] === "--jq" && args[3] === ".login") {
+  process.stdout.write("acme\\n");
+  process.exit(0);
+}
+
+if (args[0] === "label" && args[1] === "create") {
+  process.exit(0);
+}
+
+if (args[0] === "pr" && args[1] === "list") {
+  process.stdout.write("[]");
+  process.exit(0);
+}
+
+if (args[0] === "issue" && args[1] === "list") {
+  const db = loadDb();
+  const state = argValue("--state").toUpperCase();
+  const search = argValue("--search");
+  const filtered = db.issues.filter((issue) => {
+    const stateMatch = state === "ALL" ? true : issue.state === state;
+    const searchMatch = !search || issue.title.includes(search) || String(issue.body || "").includes(search);
+    return stateMatch && searchMatch;
+  });
+  process.stdout.write(JSON.stringify(filtered));
+  process.exit(0);
+}
+
+if (args[0] === "issue" && args[1] === "create") {
+  const db = loadDb();
+  const repo = argValue("--repo");
+  const title = argValue("--title");
+  const body = argValue("--body");
+  const issue = {
+    number: db.nextIssueNumber++,
+    url: "https://github.com/" + repo + "/issues/" + db.nextIssueNumber,
+    updatedAt: new Date().toISOString(),
+    title,
+    body,
+    state: "OPEN",
+  };
+  issue.url = "https://github.com/" + repo + "/issues/" + issue.number;
+  db.issues.push(issue);
+  saveDb(db);
+  process.stdout.write(issue.url + "\\n");
+  process.exit(0);
+}
+
+if (args[0] === "issue" && args[1] === "edit") {
+  const db = loadDb();
+  const issueNumber = Number(args[2]);
+  const issue = db.issues.find((item) => item.number === issueNumber);
+  if (!issue) process.exit(1);
+  issue.title = argValue("--title") || issue.title;
+  issue.body = argValue("--body") || issue.body;
+  issue.updatedAt = new Date().toISOString();
+  saveDb(db);
+  process.exit(0);
+}
+
+if (args[0] === "issue" && args[1] === "close") {
+  const db = loadDb();
+  const issueNumber = Number(args[2]);
+  const issue = db.issues.find((item) => item.number === issueNumber);
+  if (!issue) process.exit(1);
+  issue.state = "CLOSED";
+  issue.updatedAt = new Date().toISOString();
+  saveDb(db);
+  process.exit(0);
+}
+
+process.stderr.write("Unsupported gh invocation: " + args.join(" ") + "\\n");
+process.exit(1);
+`;
+const remediationGhPath = path.join(remediationGhBinDir, "gh");
+fs.writeFileSync(remediationGhPath, remediationGhScript);
+fs.chmodSync(remediationGhPath, 0o755);
+const remediationEnv = {
+  ...process.env,
+  CODEX_STACK_TEST_GH_BIN: remediationGhPath,
+};
+
+const remediationOpen = JSON.parse(runWithEnv([fleetScript, "remediate", "--manifest", remediationManifestPath, "--issue-repo", "acme/control-plane", "--json"], remediationFixtureRoot, remediationEnv)) as {
+  results?: Array<{ bucket?: string; action?: string; remediationIssueUrl?: string }>;
+};
+assert.equal(remediationOpen.results?.[0]?.bucket, "runtime-warning");
+assert.equal(remediationOpen.results?.[0]?.action, "issue-opened");
+assert.match(String(remediationOpen.results?.[0]?.remediationIssueUrl || ""), /issues\/1$/);
+
+const remediationUpdate = JSON.parse(runWithEnv([fleetScript, "remediate", "--manifest", remediationManifestPath, "--issue-repo", "acme/control-plane", "--json"], remediationFixtureRoot, remediationEnv)) as {
+  results?: Array<{ action?: string; remediationIssueUrl?: string }>;
+};
+assert.equal(remediationUpdate.results?.[0]?.action, "issue-updated");
+assert.match(String(remediationUpdate.results?.[0]?.remediationIssueUrl || ""), /issues\/1$/);
+
+fs.writeFileSync(path.join(remediationRepoDir, ".codex-stack", "fleet-status", "status.json"), JSON.stringify({
+  marker: "<!-- codex-stack:fleet-status -->",
+  generatedAt: "2026-03-16T01:00:00.000Z",
+  repo: "acme/repo-c",
+  branch: "main",
+  installed: true,
+  controlRepo: "acme/control-plane",
+  team: "platform",
+  policyPack: "default",
+  requiredChecks: ["fleet-status", "review"],
+  status: "healthy",
+  riskScore: 0,
+  latestReport: {
+    generatedAt: "2026-03-16T01:00:00.000Z",
+    status: "healthy",
+    unresolvedRegressions: 0,
+  },
+}, null, 2));
+
+const remediationClose = JSON.parse(runWithEnv([fleetScript, "remediate", "--manifest", remediationManifestPath, "--issue-repo", "acme/control-plane", "--json"], remediationFixtureRoot, remediationEnv)) as {
+  results?: Array<{ bucket?: string; action?: string }>;
+};
+assert.equal(remediationClose.results?.[0]?.bucket, "healthy");
+assert.equal(remediationClose.results?.[0]?.action, "issue-closed");
+
+const workflowText = fs.readFileSync(path.join(rootDir, ".github", "workflows", "fleet-remediate.yml"), "utf8");
+assert.match(workflowText, /fleet remediate/);
+assert.match(workflowText, /fleet\.anup4khandelwal\.json/);
+
+const driftedMemberPath = path.join(remediationRepoDir, ".codex-stack", "fleet-member.json");
+const driftedMember = JSON.parse(fs.readFileSync(driftedMemberPath, "utf8"));
+driftedMember.policyPack = "legacy";
+fs.writeFileSync(driftedMemberPath, `${JSON.stringify(driftedMember, null, 2)}\n`);
+const remediationPlan = JSON.parse(runWithEnv([fleetScript, "remediate", "--manifest", remediationManifestPath, "--dry-run", "--json"], remediationFixtureRoot, remediationEnv)) as {
+  results?: Array<{ bucket?: string; action?: string; notes?: string[] }>;
+};
+assert.equal(remediationPlan.results?.[0]?.bucket, "config-drift");
+assert.equal(remediationPlan.results?.[0]?.action, "planned");
+assert.match(String(remediationPlan.results?.[0]?.notes?.[0] || ""), /Would open rollout PR/);
+
 run([fleetScript, "dashboard", "--manifest", manifestPath, "--out", dashboardDir], fixtureRoot);
 assert.ok(fs.existsSync(path.join(dashboardDir, "index.html")));
 assert.ok(fs.existsSync(path.join(dashboardDir, "manifest.json")));
@@ -359,5 +580,6 @@ assert.deepEqual(remoteDrift.files.filter((item) => item.changed), []);
 
 fs.rmSync(fixtureRoot, { recursive: true, force: true });
 fs.rmSync(reviewOnlyFixtureRoot, { recursive: true, force: true });
+fs.rmSync(remediationFixtureRoot, { recursive: true, force: true });
 fs.rmSync(remoteFixtureRoot, { recursive: true, force: true });
 console.log("fleet spec passed");
