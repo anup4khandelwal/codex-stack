@@ -31,6 +31,8 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts mcp inspect --json
+bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago"
 bun src/cli.ts retro --since "7 days ago" --artifact-dir .codex-stack/retros
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -251,6 +253,20 @@ Notes:
 - Use `.codex-stack/fleet.anup4khandelwal.json` for the current checked-in rollout targeting `autopilot-multi-agent-loop`, `awesome-codex-skills`, and the profile repo.
 - The script writes `report.md`, `report.json`, `comment.md`, `screenshots.json`, and a visual review pack under `visual/index.html` and `visual/manifest.json`.
 - Deploy reports now include a single visual-risk score that combines path/device failures, console errors, snapshot drift, and stale baselines.
+
+## MCP workflow
+
+```bash
+bun src/cli.ts mcp inspect --json
+bun src/cli.ts mcp serve
+```
+
+Notes:
+
+- MCP v1 is `stdio` only.
+- MCP v1 is read-only plus dry-run only. Live `ship`, `issue`, `qa-decide`, `fleet sync --open-prs`, and `fleet remediate --open-prs` are intentionally not exposed.
+- Published QA resources come from local tracked files under `docs/qa/`, including the checked-in `release-readiness-demo` sample report.
+- The MCP server advertises tools for review, QA, preview, deploy, ship planning, fleet planning, retro summaries, and upgrade checks, plus resources for registered modes, skills, QA reports, and fleet metadata.
 
 ## Retro workflow
 

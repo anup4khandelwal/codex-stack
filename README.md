@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Twelve opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, and fleet rollout plus auto-remediation control.
+Thirteen opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, fleet rollout plus auto-remediation control, and local MCP interoperability.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -31,6 +31,7 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 | `upgrade` | Repo maintainer | Audits Bun, dependency drift, workflow action drift, and install health for codex-stack itself. |
 | `fleet` | Control plane operator | Pushes shared policy packs across repos, collects normalized health, and renders a GitHub-native rollout dashboard. |
+| `mcp` | Interop engineer | Exposes read-only codex-stack tools and evidence resources to MCP-capable clients over local stdio. |
 
 ## Default workflow
 
@@ -63,6 +64,7 @@ Use the repo in this order:
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, auto-remediation issues, and org-level dashboard rendering
+- Local stdio MCP server with read-only and dry-run wrappers for review, QA, preview, deploy, ship planning, fleet planning, retro, and upgrade workflows
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
@@ -93,6 +95,7 @@ bun src/cli.ts list
 - `retro`
 - `upgrade`
 - `fleet`
+- `mcp`
 
 If you want shell-level commands, link those wrappers into your `PATH`:
 
@@ -197,6 +200,8 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts mcp inspect --json
+bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
@@ -233,10 +238,45 @@ bun src/cli.ts qa-decide list --active-only
 bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --device desktop --flow landing-smoke --snapshot landing-home
 bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard
 bun run ship:dry
+bun run mcp -- inspect --json
 bun run retro
 bun run upgrade
 bun run upgrade:apply
 bun run weekly
+```
+
+## MCP interop
+
+`codex-stack` can expose its workflow layer to MCP-capable clients through a local `stdio` server.
+
+v1 policy:
+
+- `stdio` transport only
+- read-only plus dry-run tools only
+- no repo mutation, GitHub mutation, issue creation, PR creation, or baseline updates through MCP
+
+Useful commands:
+
+```bash
+bun src/cli.ts mcp inspect --json
+bun src/cli.ts mcp serve
+```
+
+Example client wiring:
+
+```json
+{
+  "mcpServers": {
+    "codex-stack": {
+      "command": "bun",
+      "args": [
+        "/Users/anup.khandelwal/Desktop/codex/codex/codex-stack/src/cli.ts",
+        "mcp",
+        "serve"
+      ]
+    }
+  }
+}
 ```
 
 ## Fleet rollout

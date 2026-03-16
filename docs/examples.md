@@ -154,3 +154,16 @@ bun src/cli.ts upgrade --json
 bun src/cli.ts upgrade --offline --apply
 bun src/cli.ts upgrade --markdown-out docs/daily-update-check.md --json-out docs/daily-update-check.json
 ```
+
+## MCP mode
+
+```text
+Use codex-stack-mcp to expose codex-stack workflows and published QA evidence to an MCP-capable client without giving it mutation access.
+```
+
+CLI:
+
+```bash
+bun src/cli.ts mcp inspect --json
+bun src/cli.ts mcp serve
+```
