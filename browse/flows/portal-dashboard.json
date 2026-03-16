@@ -1,20 +1,6 @@
 [
   {
-    "action": "assert-visible",
-    "selector": "h1"
-  },
-  {
-    "action": "assert-text",
-    "selector": "h1",
-    "value": "Daily portfolio health"
-  },
-  {
-    "action": "assert-count",
-    "selector": "[data-qa=metric-card]",
-    "count": 4
-  },
-  {
-    "action": "assert-visible",
-    "selector": "[data-signout]"
+    "action": "use-flow",
+    "name": "release-dashboard"
   }
 ]

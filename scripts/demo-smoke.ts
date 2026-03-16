@@ -44,23 +44,27 @@ function main(): void {
   const landing = read("index.html");
   const login = read("login.html");
   const dashboard = read("dashboard.html");
+  const changes = read("changes.html");
   const css = read("app.css");
   const js = read("app.js");
 
-  if (!landing.includes("Acme Customer Portal")) {
-    throw new Error("Landing page is missing the expected title.");
+  if (!landing.includes("Acme Release Readiness Demo")) {
+    throw new Error("Landing page is missing the release-readiness title.");
   }
-  if (!login.includes("Operator sign in")) {
-    throw new Error("Login page is missing the expected heading.");
+  if (!login.includes("Release operator sign in")) {
+    throw new Error("Login page is missing the release-operator heading.");
   }
-  if (!dashboard.includes("Daily portfolio health")) {
-    throw new Error("Dashboard page is missing the expected heading.");
+  if (!dashboard.includes("Release readiness dashboard")) {
+    throw new Error("Dashboard page is missing the release-readiness heading.");
   }
-  if (!css.includes(".metric-card")) {
-    throw new Error("Demo styles are missing the metric-card styling.");
+  if (!changes.includes("Change impact and preview evidence")) {
+    throw new Error("Changes page is missing the evidence heading.");
   }
-  if (!js.includes("codexStackDemoSession")) {
-    throw new Error("Demo client script is missing session persistence.");
+  if (!css.includes(".status-strip")) {
+    throw new Error("Demo styles are missing the release status strip styling.");
+  }
+  if (!js.includes("changesPath")) {
+    throw new Error("Demo client script is missing the changes route helper.");
   }
 
   console.log("demo sample app is healthy");

@@ -3,61 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Operations Dashboard</title>
+    <title>Release Readiness Dashboard</title>
     <link rel="stylesheet" href="/app.css" />
     <script src="/app.js" defer></script>
   </head>
-  <body class="portal-dashboard" data-page="dashboard">
+  <body class="release-dashboard" data-page="dashboard">
     <div class="page">
       <header class="dashboard-header">
         <div>
-          <div class="kicker">Customer operations</div>
-          <h1>Daily portfolio health</h1>
+          <div class="kicker">PR release readiness</div>
+          <h1>Release readiness dashboard</h1>
           <div class="inline-meta">
             <span>User: <strong data-user-email>loading</strong></span>
             <span>Role: <strong data-user-role>loading</strong></span>
             <span>Session started: <strong data-signed-in-at>loading</strong></span>
           </div>
         </div>
-        <button class="secondary" type="button" data-signout>Sign out</button>
+        <div class="header-actions">
+          <a class="button secondary" href="/changes" data-open-evidence>Open change impact</a>
+          <button class="secondary" type="button" data-signout>Sign out</button>
+        </div>
       </header>
 
-      <section class="metrics-grid">
-        <article class="metric-card" data-qa="metric-card">
-          <span>Open escalations</span>
-          <strong>8</strong>
+      <section class="status-strip panel">
+        <div>
+          <span class="label">Candidate</span>
+          <strong>feat/77-release-readiness-copy</strong>
+        </div>
+        <div>
+          <span class="label">Merge recommendation</span>
+          <strong data-merge-status>Hold merge</strong>
+        </div>
+        <div>
+          <span class="label">Target window</span>
+          <strong>Today, 17:00 UTC</strong>
+        </div>
+        <div>
+          <span class="label">Owner</span>
+          <strong>Growth onboarding</strong>
+        </div>
+      </section>
+
+      <section class="metrics-grid gates-grid">
+        <article class="metric-card gate-card" data-qa="gate-card">
+          <span>Structural review</span>
+          <strong>Pass</strong>
+          <p>No critical trust-boundary issues detected.</p>
         </article>
-        <article class="metric-card" data-qa="metric-card">
-          <span>Healthy renewals</span>
-          <strong>91%</strong>
+        <article class="metric-card gate-card" data-qa="gate-card">
+          <span>Preview verification</span>
+          <strong>Warning</strong>
+          <p>Mobile layout clipped in the trial-plan card.</p>
         </article>
-        <article class="metric-card" data-qa="metric-card">
-          <span>Playbooks automated</span>
-          <strong>34</strong>
+        <article class="metric-card gate-card" data-qa="gate-card">
+          <span>QA evidence</span>
+          <strong>2 open</strong>
+          <p>Visual drift plus stale baseline on mobile.</p>
         </article>
-        <article class="metric-card" data-qa="metric-card">
-          <span>Queues under SLA</span>
-          <strong>17/19</strong>
+        <article class="metric-card gate-card" data-qa="gate-card">
+          <span>Release confidence</span>
+          <strong>74%</strong>
+          <p>Safe to continue review, not yet safe to merge.</p>
         </article>
       </section>
 
       <section class="section-grid">
         <article class="panel stack-card">
-          <h2>Priority queue</h2>
+          <h2>Blocking findings</h2>
           <ul class="task-list">
-            <li><span>Expand renewal-risk scoring to LATAM accounts</span><span class="badge warn">Needs review</span></li>
-            <li><span>Confirm migration status for enterprise pilot workspace</span><span class="badge good">On track</span></li>
-            <li><span>Publish Q2 retention automation playbook</span><span class="badge good">Ready</span></li>
+            <li data-qa="finding-row"><span>Mobile CTA row wraps below the viewport fold on `/changes`.</span><span class="badge warn">Visual</span></li>
+            <li data-qa="finding-row"><span>Saved dashboard snapshot is stale after copy and badge changes.</span><span class="badge warn">Baseline</span></li>
+            <li data-qa="finding-row"><span>Desktop layout and sign-in flow remain stable.</span><span class="badge good">Pass</span></li>
           </ul>
         </article>
 
         <article class="panel stack-card">
-          <h2>Demo notes</h2>
+          <h2>Why this is a convincing demo</h2>
           <p>
-            This page is built to be friendly to `browse` assertions. It has a stable heading, stable metric-card count, and explicit session metadata.
+            The page is deliberately optimized for release-readiness storytelling: a merge recommendation, concrete blockers,
+            stable QA selectors, and an evidence link into the change-impact surface.
           </p>
           <p>
-            It also gives `review` and `ship` something realistic to talk about when you change copy, cards, or login behavior.
+            This is the screen where `qa`, `preview`, `deploy`, and `ship --dry-run` all feel like they are describing the same decision.
           </p>
         </article>
       </section>

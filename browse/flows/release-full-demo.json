@@ -1,0 +1,26 @@
+[
+  {
+    "action": "use-flow",
+    "name": "release-login"
+  },
+  {
+    "action": "use-flow",
+    "name": "release-dashboard"
+  },
+  {
+    "action": "click",
+    "selector": "[data-open-evidence]"
+  },
+  {
+    "action": "wait",
+    "loadState": "load"
+  },
+  {
+    "action": "assert-url",
+    "value": "/changes"
+  },
+  {
+    "action": "use-flow",
+    "name": "release-changes"
+  }
+]

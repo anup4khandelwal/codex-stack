@@ -34,7 +34,7 @@ Use codex-stack-qa to verify the staging dashboard flow, compare it to the saved
 CLI:
 
 ```bash
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 ```
 
@@ -59,7 +59,7 @@ Use codex-stack-deploy to verify the staging deploy across key pages and devices
 CLI:
 
 ```bash
-bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard
 ```
 
 ## Ship mode
@@ -76,7 +76,7 @@ bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device desktop --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device desktop --verify-device mobile --verify-console-errors --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
 ```
 
 ## Browse mode
@@ -84,8 +84,8 @@ bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-p
 ```bash
 bun run demo:start
 bun src/cli.ts browse flows
-bun src/cli.ts browse export-flow portal-full-demo /tmp/portal-full-demo.md
-bun src/cli.ts browse import-flow portal-copy /tmp/portal-full-demo.md
+bun src/cli.ts browse export-flow release-full-demo /tmp/release-full-demo.md
+bun src/cli.ts browse import-flow portal-copy /tmp/release-full-demo.md
 bun src/cli.ts browse export-session /tmp/portal-session.json --session friend-demo
 bun src/cli.ts browse import-session /tmp/portal-session.json --session friend-demo-copy
 bun src/cli.ts browse import-browser-cookies chrome --session friend-demo --profile Default
@@ -100,12 +100,13 @@ bun src/cli.ts browse click http://127.0.0.1:4173/checkout "role:button:Pay now"
 bun src/cli.ts browse mock http://127.0.0.1:4173/dashboard "**/api/profile" '{"status":503,"json":{"error":"offline"}}' --session friend-demo
 bun src/cli.ts browse download http://127.0.0.1:4173/reports "role:button:Export CSV" ./artifacts/report.csv --session friend-demo
 bun src/cli.ts browse assert-focused http://127.0.0.1:4173/login "input[name=email]" --session friend-demo
-bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-login --session friend-demo
-bun src/cli.ts browse run-flow http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
-bun src/cli.ts browse screenshot http://127.0.0.1:4173/dashboard /tmp/customer-portal-demo.png --session friend-demo
+bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard release-dashboard --session friend-demo
+bun src/cli.ts browse compare-snapshot http://127.0.0.1:4173/dashboard release-dashboard --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login release-login --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/dashboard release-dashboard --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/changes release-changes --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login release-full-demo --session friend-demo
+bun src/cli.ts browse screenshot http://127.0.0.1:4173/changes /tmp/release-readiness-demo.png --session friend-demo
 ```
 
 ## Authenticated preview verification
@@ -120,7 +121,7 @@ bun src/cli.ts preview \
   --sha abcdef1234567890 \
   --path /dashboard \
   --device desktop \
-  --flow portal-dashboard \
+  --flow release-dashboard \
   --session preview-auth \
   --session-bundle .codex-stack/private/preview-auth.json
 ```

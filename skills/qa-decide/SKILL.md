@@ -27,8 +27,8 @@ Keep visual, accessibility, and performance triage explicit and reviewable inste
 ## CLI
 
 ```bash
-bun src/cli.ts qa-decide approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123" --review-after 2026-03-22T00:00:00Z
-bun src/cli.ts qa-decide suppress --snapshot portal-dashboard --route /dashboard --device mobile --kind missing-selectors --selector "header .promo" --reason "Promo banner intentionally removed"
+bun src/cli.ts qa-decide approve --snapshot release-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123" --review-after 2026-03-22T00:00:00Z
+bun src/cli.ts qa-decide suppress --snapshot release-dashboard --route /dashboard --device mobile --kind missing-selectors --selector "header .promo" --reason "Promo banner intentionally removed"
 bun src/cli.ts qa-decide approve --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
 bun src/cli.ts qa-decide approve --category performance --kind performance-budget --route /dashboard --device desktop --metric lcp --reason "Temporary budget exception during analytics migration" --decision-type refresh-required
 bun src/cli.ts qa-decide list --active-only

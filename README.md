@@ -116,7 +116,7 @@ Because the command contracts are shared, those agents stay aligned on the same 
 
 ## Demo the sample app
 
-The repo includes a small demo app at `examples/customer-portal-demo/` so you can show a full workflow without a backend.
+The repo includes a release-readiness demo app at `examples/customer-portal-demo/`. It is built for technical evaluators who need to see whether `codex-stack` can support a real merge decision, not just automate a toy page.
 
 Start it:
 
@@ -124,20 +124,23 @@ Start it:
 bun run demo:start
 ```
 
-Then run a realistic sequence:
+Then run the core live sequence:
 
 ```bash
-bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
-bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard portal-dashboard --session friend-demo
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session friend-demo
-bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --publish-dir docs/qa/demo/deploy
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device desktop --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun src/cli.ts retro --since "30 days ago" --no-github
-bun run weekly
-bun run qa:site
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login release-full-demo --session friend-demo
+bun src/cli.ts browse snapshot http://127.0.0.1:4173/dashboard release-dashboard --session friend-demo
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session friend-demo
+bun src/cli.ts deploy --url http://127.0.0.1:4173 --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard --publish-dir docs/qa/demo/deploy
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device desktop --verify-device mobile --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
 ```
 
-The checked-in `portal-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
+What that sequence demonstrates:
+- authenticated browser automation
+- QA evidence tied to release confidence
+- page and device verification against a believable change-impact surface
+- shipping decisions backed by the same evidence
+
+The checked-in `release-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
 
 ## Issue to merge flow
 
@@ -172,21 +175,21 @@ Branch naming matters: when the branch follows `<prefix>/<issue-number>-slug`, `
 bun src/cli.ts list
 bun src/cli.ts show qa
 bun src/cli.ts review --json --base origin/main
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
-bun src/cli.ts qa https://preview.example.com/dashboard --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
-bun src/cli.ts qa-decide approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun src/cli.ts qa https://preview.example.com/dashboard --flow release-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
+bun src/cli.ts qa-decide approve --snapshot release-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
 bun src/cli.ts qa-decide suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
-bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow release-full-demo
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
-bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
-bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
-bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
-bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow release-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap"
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-console-errors --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
@@ -223,10 +226,10 @@ bun run smoke
 bun run demo:start
 bun run demo:smoke
 bun run review
-bun run qa -- http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo
+bun run qa -- http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo
 bun src/cli.ts qa-decide list --active-only
 bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --device desktop --flow landing-smoke --snapshot landing-home
-bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard
+bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard
 bun run ship:dry
 bun run retro
 bun run upgrade
@@ -332,7 +335,7 @@ bun src/cli.ts preview \
   --path /dashboard \
   --device desktop \
   --device mobile \
-  --flow portal-full-demo \
+  --flow release-full-demo \
   --a11y \
   --a11y-scope main \
   --perf \
@@ -353,7 +356,7 @@ bun src/cli.ts preview \
   --sha abcdef1234567890 \
   --path /dashboard \
   --device desktop \
-  --flow portal-dashboard \
+  --flow release-dashboard \
   --session preview-auth \
   --session-bundle .codex-stack/private/preview-auth.json
 ```
@@ -433,7 +436,7 @@ The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/
 
 - `CODEX_STACK_PREVIEW_PATHS=/login,/dashboard`
 - `CODEX_STACK_PREVIEW_DEVICES=desktop,mobile`
-- `CODEX_STACK_PREVIEW_FLOW=portal-full-demo`
+- `CODEX_STACK_PREVIEW_FLOW=release-full-demo`
 - `CODEX_STACK_PREVIEW_SNAPSHOT=<optional snapshot name>`
 - `CODEX_STACK_PREVIEW_WAIT_TIMEOUT=300`
 

@@ -10,22 +10,22 @@ bun src/cli.ts issue start --title "Add PR workflow" --label automation --prefix
 bun src/cli.ts issue branch 42 --title "Add PR workflow" --prefix feat
 bun src/cli.ts review
 bun src/cli.ts review --json
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
-bun src/cli.ts qa-decide approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun src/cli.ts qa-decide approve --snapshot release-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
 bun src/cli.ts qa-decide suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
 bun src/cli.ts qa-decide list --active-only
 bun src/cli.ts qa-decide prune-expired
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s
-bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard
-bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
+bun src/cli.ts deploy --url https://staging.example.com --path / --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard
+bun src/cli.ts deploy --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1
 bun src/cli.ts ship --dry-run
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-console-errors --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
+bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
@@ -62,7 +62,7 @@ bun src/cli.ts browse save-flow login-local '[{"action":"fill","selector":"input
 bun src/cli.ts browse save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"main"}]'
 bun src/cli.ts browse import-flow login-local ./docs/login-flow.md
 bun src/cli.ts browse import-repo-flow landing-smoke ./docs/landing-smoke.yaml
-bun src/cli.ts browse export-flow portal-full-demo ./docs/portal-full-demo.md
+bun src/cli.ts browse export-flow release-full-demo ./docs/release-full-demo.md
 bun src/cli.ts browse snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse compare-snapshot https://example.com marketing-home --session staging
 bun src/cli.ts browse login https://example.com/login login-local --session staging
@@ -80,7 +80,7 @@ bun src/cli.ts browse assert-editable https://example.com "textarea" --session s
 bun src/cli.ts browse assert-focused https://example.com "input[name=email]" --session staging
 bun src/cli.ts browse assert-text https://example.com "h1" "Example Domain" --session staging
 bun src/cli.ts browse assert-count https://example.com "a" 1 --session staging
-bun src/cli.ts browse run-flow http://127.0.0.1:4173/login portal-full-demo --session friend-demo
+bun src/cli.ts browse run-flow http://127.0.0.1:4173/login release-full-demo --session friend-demo
 bun src/cli.ts browse sessions
 bun src/cli.ts browse clear-session staging
 bun src/cli.ts browse screenshot https://example.com /tmp/example.png
@@ -119,8 +119,8 @@ bun scripts/ship-branch.ts --message "feat: ready for review" --push
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --reviewer octocat --team-reviewer acme/platform --assignee @me --project "Engineering Roadmap" --label release-candidate
-bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow portal-dashboard --verify-snapshot portal-dashboard
-bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-device mobile --verify-flow portal-dashboard --verify-snapshot portal-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
+bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-console-errors --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard
+bun scripts/ship-branch.ts --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-path /dashboard --verify-path /changes --verify-device mobile --verify-flow release-dashboard --verify-flow release-changes --verify-snapshot release-dashboard --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 bun scripts/ship-branch.ts --message "feat: ready for review" --push --pr --draft
 ```
 
@@ -143,11 +143,11 @@ Notes:
 ## QA workflow
 
 ```bash
-bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --json
-bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
+bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo --json
+bun scripts/qa-run.ts http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --json
+bun scripts/qa-run.ts http://127.0.0.1:4173/login --flow release-full-demo --snapshot release-login --session demo
 bun scripts/qa-run.ts https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
-bun scripts/qa-decide.ts approve --snapshot portal-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
+bun scripts/qa-decide.ts approve --snapshot release-dashboard --route /dashboard --device desktop --kind snapshot-drift --reason "Intentional redesign approved in PR #123"
 bun scripts/qa-decide.ts suppress --category accessibility --kind accessibility-rule --route /checkout --device desktop --rule color-contrast --reason "Vendor widget pending upstream fix" --expires-at 2026-03-29T00:00:00Z
 bun scripts/qa-decide.ts list --active-only
 bun scripts/qa-decide.ts prune-expired
@@ -187,10 +187,10 @@ Notes:
 ## Preview workflow
 
 ```bash
-bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /login --path /dashboard --device desktop --device mobile --flow release-full-demo --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
-bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
+bun scripts/preview-verify.ts --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device desktop --flow release-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --markdown-out preview.md --json-out preview.json --comment-out preview-comment.md
 bun scripts/preview-verify.ts --url https://preview.example.com --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --json
 ```
 
@@ -210,9 +210,9 @@ Notes:
 ## Deploy workflow
 
 ```bash
-bun scripts/deploy-verify.ts --url https://staging.example.com --path / --path /dashboard --device desktop --device mobile --flow portal-dashboard --snapshot portal-dashboard --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
-bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
-bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow portal-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
+bun scripts/deploy-verify.ts --url https://staging.example.com --path / --path /dashboard --path /changes --device desktop --device mobile --flow release-dashboard --flow release-changes --snapshot release-dashboard --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
+bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --markdown-out deploy.md --json-out deploy.json --comment-out deploy-comment.md
+bun scripts/deploy-verify.ts --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --session staging-auth --session-bundle .codex-stack/private/staging-auth.json --json
 bun scripts/deploy-verify.ts --url-template "https://preview-{pr}.example.com" --repo anup4khandelwal/codex-stack --pr 42 --branch feat/42-preview --sha abcdef1234567890 --path /dashboard --device mobile --strict-console --strict-http --json
 ```
 
@@ -299,7 +299,7 @@ bun browse/src/cli.ts flows
 bun browse/src/cli.ts save-flow smoke-login '[{"action":"fill","selector":"input[name=email]","value":"demo@example.com"},{"action":"fill","selector":"input[name=password]","value":"demo-pass"},{"action":"click","selector":"button[type=submit]"},{"action":"wait","selector":"text=Dashboard"}]'
 bun browse/src/cli.ts save-repo-flow landing-smoke '[{"action":"assert-visible","selector":"body"}]'
 bun browse/src/cli.ts import-flow smoke-login ./docs/smoke-login.yaml
-bun browse/src/cli.ts export-flow portal-full-demo ./docs/portal-full-demo.md
+bun browse/src/cli.ts export-flow release-full-demo ./docs/release-full-demo.md
 bun browse/src/cli.ts export-session ./tmp/staging-session.json --session staging
 bun browse/src/cli.ts import-session ./tmp/staging-session.json --session staging-copy
 bun browse/src/cli.ts import-browser-cookies chrome --session staging --profile Default
@@ -332,7 +332,7 @@ Notes:
 - Flow steps also support `{ "action": "route", ... }` and `{ "action": "clear-routes" }` so network controls can be armed before navigation.
 - Use `download` to save a file to disk and `assert-download` when the filename fragment itself is part of the assertion.
 - Flow steps also support `{ "action": "download", ... }` and `{ "action": "assert-download", ... }` for checked-in export flows.
-- Use `{"action":"use-flow","name":"portal-login"}` inside a checked-in flow to compose a larger QA sequence.
+- Use `{"action":"use-flow","name":"release-login"}` inside a checked-in flow to compose a larger QA sequence.
 - Flow import/export supports `.json`, `.yaml` / `.yml`, and Markdown files with fenced JSON or YAML blocks.
 - Leading `{"action":"clear-storage"}` steps run before navigation, which is useful for repeatable login flows on persistent sessions.
 - Snapshots are stored under `.codex-stack/browse/snapshots/`; comparison artifacts are stored under `.codex-stack/browse/artifacts/`.

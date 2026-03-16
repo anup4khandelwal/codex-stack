@@ -33,10 +33,10 @@ Run repeatable browser verification, collect evidence, and turn it into a ship/n
 ## CLI
 
 ```bash
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --session demo --json
-bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow portal-dashboard --snapshot portal-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
-bun src/cli.ts qa http://127.0.0.1:4173/login --flow portal-full-demo --snapshot portal-login --session demo
-bun src/cli.ts qa https://preview.example.com/dashboard --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/dashboard --flow release-dashboard --snapshot release-dashboard --a11y --a11y-scope main --perf --perf-budget lcp=2s --perf-budget cls=0.1 --session demo --json
+bun src/cli.ts qa http://127.0.0.1:4173/login --flow release-full-demo --snapshot release-login --session demo
+bun src/cli.ts qa https://preview.example.com/dashboard --flow release-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json --json
 bun src/cli.ts qa https://preview.example.com --mode diff-aware --base-ref origin/main --session preview --json
 bun scripts/qa-run.ts --fixture ./tmp/qa-fixture.json --json
 bun scripts/qa-trends.ts --dir .codex-stack/qa --json

@@ -30,9 +30,9 @@ Turn preview verification into a repeatable workflow that resolves the right pre
 ```bash
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --path /dashboard --device desktop --device mobile --flow landing-smoke --snapshot landing-home
 bun src/cli.ts preview --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow landing-smoke --snapshot landing-home --a11y --a11y-scope main --perf --perf-budget lcp=2s
-bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow portal-full-demo
-bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow portal-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
-bun src/cli.ts preview --url http://127.0.0.1:4173 --path /dashboard --device desktop --flow portal-dashboard --snapshot portal-dashboard --fixture /tmp/deploy-fixture.json --qa-fixture /tmp/qa-fixture.json --json
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /login --path /dashboard --device desktop --device mobile --flow release-full-demo
+bun src/cli.ts preview --url "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-42/" --pr 42 --branch feat/42-preview --sha abcdef123 --path /dashboard --device desktop --flow release-dashboard --session preview-auth --session-bundle .codex-stack/private/preview-auth.json
+bun src/cli.ts preview --url http://127.0.0.1:4173 --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard --fixture /tmp/deploy-fixture.json --qa-fixture /tmp/qa-fixture.json --json
 ```
 
 ## Output format
