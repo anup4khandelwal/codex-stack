@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Twelve opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, and fleet rollout control.
+Twelve opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, and fleet rollout plus auto-remediation control.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -62,7 +62,7 @@ Use the repo in this order:
 - Tracked QA evidence published under `docs/qa/<branch>/` during shipping so PR comments can link to real files
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
-- Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, and org-level dashboard rendering
+- Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, auto-remediation issues, and org-level dashboard rendering
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
 
@@ -191,6 +191,7 @@ bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
 bun src/cli.ts upgrade --offline --json
 bun src/cli.ts upgrade --offline --apply
@@ -252,6 +253,8 @@ Checked-in real control plane for this workspace:
 bun src/cli.ts fleet validate --manifest .codex-stack/fleet.anup4khandelwal.json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --dry-run --json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.anup4khandelwal.json --dry-run --json
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.anup4khandelwal.json --open-prs --issue-repo anup4khandelwal/codex-stack
 ```
 
 The control repo owns:
@@ -267,7 +270,7 @@ The control repo owns:
 - `.github/codex-stack/fleet-status.js`
 - `.github/workflows/codex-stack-fleet-status.yml`
 
-That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend.
+That workflow emits a normalized `codex-stack-fleet-status` artifact so `fleet collect` can aggregate repo health without inventing a new backend. `fleet remediate` builds on the same status feed to open rollout PRs for drifted repos and maintain one stable remediation issue per unhealthy repo in the control plane.
 
 Policy packs also define whether a repo is expected to publish a codex-stack QA/deploy report. `review-only` repos are considered healthy when they are installed and in sync even if they do not publish `docs/qa/` artifacts. Full rollout packs can still require a latest report before fleet health turns green.
 

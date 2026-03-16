@@ -110,6 +110,7 @@ run_ts scripts/upgrade-check.ts --offline --json >/tmp/codex-stack-upgrade.json
 run_ts scripts/upgrade-check.spec.ts >/tmp/codex-stack-upgrade-spec.log
 run_ts scripts/fleet.ts validate --manifest .codex-stack/fleet.example.json --json >/tmp/codex-stack-fleet-validate.json
 run_ts scripts/fleet.ts sync --manifest .codex-stack/fleet.example.json --dry-run --json >/tmp/codex-stack-fleet-sync.json
+run_ts scripts/fleet.ts remediate --manifest .codex-stack/fleet.example.json --dry-run --json >/tmp/codex-stack-fleet-remediate.json
 run_ts scripts/fleet.spec.ts >/tmp/codex-stack-fleet-spec.log
 run_ts scripts/preview-verify.spec.ts >/tmp/codex-stack-preview-spec.log
 run_ts scripts/weekly-digest.spec.ts >/tmp/codex-stack-weekly-spec.log
@@ -118,6 +119,7 @@ grep -q '"overallStatus"' /tmp/codex-stack-upgrade.json
 grep -q '"offline": true' /tmp/codex-stack-upgrade.json
 grep -q '"controlRepo"' /tmp/codex-stack-fleet-validate.json
 grep -q '"results"' /tmp/codex-stack-fleet-sync.json
+grep -q '"bucket"' /tmp/codex-stack-fleet-remediate.json
 run_ts scripts/retro-report.ts --since "1 day ago" --artifact-dir /tmp/codex-stack-retros --no-github >/tmp/codex-stack-retro.log
 run_ts scripts/weekly-digest.ts --since "1 day ago" --out /tmp/codex-stack-weekly.md --json-out /tmp/codex-stack-weekly.json --publish-dir /tmp/codex-stack-weekly-publish --no-github >/tmp/codex-stack-weekly.log
 mkdir -p .codex-stack/browse/snapshots .codex-stack/browse/artifacts

@@ -16,6 +16,7 @@ Operate codex-stack as a multi-repo platform instead of a single-repo tool.
 3. Sync generated fleet files locally or open rollout PRs remotely.
 4. Collect normalized fleet-status reports from target repos.
 5. Render a dashboard that ranks rollout health and unresolved risks.
+6. Run remediation to open rollout PRs for drift and stable issues for runtime problems.
 
 ## CLI
 
@@ -24,6 +25,7 @@ bun src/cli.ts fleet validate --manifest .codex-stack/fleet.example.json
 bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run --json
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
 ```
 
 ## Output format
@@ -32,6 +34,7 @@ bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out 
 - `sync`: deterministic rollout plan or write/PR results per repo
 - `collect`: normalized multi-repo health report with ranked risks
 - `dashboard`: static HTML + JSON summary for Pages or local review
+- `remediate`: planned or executed rollout PR / remediation issue actions per repo
 
 ## Guardrails
 

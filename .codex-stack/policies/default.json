@@ -20,6 +20,12 @@
     "staleAfterDays": 14,
     "expiringSoonDays": 7
   },
+  "remediation": {
+    "autoOpenPrs": true,
+    "issueOnWarning": true,
+    "issueOnCritical": true,
+    "closeIssueWhenHealthy": true
+  },
   "status": {
     "requiresLatestReport": true
   },

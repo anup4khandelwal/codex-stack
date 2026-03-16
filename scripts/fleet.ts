@@ -23,13 +23,15 @@ const ALLOWED_CHECKS = new Set(["review", "qa", "preview", "deploy", "ship", "fl
 type FleetCheck = "review" | "qa" | "preview" | "deploy" | "ship" | "fleet-status";
 type DriftState = "healthy" | "missing" | "outdated" | "diverged";
 type RepoHealth = "healthy" | "warning" | "critical" | "missing" | "unknown";
+type RemediationBucket = "healthy" | "config-drift" | "missing-install" | "runtime-warning" | "runtime-critical";
+type RemediationState = "none" | "rollout-pr-open" | "issue-open" | "healthy";
 
 interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
   allowFailure?: boolean;
 }
 
 interface ParsedArgs {
-  command: "validate" | "sync" | "collect" | "dashboard";
+  command: "validate" | "sync" | "collect" | "dashboard" | "remediate";
   manifestPath: string;
   json: boolean;
   jsonOut: string;
@@ -38,6 +40,7 @@ interface ParsedArgs {
   dryRun: boolean;
   openPrs: boolean;
   branchName: string;
+  issueRepo: string;
 }
 
 interface FleetManifest {
@@ -92,6 +95,13 @@ interface FleetDecisionConfig {
   expiringSoonDays?: number;
 }
 
+interface FleetRemediationConfig {
+  autoOpenPrs?: boolean;
+  issueOnWarning?: boolean;
+  issueOnCritical?: boolean;
+  closeIssueWhenHealthy?: boolean;
+}
+
 interface FleetPolicyPack {
   name?: string;
   description?: string;
@@ -99,6 +109,7 @@ interface FleetPolicyPack {
   qa?: FleetQaConfig;
   preview?: FleetPreviewConfig;
   decisions?: FleetDecisionConfig;
+  remediation?: FleetRemediationConfig;
   status?: {
     requiresLatestReport?: boolean;
   };
@@ -134,6 +145,12 @@ interface FleetMemberConfig {
   qa: FleetQaConfig;
   preview: FleetPreviewConfig;
   decisions: FleetDecisionConfig;
+  remediation: {
+    autoOpenPrs: boolean;
+    issueOnWarning: boolean;
+    issueOnCritical: boolean;
+    closeIssueWhenHealthy: boolean;
+  };
   status: {
     requiresLatestReport: boolean;
   };
@@ -223,6 +240,11 @@ interface CollectedFleetRepo {
   requiredChecks: string[];
   latestReport: FleetStatusReport["latestReport"];
   source: "local-status" | "local" | "artifact" | "repo-files" | "missing";
+  remediationPolicy: FleetMemberConfig["remediation"];
+  remediationState: RemediationState;
+  remediationIssueUrl: string;
+  remediationPrUrl: string;
+  lastRemediationAt: string;
 }
 
 interface FleetCollectReport {
@@ -238,9 +260,60 @@ interface FleetCollectReport {
     missing: number;
     unknown: number;
     drifted: number;
+    remediationIssues: number;
+    remediationPrs: number;
   };
   repos: CollectedFleetRepo[];
   topRisks: CollectedFleetRepo[];
+}
+
+interface FleetRolloutPr {
+  number: number;
+  url: string;
+  updatedAt: string;
+}
+
+interface FleetRemediationIssue {
+  number: number;
+  url: string;
+  updatedAt: string;
+  title: string;
+  body: string;
+  state: "OPEN" | "CLOSED";
+}
+
+interface FleetRemediationRepoResult {
+  repo: string;
+  status: RepoHealth;
+  drift: DriftState;
+  riskScore: number;
+  bucket: RemediationBucket;
+  action: "planned" | "opened-pr" | "issue-opened" | "issue-updated" | "issue-closed" | "skipped" | "noop";
+  remediationState: RemediationState;
+  remediationPrUrl: string;
+  remediationIssueUrl: string;
+  notes: string[];
+}
+
+interface FleetRemediationReport {
+  marker: string;
+  generatedAt: string;
+  controlRepo: string;
+  manifestPath: string;
+  issueRepo: string;
+  counts: {
+    repos: number;
+    healthy: number;
+    configDrift: number;
+    missingInstall: number;
+    runtimeWarning: number;
+    runtimeCritical: number;
+    openedPrs: number;
+    openedIssues: number;
+    updatedIssues: number;
+    closedIssues: number;
+  };
+  results: FleetRemediationRepoResult[];
 }
 
 function normalizeMemberConfigText(text: string): string {
@@ -262,6 +335,7 @@ Usage:
   bun scripts/fleet.ts sync --manifest <path> [--dry-run] [--open-prs] [--branch-name <name>] [--json] [--json-out <path>] [--markdown-out <path>]
   bun scripts/fleet.ts collect --manifest <path> [--json] [--json-out <path>] [--markdown-out <path>]
   bun scripts/fleet.ts dashboard --manifest <path> --out <dir> [--json] [--json-out <path>]
+  bun scripts/fleet.ts remediate --manifest <path> [--dry-run] [--open-prs] [--issue-repo <owner/repo>] [--json] [--json-out <path>] [--markdown-out <path>]
 `);
   process.exit(0);
 }
@@ -322,6 +396,10 @@ function runArgs(program: string, args: string[], cwd = process.cwd()): string {
   return clean(result.stdout || "");
 }
 
+function ghBinary(): string {
+  return clean(process.env.CODEX_STACK_TEST_GH_BIN || "") || "gh";
+}
+
 function runArgsRaw(program: string, args: string[], cwd = process.cwd()): string {
   const result = spawnSync(program, args, {
     cwd,
@@ -372,7 +450,7 @@ function isGitRepoRoot(repoPath: string): boolean {
 
 function parseArgs(argv: string[]): ParsedArgs {
   const command = clean(argv[0]) as ParsedArgs["command"];
-  if (!command || !(command === "validate" || command === "sync" || command === "collect" || command === "dashboard")) usage();
+  if (!command || !(command === "validate" || command === "sync" || command === "collect" || command === "dashboard" || command === "remediate")) usage();
 
   const out: ParsedArgs = {
     command,
@@ -384,6 +462,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     dryRun: false,
     openPrs: false,
     branchName: DEFAULT_SYNC_BRANCH,
+    issueRepo: "",
   };
 
   for (let i = 1; i < argv.length; i += 1) {
@@ -408,6 +487,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       out.openPrs = true;
     } else if (arg === "--branch-name") {
       out.branchName = clean(argv[i + 1] || DEFAULT_SYNC_BRANCH) || DEFAULT_SYNC_BRANCH;
+      i += 1;
+    } else if (arg === "--issue-repo") {
+      out.issueRepo = clean(argv[i + 1] || "");
       i += 1;
     } else if (arg === "--help" || arg === "-h") {
       usage();
@@ -461,6 +543,16 @@ function normalizeDecisionConfig(value: unknown): FleetDecisionConfig {
   };
 }
 
+function normalizeRemediationConfig(value: unknown): FleetRemediationConfig {
+  const input = asObject<FleetRemediationConfig>(value);
+  return {
+    autoOpenPrs: input.autoOpenPrs !== false,
+    issueOnWarning: input.issueOnWarning !== false,
+    issueOnCritical: input.issueOnCritical !== false,
+    closeIssueWhenHealthy: input.closeIssueWhenHealthy !== false,
+  };
+}
+
 function loadFleetContext(manifestPath: string): FleetContext {
   if (!fs.existsSync(manifestPath)) throw new Error(`Fleet manifest not found: ${manifestPath}`);
   const manifest = readJsonFile<FleetManifest>(manifestPath);
@@ -502,6 +594,7 @@ function loadPolicyPack(context: FleetContext, name: string): FleetPolicyPack {
     qa: normalizeQaConfig(raw.qa),
     preview: normalizePreviewConfig(raw.preview),
     decisions: normalizeDecisionConfig(raw.decisions),
+    remediation: normalizeRemediationConfig(raw.remediation),
     status: {
       requiresLatestReport: raw.status?.requiresLatestReport !== false,
     },
@@ -545,6 +638,15 @@ function mergeDecisionConfig(base: FleetDecisionConfig, extra: FleetDecisionConf
   };
 }
 
+function mergeRemediationConfig(base: FleetRemediationConfig, extra: FleetRemediationConfig): FleetMemberConfig["remediation"] {
+  return {
+    autoOpenPrs: extra.autoOpenPrs ?? base.autoOpenPrs ?? true,
+    issueOnWarning: extra.issueOnWarning ?? base.issueOnWarning ?? true,
+    issueOnCritical: extra.issueOnCritical ?? base.issueOnCritical ?? true,
+    closeIssueWhenHealthy: extra.closeIssueWhenHealthy ?? base.closeIssueWhenHealthy ?? true,
+  };
+}
+
 function compileMemberConfig(context: FleetContext, target: FleetTarget): FleetMemberConfig {
   const repo = clean(target.repo);
   if (!repo || !repo.includes("/")) throw new Error(`Invalid repo entry: ${JSON.stringify(target.repo)}`);
@@ -557,6 +659,7 @@ function compileMemberConfig(context: FleetContext, target: FleetTarget): FleetM
   const qa = mergeQaConfig(policyPack.qa || {}, normalizeQaConfig(target.qa));
   const preview = mergePreviewConfig(policyPack.preview || {}, normalizePreviewConfig(target.preview));
   const decisions = mergeDecisionConfig(policyPack.decisions || {}, normalizeDecisionConfig(target.decisions));
+  const remediation = mergeRemediationConfig(policyPack.remediation || {}, {});
   const previewUrlTemplate = clean(target.previewUrlTemplate || preview.urlTemplate || "");
   const branch = clean(target.branch || "") || clean(context.manifest.defaultBranch || "") || DEFAULT_BRANCH;
   return {
@@ -575,6 +678,7 @@ function compileMemberConfig(context: FleetContext, target: FleetTarget): FleetM
     qa,
     preview,
     decisions,
+    remediation,
     status: {
       requiresLatestReport: policyPack.status?.requiresLatestReport !== false,
     },
@@ -643,8 +747,7 @@ function readLocalFile(root: string, relativePath: string): string {
 function readRemoteFile(repo: string, relativePath: string, ref: string): string {
   const endpoint = `repos/${repo}/contents/${relativePath}?ref=${encodeURIComponent(ref)}`;
   try {
-    const ghBin = clean(process.env.CODEX_STACK_TEST_GH_BIN || "") || "gh";
-    return runArgsRaw(ghBin, ["api", "-H", "Accept: application/vnd.github.raw", endpoint], process.cwd());
+    return runArgsRaw(ghBinary(), ["api", "-H", "Accept: application/vnd.github.raw", endpoint], process.cwd());
   } catch {
     return "";
   }
@@ -793,11 +896,32 @@ function checkoutBranch(repoDir: string, branchName: string, baseRef: string): v
   runArgs("git", ["checkout", "-B", branchName, `origin/${baseRef}`], repoDir);
 }
 
-function maybeCreateOrUpdatePr(repo: string, branchName: string, baseRef: string): string {
-  const currentOwner = clean(runArgs("gh", ["api", "user", "--jq", ".login"], process.cwd()));
-  const existing = runArgs("gh", ["pr", "list", "--repo", repo, "--head", `${currentOwner}:${branchName}`, "--json", "number,url", "--jq", ".[] | .url"], process.cwd());
-  if (existing) return clean(existing.split(/\r?\n/)[0]);
-  return runArgs("gh", [
+function currentGitHubLogin(): string {
+  return clean(runArgs(ghBinary(), ["api", "user", "--jq", ".login"], process.cwd()));
+}
+
+function findOpenRolloutPr(repo: string, branchName: string, owner = currentGitHubLogin()): FleetRolloutPr | null {
+  if (!repo || !branchName || !owner) return null;
+  try {
+    const json = runArgs(ghBinary(), ["pr", "list", "--repo", repo, "--head", `${owner}:${branchName}`, "--state", "open", "--json", "number,url,updatedAt"], process.cwd());
+    const items = JSON.parse(json) as Array<{ number?: number; url?: string; updatedAt?: string }>;
+    const match = items[0];
+    if (!match?.url) return null;
+    return {
+      number: Number(match.number || 0),
+      url: clean(match.url || ""),
+      updatedAt: clean(match.updatedAt || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function maybeCreateOrUpdatePr(repo: string, branchName: string, baseRef: string): FleetRolloutPr {
+  const currentOwner = currentGitHubLogin();
+  const existing = findOpenRolloutPr(repo, branchName, currentOwner);
+  if (existing) return existing;
+  const prUrl = runArgs(ghBinary(), [
     "pr",
     "create",
     "--repo",
@@ -811,13 +935,150 @@ function maybeCreateOrUpdatePr(repo: string, branchName: string, baseRef: string
     "--body",
     `Sync codex-stack fleet rollout files.\n\n- refresh \`${FLEET_MEMBER_PATH}\`\n- refresh \`${FLEET_STATUS_SCRIPT_PATH}\`\n- refresh \`${FLEET_STATUS_WORKFLOW_PATH}\``,
   ], process.cwd());
+  return {
+    number: 0,
+    url: clean(prUrl),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function remediationIssueTitle(repo: string): string {
+  return `Fleet remediation: ${repo}`;
+}
+
+function remediationIssueMarker(repo: string): string {
+  return `<!-- codex-stack:fleet-remediation repo=${repo} -->`;
+}
+
+function parseIssueJson(jsonText: string): FleetRemediationIssue | null {
+  try {
+    const parsed = JSON.parse(jsonText) as Array<{ number?: number; url?: string; updatedAt?: string; title?: string; body?: string; state?: "OPEN" | "CLOSED" }>;
+    const issue = parsed[0];
+    if (!issue?.url) return null;
+    return {
+      number: Number(issue.number || 0),
+      url: clean(issue.url || ""),
+      updatedAt: clean(issue.updatedAt || ""),
+      title: clean(issue.title || ""),
+      body: String(issue.body || ""),
+      state: issue.state || "OPEN",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function findRemediationIssue(issueRepo: string, repo: string, state: "open" | "closed" | "all" = "open"): FleetRemediationIssue | null {
+  if (!issueRepo || !repo) return null;
+  try {
+    const json = runArgs(ghBinary(), [
+      "issue",
+      "list",
+      "--repo",
+      issueRepo,
+      "--state",
+      state,
+      "--search",
+      remediationIssueTitle(repo),
+      "--json",
+      "number,url,updatedAt,title,body,state",
+    ], process.cwd());
+    const issues = JSON.parse(json) as Array<{ number?: number; url?: string; updatedAt?: string; title?: string; body?: string; state?: "OPEN" | "CLOSED" }>;
+    const match = issues.find((issue) => clean(issue.title || "") === remediationIssueTitle(repo) || String(issue.body || "").includes(remediationIssueMarker(repo)));
+    if (!match?.url) return null;
+    return {
+      number: Number(match.number || 0),
+      url: clean(match.url || ""),
+      updatedAt: clean(match.updatedAt || ""),
+      title: clean(match.title || ""),
+      body: String(match.body || ""),
+      state: match.state || "OPEN",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildRemediationIssueBody(collected: CollectedFleetRepo, rolloutPrUrl: string): string {
+  const lines = [
+    remediationIssueMarker(collected.repo),
+    `# Fleet remediation: ${collected.repo}`,
+    "",
+    `- Repo: ${collected.repo}`,
+    `- Status: ${collected.status}`,
+    `- Drift: ${collected.drift}`,
+    `- Risk score: ${collected.riskScore}`,
+    `- Policy pack: ${collected.policyPack}`,
+    `- Team: ${collected.team || "unassigned"}`,
+    `- Last evaluated: ${new Date().toISOString()}`,
+    `- Evidence source: ${collected.source}`,
+  ];
+  if (rolloutPrUrl) lines.push(`- Rollout PR: ${rolloutPrUrl}`);
+  if (collected.latestReport?.reportPath) lines.push(`- Latest report path: ${collected.latestReport.reportPath}`);
+  if (collected.latestReport?.status) lines.push(`- Latest QA status: ${collected.latestReport.status}`);
+  if (Number.isFinite(Number(collected.latestReport?.unresolvedRegressions))) lines.push(`- Unresolved regressions: ${Number(collected.latestReport?.unresolvedRegressions || 0)}`);
+  if (Number.isFinite(Number(collected.latestReport?.expiredDecisions))) lines.push(`- Expired approvals: ${Number(collected.latestReport?.expiredDecisions || 0)}`);
+  if (Number.isFinite(Number(collected.latestReport?.visualRiskScore))) lines.push(`- Visual risk score: ${Number(collected.latestReport?.visualRiskScore || 0)}`);
+  if (Number.isFinite(Number(collected.latestReport?.accessibilityViolations))) lines.push(`- Accessibility violations: ${Number(collected.latestReport?.accessibilityViolations || 0)}`);
+  if (Number.isFinite(Number(collected.latestReport?.performanceBudgetViolations))) lines.push(`- Performance budget violations: ${Number(collected.latestReport?.performanceBudgetViolations || 0)}`);
+  return `${lines.join("\n")}\n`;
+}
+
+function ensureRemediationLabel(issueRepo: string): void {
+  try {
+    runArgs(ghBinary(), ["label", "create", "fleet-remediation", "--repo", issueRepo, "--color", "B60205", "--description", "codex-stack fleet remediation tracking"], process.cwd());
+  } catch {
+    // Ignore if the label already exists or creation is unavailable.
+  }
+}
+
+function createOrUpdateRemediationIssue(issueRepo: string, collected: CollectedFleetRepo, rolloutPrUrl: string): FleetRemediationIssue | null {
+  if (!issueRepo) return null;
+  ensureRemediationLabel(issueRepo);
+  const title = remediationIssueTitle(collected.repo);
+  const body = buildRemediationIssueBody(collected, rolloutPrUrl);
+  const existing = findRemediationIssue(issueRepo, collected.repo, "open");
+  if (existing) {
+    runArgs(ghBinary(), ["issue", "edit", String(existing.number), "--repo", issueRepo, "--title", title, "--body", body, "--add-label", "fleet-remediation"], process.cwd());
+    return findRemediationIssue(issueRepo, collected.repo, "open") || {
+      ...existing,
+      body,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const created = runArgs(ghBinary(), ["issue", "create", "--repo", issueRepo, "--title", title, "--label", "fleet-remediation", "--body", body], process.cwd());
+  const match = clean(created).match(/https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+  if (match) {
+    return {
+      number: Number(match[1]),
+      url: clean(created),
+      updatedAt: new Date().toISOString(),
+      title,
+      body,
+      state: "OPEN",
+    };
+  }
+  return findRemediationIssue(issueRepo, collected.repo, "open");
+}
+
+function closeRemediationIssue(issueRepo: string, repo: string): FleetRemediationIssue | null {
+  const existing = findRemediationIssue(issueRepo, repo, "open");
+  if (!existing) return null;
+  const closedBody = `${existing.body.trim()}\n\nResolved by fleet remediation on ${new Date().toISOString()}.\n`;
+  runArgs(ghBinary(), ["issue", "close", String(existing.number), "--repo", issueRepo, "--comment", "Repository returned to healthy fleet status."], process.cwd());
+  return {
+    ...existing,
+    body: closedBody,
+    state: "CLOSED",
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function openPrSync(plan: SyncPlan, syncBranch: string): SyncResult {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-stack-fleet-sync-"));
   const repoDir = path.join(tempDir, plan.repo.replace(/\//g, "-"));
   try {
-    runArgs("gh", ["repo", "clone", plan.repo, repoDir, "--", "-q"], process.cwd());
+    runArgs(ghBinary(), ["repo", "clone", plan.repo, repoDir, "--", "-q"], process.cwd());
     checkoutBranch(repoDir, syncBranch, plan.branch);
     const filesChanged = writeGeneratedFiles(repoDir, plan);
     if (!filesChanged.length) {
@@ -834,14 +1095,14 @@ function openPrSync(plan: SyncPlan, syncBranch: string): SyncResult {
     runArgs("git", ["add", FLEET_MEMBER_PATH, FLEET_STATUS_SCRIPT_PATH, FLEET_STATUS_WORKFLOW_PATH], repoDir);
     runArgs("git", ["commit", "-m", "chore: sync codex-stack fleet rollout"], repoDir);
     runArgs("git", ["push", "-u", "origin", syncBranch, "--force-with-lease"], repoDir);
-    const prUrl = maybeCreateOrUpdatePr(plan.repo, syncBranch, plan.branch);
+    const pr = maybeCreateOrUpdatePr(plan.repo, syncBranch, plan.branch);
     return {
       repo: plan.repo,
       drift: plan.drift,
       action: "opened-pr",
       branch: plan.branch,
       localPath: repoDir,
-      prUrl,
+      prUrl: pr.url,
       filesChanged,
     };
   } finally {
@@ -939,6 +1200,14 @@ function computeCollectedStatus(installed: boolean, drift: DriftState, latestRep
   return { status: "healthy", riskScore };
 }
 
+function classifyRemediationBucket(repo: CollectedFleetRepo): RemediationBucket {
+  if (!repo.installed) return "missing-install";
+  if (repo.drift !== "healthy") return "config-drift";
+  if (repo.status === "critical") return "runtime-critical";
+  if (repo.status === "warning") return "runtime-warning";
+  return "healthy";
+}
+
 function readRemoteMemberConfig(repo: string, branch: string): FleetMemberConfig | null {
   const raw = readRemoteFile(repo, FLEET_MEMBER_PATH, branch);
   if (!raw) return null;
@@ -979,6 +1248,9 @@ function downloadLatestArtifactStatus(repo: string, branch: string, artifactName
 
 function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleetRepo {
   const plan = planSync(context, target);
+  const controlOwner = clean(context.controlRepo.split("/")[0] || "");
+  const rolloutPr = plan.repo ? findOpenRolloutPr(plan.repo, context.syncBranch, controlOwner || currentGitHubLogin()) : null;
+  const remediationIssue = findRemediationIssue(context.controlRepo, plan.repo, "open");
   if (plan.localPath && plan.localRepoDetected) {
     const member = readLocalMemberConfig(plan.localPath);
     const localStatus = readLocalFleetStatus(plan.localPath);
@@ -1001,6 +1273,11 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
       requiredChecks: member?.requiredChecks || plan.memberConfig.requiredChecks,
       latestReport,
       source: localStatus ? "local-status" : latestReport ? "local" : installed ? "repo-files" : "missing",
+      remediationPolicy: member?.remediation || plan.memberConfig.remediation,
+      remediationState: remediationIssue ? "issue-open" : rolloutPr ? "rollout-pr-open" : status === "healthy" ? "healthy" : "none",
+      remediationIssueUrl: remediationIssue?.url || "",
+      remediationPrUrl: rolloutPr?.url || "",
+      lastRemediationAt: remediationIssue?.updatedAt || rolloutPr?.updatedAt || "",
     };
   }
 
@@ -1022,6 +1299,11 @@ function collectRepo(context: FleetContext, target: FleetTarget): CollectedFleet
     requiredChecks: asArray<string>(member?.requiredChecks || plan.memberConfig.requiredChecks || []),
     latestReport,
     source: statusReport ? "artifact" : member ? "repo-files" : "missing",
+    remediationPolicy: member?.remediation || plan.memberConfig.remediation,
+    remediationState: remediationIssue ? "issue-open" : rolloutPr ? "rollout-pr-open" : (statusReport?.status || computed.status) === "healthy" ? "healthy" : "none",
+    remediationIssueUrl: remediationIssue?.url || "",
+    remediationPrUrl: rolloutPr?.url || "",
+    lastRemediationAt: remediationIssue?.updatedAt || rolloutPr?.updatedAt || "",
   };
 }
 
@@ -1036,6 +1318,8 @@ function collectFleet(context: FleetContext): FleetCollectReport {
     missing: repos.filter((repo) => repo.status === "missing").length,
     unknown: repos.filter((repo) => repo.status === "unknown").length,
     drifted: repos.filter((repo) => repo.drift !== "healthy").length,
+    remediationIssues: repos.filter((repo) => repo.remediationState === "issue-open").length,
+    remediationPrs: repos.filter((repo) => repo.remediationState === "rollout-pr-open").length,
   };
   return {
     marker: "<!-- codex-stack:fleet-report -->",
@@ -1060,10 +1344,12 @@ function renderFleetMarkdown(report: FleetCollectReport): string {
     `- Critical: ${report.counts.critical}`,
     `- Missing: ${report.counts.missing}`,
     `- Drifted: ${report.counts.drifted}`,
+    `- Open remediation issues: ${report.counts.remediationIssues}`,
+    `- Open rollout PRs: ${report.counts.remediationPrs}`,
     "",
     "## Top risks",
     "",
-    ...report.topRisks.map((repo) => `- ${repo.repo}: ${repo.status.toUpperCase()} (${repo.riskScore}/100) • drift=${repo.drift} • unresolved=${repo.latestReport?.unresolvedRegressions ?? 0}`),
+    ...report.topRisks.map((repo) => `- ${repo.repo}: ${repo.status.toUpperCase()} (${repo.riskScore}/100) • drift=${repo.drift} • unresolved=${repo.latestReport?.unresolvedRegressions ?? 0} • remediation=${repo.remediationState}`),
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -1088,6 +1374,7 @@ function renderFleetDashboard(report: FleetCollectReport, outDir: string): void 
         <td>${escapeHtml(repo.latestReport?.status || "missing")}</td>
         <td>${escapeHtml(repo.latestReport?.unresolvedRegressions ?? 0)}</td>
         <td>${escapeHtml(repo.latestReport?.visualRiskScore ?? "-")}</td>
+        <td>${repo.remediationIssueUrl ? `<a href="${escapeHtml(repo.remediationIssueUrl)}">issue</a>` : repo.remediationPrUrl ? `<a href="${escapeHtml(repo.remediationPrUrl)}">rollout PR</a>` : escapeHtml(repo.remediationState)}</td>
       </tr>`).join("");
   const html = `<!doctype html>
 <html lang="en">
@@ -1119,16 +1406,18 @@ function renderFleetDashboard(report: FleetCollectReport, outDir: string): void 
     <div class="card"><span>Critical</span><strong>${report.counts.critical}</strong></div>
     <div class="card"><span>Missing</span><strong>${report.counts.missing}</strong></div>
     <div class="card"><span>Drifted</span><strong>${report.counts.drifted}</strong></div>
+    <div class="card"><span>Open issues</span><strong>${report.counts.remediationIssues}</strong></div>
+    <div class="card"><span>Open rollout PRs</span><strong>${report.counts.remediationPrs}</strong></div>
   </div>
   <section class="top-risks">
     <h2>Top risks</h2>
-    <ul>${report.topRisks.map((repo) => `<li><strong><a href="${escapeHtml(repo.repoUrl)}">${escapeHtml(repo.repo)}</a></strong> — ${escapeHtml(repo.status.toUpperCase())} (${escapeHtml(repo.riskScore)}/100), drift=${escapeHtml(repo.drift)}, unresolved=${escapeHtml(repo.latestReport?.unresolvedRegressions ?? 0)}</li>`).join("")}</ul>
+    <ul>${report.topRisks.map((repo) => `<li><strong><a href="${escapeHtml(repo.repoUrl)}">${escapeHtml(repo.repo)}</a></strong> — ${escapeHtml(repo.status.toUpperCase())} (${escapeHtml(repo.riskScore)}/100), drift=${escapeHtml(repo.drift)}, unresolved=${escapeHtml(repo.latestReport?.unresolvedRegressions ?? 0)}, remediation=${escapeHtml(repo.remediationState)}</li>`).join("")}</ul>
   </section>
   <section>
     <h2>Repo status</h2>
     <table>
       <thead>
-        <tr><th>Repo</th><th>Status</th><th>Drift</th><th>Risk</th><th>Latest QA</th><th>Unresolved</th><th>Visual risk</th></tr>
+        <tr><th>Repo</th><th>Status</th><th>Drift</th><th>Risk</th><th>Latest QA</th><th>Unresolved</th><th>Visual risk</th><th>Remediation</th></tr>
       </thead>
       <tbody>${repoRows}</tbody>
     </table>
@@ -1170,6 +1459,152 @@ function renderSyncMarkdown(results: SyncResult[]): string {
     lines.push(`- ${result.repo}: ${result.action} (${result.drift})${result.prUrl ? ` • ${result.prUrl}` : ""}${result.notes?.length ? ` • ${result.notes.join("; ")}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+function renderRemediationMarkdown(report: FleetRemediationReport): string {
+  const lines = [
+    "# codex-stack fleet remediation",
+    "",
+    `- Control repo: ${report.controlRepo}`,
+    `- Issue repo: ${report.issueRepo}`,
+    `- Generated: ${report.generatedAt}`,
+    `- Repos: ${report.counts.repos}`,
+    `- Healthy: ${report.counts.healthy}`,
+    `- Config drift: ${report.counts.configDrift}`,
+    `- Missing install: ${report.counts.missingInstall}`,
+    `- Runtime warning: ${report.counts.runtimeWarning}`,
+    `- Runtime critical: ${report.counts.runtimeCritical}`,
+    `- Opened rollout PRs: ${report.counts.openedPrs}`,
+    `- Opened issues: ${report.counts.openedIssues}`,
+    `- Updated issues: ${report.counts.updatedIssues}`,
+    `- Closed issues: ${report.counts.closedIssues}`,
+    "",
+    "## Results",
+    "",
+    ...report.results.map((result) => `- ${result.repo}: ${result.bucket} -> ${result.action}${result.remediationPrUrl ? ` • PR ${result.remediationPrUrl}` : ""}${result.remediationIssueUrl ? ` • Issue ${result.remediationIssueUrl}` : ""}${result.notes.length ? ` • ${result.notes.join("; ")}` : ""}`),
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+function handleRemediate(args: ParsedArgs, context: FleetContext): void {
+  const collectReport = collectFleet(context);
+  const issueRepo = clean(args.issueRepo || "") || context.controlRepo;
+  const results: FleetRemediationRepoResult[] = [];
+
+  for (const repo of collectReport.repos) {
+    const bucket = classifyRemediationBucket(repo);
+    const existingIssue = issueRepo === context.controlRepo ? findRemediationIssue(issueRepo, repo.repo, "open") || (repo.remediationIssueUrl ? {
+      number: 0,
+      url: repo.remediationIssueUrl,
+      updatedAt: repo.lastRemediationAt,
+      title: remediationIssueTitle(repo.repo),
+      body: "",
+      state: "OPEN" as const,
+    } : null) : findRemediationIssue(issueRepo, repo.repo, "open");
+    let action: FleetRemediationRepoResult["action"] = "noop";
+    let remediationState: RemediationState = repo.remediationState;
+    let remediationPrUrl = repo.remediationPrUrl;
+    let remediationIssueUrl = existingIssue?.url || repo.remediationIssueUrl;
+    const notes: string[] = [];
+
+    if (bucket === "config-drift" || bucket === "missing-install") {
+      const target = asArray<FleetTarget>(context.manifest.repos).find((item) => clean(item.repo || "") === repo.repo);
+      if (!target) {
+        action = "skipped";
+        notes.push("Repo missing from manifest during remediation.");
+      } else if (!args.openPrs || args.dryRun) {
+        const plan = planSync(context, target);
+        action = "planned";
+        remediationState = "rollout-pr-open";
+        notes.push(`Would open rollout PR for ${plan.files.filter((item) => item.changed).map((item) => item.path).join(", ") || "fleet files"}.`);
+      } else if (!repo.remediationPolicy.autoOpenPrs) {
+        action = "skipped";
+        notes.push("Policy disables automatic rollout PR creation.");
+      } else {
+        const plan = planSync(context, target);
+        const syncResult = openPrSync(plan, args.branchName || context.syncBranch);
+        action = syncResult.action === "opened-pr" ? "opened-pr" : "skipped";
+        remediationPrUrl = syncResult.prUrl;
+        remediationState = remediationPrUrl ? "rollout-pr-open" : remediationState;
+        notes.push(...(syncResult.notes || []));
+      }
+    } else if (bucket === "runtime-warning" || bucket === "runtime-critical") {
+      const shouldIssue = bucket === "runtime-critical" ? repo.remediationPolicy.issueOnCritical : repo.remediationPolicy.issueOnWarning;
+      if (!shouldIssue) {
+        action = "skipped";
+        notes.push("Policy does not open remediation issues for this runtime state.");
+      } else if (args.dryRun) {
+        action = "planned";
+        remediationState = "issue-open";
+        notes.push(`Would ${existingIssue ? "update" : "open"} remediation issue in ${issueRepo}.`);
+      } else {
+        const issue = createOrUpdateRemediationIssue(issueRepo, repo, remediationPrUrl);
+        if (issue) {
+          action = existingIssue ? "issue-updated" : "issue-opened";
+          remediationIssueUrl = issue.url;
+          remediationState = "issue-open";
+        } else {
+          action = "skipped";
+          notes.push("Failed to create or update remediation issue.");
+        }
+      }
+    } else {
+      if (repo.remediationPolicy.closeIssueWhenHealthy && existingIssue) {
+        if (args.dryRun) {
+          action = "planned";
+          remediationState = "healthy";
+          notes.push(`Would close remediation issue ${existingIssue.url}.`);
+        } else {
+          const closed = closeRemediationIssue(issueRepo, repo.repo);
+          action = closed ? "issue-closed" : "noop";
+          remediationState = "healthy";
+          remediationIssueUrl = "";
+        }
+      } else {
+        remediationState = "healthy";
+      }
+    }
+
+    results.push({
+      repo: repo.repo,
+      status: repo.status,
+      drift: repo.drift,
+      riskScore: repo.riskScore,
+      bucket,
+      action,
+      remediationState,
+      remediationPrUrl,
+      remediationIssueUrl,
+      notes,
+    });
+  }
+
+  const report: FleetRemediationReport = {
+    marker: "<!-- codex-stack:fleet-remediation -->",
+    generatedAt: new Date().toISOString(),
+    controlRepo: context.controlRepo,
+    manifestPath: context.manifestPath,
+    issueRepo,
+    counts: {
+      repos: results.length,
+      healthy: results.filter((item) => item.bucket === "healthy").length,
+      configDrift: results.filter((item) => item.bucket === "config-drift").length,
+      missingInstall: results.filter((item) => item.bucket === "missing-install").length,
+      runtimeWarning: results.filter((item) => item.bucket === "runtime-warning").length,
+      runtimeCritical: results.filter((item) => item.bucket === "runtime-critical").length,
+      openedPrs: results.filter((item) => item.action === "opened-pr").length,
+      openedIssues: results.filter((item) => item.action === "issue-opened").length,
+      updatedIssues: results.filter((item) => item.action === "issue-updated").length,
+      closedIssues: results.filter((item) => item.action === "issue-closed").length,
+    },
+    results,
+  };
+
+  const jsonText = `${JSON.stringify(report, null, 2)}\n`;
+  const markdown = renderRemediationMarkdown(report);
+  if (args.jsonOut) writeFile(args.jsonOut, jsonText);
+  if (args.markdownOut) writeFile(args.markdownOut, markdown);
+  process.stdout.write(args.json ? jsonText : markdown);
 }
 
 function handleValidate(args: ParsedArgs, context: FleetContext): void {
@@ -1251,12 +1686,16 @@ function main(): void {
   if (args.command === "sync") return handleSync(args, context);
   if (args.command === "collect") return handleCollect(args, context);
   if (args.command === "dashboard") return handleDashboard(args, context);
+  if (args.command === "remediate") return handleRemediate(args, context);
   usage();
 }
 
 export const __testing = {
   readRemoteFile,
   detectDrift,
+  classifyRemediationBucket,
+  remediationIssueMarker,
+  buildRemediationIssueBody,
 };
 
 if (import.meta.main) {
