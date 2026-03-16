@@ -171,6 +171,7 @@ Notes:
 - Use `--publish-dir docs/qa/<name>` when you want tracked copies of the QA report and evidence.
 - Use `--update-snapshot` when the UI change is intentional and the baseline should move.
 - Run `bun scripts/render-qa-pages.ts --out .site` to turn tracked `docs/qa/` artifacts into a static site locally or in CI.
+- Run `bun run demo:publish-qa` to refresh the checked-in sample report at `docs/qa/release-readiness-demo/`.
 
 ## Preview site build
 

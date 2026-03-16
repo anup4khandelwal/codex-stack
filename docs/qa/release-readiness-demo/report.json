@@ -1,0 +1,417 @@
+{
+  "generatedAt": "2026-03-16T11:42:26.831Z",
+  "url": "https://anup4khandelwal.github.io/codex-stack/",
+  "mode": "full",
+  "session": "qa",
+  "status": "warning",
+  "healthScore": 14,
+  "recommendation": "Hold the release until the regression evidence is explained or the baseline is refreshed intentionally.",
+  "findings": [
+    {
+      "severity": "medium",
+      "category": "visual",
+      "title": "Snapshot drift detected",
+      "detail": "The page differs from the saved baseline for release-dashboard.",
+      "evidence": {
+        "snapshot": "release-dashboard",
+        "route": "/dashboard",
+        "device": "desktop",
+        "selectors": "[data-qa='release-status-card'], [data-qa='changes-approval-banner'], [data-qa='changes-escalation-chip']",
+        "decisionKind": "snapshot-drift",
+        "decisionTitle": "Snapshot drift detected",
+        "screenshot": "docs/qa/release-readiness-demo/screenshot.png",
+        "current": "docs/qa/release-readiness-demo/visual/current.json",
+        "annotation": "docs/qa/release-readiness-demo/annotation.svg",
+        "visualPack": "docs/qa/release-readiness-demo/visual/index.html",
+        "diffImage": "docs/qa/release-readiness-demo/visual/diff.png"
+      }
+    },
+    {
+      "severity": "high",
+      "category": "accessibility",
+      "title": "Accessibility violation: color-contrast",
+      "detail": "Elements must meet minimum color contrast ratio thresholds (1 affected node)",
+      "evidence": {
+        "rule": "color-contrast",
+        "impact": "serious",
+        "route": "/codex-stack/",
+        "device": "desktop",
+        "decisionKind": "accessibility-rule",
+        "decisionTitle": "color-contrast",
+        "selectors": "[data-qa='changes-approval-banner']",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast"
+      }
+    },
+    {
+      "severity": "medium",
+      "category": "accessibility",
+      "title": "Accessibility violation: aria-input-field-name",
+      "detail": "Form elements must have labels (1 affected node)",
+      "evidence": {
+        "rule": "aria-input-field-name",
+        "impact": "moderate",
+        "route": "/codex-stack/",
+        "device": "desktop",
+        "decisionKind": "accessibility-rule",
+        "decisionTitle": "aria-input-field-name",
+        "selectors": "[data-qa='qa-exception-input']",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-input-field-name"
+      }
+    },
+    {
+      "severity": "high",
+      "category": "performance",
+      "title": "Performance budget exceeded: Largest Contentful Paint",
+      "detail": "LCP exceeded the demo budget by 260ms on the release dashboard.",
+      "evidence": {
+        "metric": "lcp",
+        "route": "/codex-stack/",
+        "device": "desktop",
+        "decisionKind": "performance-budget",
+        "decisionTitle": "Largest Contentful Paint",
+        "threshold": "2200",
+        "value": "2460"
+      }
+    },
+    {
+      "severity": "medium",
+      "category": "performance",
+      "title": "Performance budget exceeded: Cumulative Layout Shift",
+      "detail": "CLS exceeded the demo budget by 0.04 because the approval banner pushed the checklist.",
+      "evidence": {
+        "metric": "cls",
+        "route": "/codex-stack/",
+        "device": "desktop",
+        "decisionKind": "performance-budget",
+        "decisionTitle": "Cumulative Layout Shift",
+        "threshold": "0.1",
+        "value": "0.14"
+      }
+    }
+  ],
+  "flowResults": [
+    {
+      "name": "release-login",
+      "status": "pass",
+      "steps": 6
+    },
+    {
+      "name": "release-dashboard",
+      "status": "pass",
+      "steps": 7
+    },
+    {
+      "name": "release-changes",
+      "status": "pass",
+      "steps": 6
+    }
+  ],
+  "routeResults": [],
+  "diffSummary": null,
+  "snapshotResult": {
+    "name": "release-dashboard",
+    "status": "changed",
+    "baseline": "docs/qa/release-readiness-demo/visual/baseline.json",
+    "current": "docs/qa/release-readiness-demo/visual/current.json",
+    "screenshot": "docs/qa/release-readiness-demo/screenshot.png",
+    "annotation": "docs/qa/release-readiness-demo/annotation.svg",
+    "baselineFreshness": {
+      "snapshot": "release-dashboard",
+      "routePath": "/dashboard",
+      "device": "desktop",
+      "capturedAt": "2026-03-15T06:30:00.000Z",
+      "ageDays": 1.2,
+      "stale": false,
+      "staleAfterDays": 30
+    },
+    "visualPack": {
+      "dir": "docs/qa/release-readiness-demo/visual",
+      "index": "docs/qa/release-readiness-demo/visual/index.html",
+      "manifest": "docs/qa/release-readiness-demo/visual/manifest.json",
+      "annotation": "docs/qa/release-readiness-demo/visual/annotation.svg",
+      "baselineJson": "docs/qa/release-readiness-demo/visual/baseline.json",
+      "currentJson": "docs/qa/release-readiness-demo/visual/current.json",
+      "baselineScreenshot": "docs/qa/release-readiness-demo/visual/baseline.png",
+      "currentScreenshot": "docs/qa/release-readiness-demo/visual/current.png",
+      "diffImage": "docs/qa/release-readiness-demo/visual/diff.png",
+      "imageDiff": {
+        "comparedPixels": 921600,
+        "changedPixels": 144576,
+        "diffRatio": 0.157,
+        "score": 84.3,
+        "dimensionsMatch": true,
+        "baseline": {
+          "width": 1280,
+          "height": 720
+        },
+        "current": {
+          "width": 1280,
+          "height": 720
+        }
+      }
+    }
+  },
+  "accessibility": {
+    "enabled": true,
+    "minimumImpact": "serious",
+    "scopeSelectors": [
+      "main",
+      "[data-qa='changes-approval-banner']"
+    ],
+    "violationCount": 2,
+    "passCount": 14,
+    "incompleteCount": 1,
+    "topRules": [
+      "color-contrast",
+      "aria-input-field-name"
+    ],
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "description": "The approval banner uses a low-contrast warning background against body text.",
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+        "selectors": [
+          "[data-qa='changes-approval-banner']"
+        ],
+        "nodeCount": 1
+      },
+      {
+        "id": "aria-input-field-name",
+        "impact": "moderate",
+        "description": "The exception note field lost its accessible label in the preview state.",
+        "help": "Form elements must have labels",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-input-field-name",
+        "selectors": [
+          "[data-qa='qa-exception-input']"
+        ],
+        "nodeCount": 1
+      }
+    ],
+    "artifactJson": "docs/qa/release-readiness-demo/a11y.json",
+    "artifactMarkdown": "docs/qa/release-readiness-demo/a11y.md"
+  },
+  "performance": {
+    "enabled": true,
+    "waitMs": 1200,
+    "metrics": {
+      "ttfb": 182,
+      "domContentLoaded": 640,
+      "loadEvent": 1120,
+      "fcp": 710,
+      "lcp": 2460,
+      "cls": 0.14,
+      "jsHeapUsed": 18432000,
+      "resourceCount": 27,
+      "failedResourceCount": 0
+    },
+    "budgets": [
+      {
+        "metric": "lcp",
+        "label": "Largest Contentful Paint",
+        "threshold": 2200,
+        "unit": "ms",
+        "severity": "high",
+        "raw": "lcp=2200",
+        "value": 2460,
+        "passed": false,
+        "detail": "LCP exceeded the demo budget by 260ms on the release dashboard."
+      },
+      {
+        "metric": "cls",
+        "label": "Cumulative Layout Shift",
+        "threshold": 0.1,
+        "unit": "score",
+        "severity": "medium",
+        "raw": "cls=0.1",
+        "value": 0.14,
+        "passed": false,
+        "detail": "CLS exceeded the demo budget by 0.04 because the approval banner pushed the checklist."
+      }
+    ],
+    "budgetViolationCount": 2,
+    "topViolations": [
+      "Largest Contentful Paint exceeded budget",
+      "Cumulative Layout Shift exceeded budget"
+    ],
+    "artifactJson": "docs/qa/release-readiness-demo/performance.json",
+    "artifactMarkdown": "docs/qa/release-readiness-demo/performance.md"
+  },
+  "visualRisk": {
+    "available": true,
+    "score": 13.5,
+    "level": "low",
+    "summary": "LOW visual risk (13.5/100): 1 changed snapshot; avg image diff score 84.3",
+    "criticalChecks": 0,
+    "warningChecks": 0,
+    "consoleErrors": 0,
+    "changedSnapshots": 1,
+    "staleBaselines": 0,
+    "avgImageDiffScore": 84.3,
+    "topDrivers": [
+      "1 changed snapshot",
+      "avg image diff score 84.3"
+    ]
+  },
+  "decisionSummary": {
+    "totalDecisions": 0,
+    "appliedCount": 0,
+    "approvedCount": 0,
+    "suppressedCount": 0,
+    "refreshRequiredCount": 0,
+    "expiredCount": 0,
+    "unresolvedCount": 5,
+    "expiringSoonCount": 0
+  },
+  "appliedDecisions": [],
+  "expiredDecisions": [],
+  "unresolvedRegressions": [
+    {
+      "category": "visual",
+      "kind": "snapshot-drift",
+      "title": "Snapshot drift detected",
+      "severity": "medium",
+      "snapshot": "release-dashboard",
+      "routePath": "/dashboard",
+      "device": "desktop",
+      "selectors": [
+        "[data-qa='release-status-card']",
+        "[data-qa='changes-approval-banner']",
+        "[data-qa='changes-escalation-chip']"
+      ],
+      "ruleId": "",
+      "metric": ""
+    },
+    {
+      "category": "accessibility",
+      "kind": "accessibility-rule",
+      "title": "Accessibility violation: color-contrast",
+      "severity": "high",
+      "snapshot": "",
+      "routePath": "/codex-stack/",
+      "device": "desktop",
+      "selectors": [
+        "[data-qa='changes-approval-banner']"
+      ],
+      "ruleId": "color-contrast",
+      "metric": ""
+    },
+    {
+      "category": "accessibility",
+      "kind": "accessibility-rule",
+      "title": "Accessibility violation: aria-input-field-name",
+      "severity": "medium",
+      "snapshot": "",
+      "routePath": "/codex-stack/",
+      "device": "desktop",
+      "selectors": [
+        "[data-qa='qa-exception-input']"
+      ],
+      "ruleId": "aria-input-field-name",
+      "metric": ""
+    },
+    {
+      "category": "performance",
+      "kind": "performance-budget",
+      "title": "Performance budget exceeded: Largest Contentful Paint",
+      "severity": "high",
+      "snapshot": "",
+      "routePath": "/codex-stack/",
+      "device": "desktop",
+      "selectors": [],
+      "ruleId": "",
+      "metric": "lcp"
+    },
+    {
+      "category": "performance",
+      "kind": "performance-budget",
+      "title": "Performance budget exceeded: Cumulative Layout Shift",
+      "severity": "medium",
+      "snapshot": "",
+      "routePath": "/codex-stack/",
+      "device": "desktop",
+      "selectors": [],
+      "ruleId": "",
+      "metric": "cls"
+    }
+  ],
+  "artifacts": {
+    "visualPack": {
+      "dir": "docs/qa/release-readiness-demo/visual",
+      "index": "docs/qa/release-readiness-demo/visual/index.html",
+      "manifest": "docs/qa/release-readiness-demo/visual/manifest.json",
+      "annotation": "docs/qa/release-readiness-demo/visual/annotation.svg",
+      "baselineJson": "docs/qa/release-readiness-demo/visual/baseline.json",
+      "currentJson": "docs/qa/release-readiness-demo/visual/current.json",
+      "baselineScreenshot": "docs/qa/release-readiness-demo/visual/baseline.png",
+      "currentScreenshot": "docs/qa/release-readiness-demo/visual/current.png",
+      "diffImage": "docs/qa/release-readiness-demo/visual/diff.png",
+      "imageDiff": {
+        "comparedPixels": 921600,
+        "changedPixels": 144576,
+        "diffRatio": 0.157,
+        "score": 84.3,
+        "dimensionsMatch": true,
+        "baseline": {
+          "width": 1280,
+          "height": 720
+        },
+        "current": {
+          "width": 1280,
+          "height": 720
+        }
+      }
+    },
+    "annotation": ".codex-stack/qa/annotations/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack.svg",
+    "json": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack.json",
+    "markdown": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack.md",
+    "latestJson": ".codex-stack/qa/latest.json",
+    "latestMarkdown": ".codex-stack/qa/latest.md",
+    "accessibilityJson": "docs/qa/release-readiness-demo/a11y.json",
+    "accessibilityMarkdown": "docs/qa/release-readiness-demo/a11y.md",
+    "performanceJson": "docs/qa/release-readiness-demo/performance.json",
+    "performanceMarkdown": "docs/qa/release-readiness-demo/performance.md",
+    "trendsJson": ".codex-stack/qa/trends.json",
+    "trendsMarkdown": ".codex-stack/qa/trends.md",
+    "published": {
+      "dir": "docs/qa/release-readiness-demo",
+      "json": "docs/qa/release-readiness-demo/report.json",
+      "markdown": "docs/qa/release-readiness-demo/report.md",
+      "annotation": "docs/qa/release-readiness-demo/annotation.svg",
+      "screenshot": "docs/qa/release-readiness-demo/screenshot.png",
+      "current": "docs/qa/release-readiness-demo/visual/current.json",
+      "baseline": "docs/qa/release-readiness-demo/visual/baseline.json",
+      "accessibilityJson": "docs/qa/release-readiness-demo/a11y.json",
+      "accessibilityMarkdown": "docs/qa/release-readiness-demo/a11y.md",
+      "performanceJson": "docs/qa/release-readiness-demo/performance.json",
+      "performanceMarkdown": "docs/qa/release-readiness-demo/performance.md",
+      "visualPack": {
+        "dir": "docs/qa/release-readiness-demo/visual",
+        "index": "docs/qa/release-readiness-demo/visual/index.html",
+        "manifest": "docs/qa/release-readiness-demo/visual/manifest.json",
+        "annotation": "docs/qa/release-readiness-demo/visual/annotation.svg",
+        "baselineJson": "docs/qa/release-readiness-demo/visual/baseline.json",
+        "currentJson": "docs/qa/release-readiness-demo/visual/current.json",
+        "baselineScreenshot": "docs/qa/release-readiness-demo/visual/baseline.png",
+        "currentScreenshot": "docs/qa/release-readiness-demo/visual/current.png",
+        "diffImage": "docs/qa/release-readiness-demo/visual/diff.png",
+        "imageDiff": {
+          "comparedPixels": 921600,
+          "changedPixels": 144576,
+          "diffRatio": 0.157,
+          "score": 84.3,
+          "dimensionsMatch": true,
+          "baseline": {
+            "width": 1280,
+            "height": 720
+          },
+          "current": {
+            "width": 1280,
+            "height": 720
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "release-dashboard",
+  "capturedAt": "2026-03-15T06:30:00.000Z",
+  "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/baseline/dashboard",
+  "origin": "https://anup4khandelwal.github.io",
+  "routePath": "/dashboard",
+  "device": "desktop",
+  "page": {
+    "width": 1280,
+    "height": 720
+  },
+  "screenshotPath": "/var/folders/2p/lfnzkvvd2qn2wkdvvx71vv480000gp/T/codex-stack-demo-qa-EjcNG7/visual/baseline.png",
+  "elements": [
+    {
+      "selector": "[data-qa='release-status-card']",
+      "bounds": {
+        "x": 980,
+        "y": 180,
+        "width": 168,
+        "height": 54
+      }
+    },
+    {
+      "selector": "[data-qa='changes-approval-banner']",
+      "bounds": {
+        "x": 456,
+        "y": 466,
+        "width": 648,
+        "height": 50
+      }
+    }
+  ]
+}

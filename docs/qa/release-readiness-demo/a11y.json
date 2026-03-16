@@ -1,0 +1,41 @@
+{
+  "enabled": true,
+  "minimumImpact": "serious",
+  "scopeSelectors": [
+    "main",
+    "[data-qa='changes-approval-banner']"
+  ],
+  "violationCount": 2,
+  "passCount": 14,
+  "incompleteCount": 1,
+  "topRules": [
+    "color-contrast",
+    "aria-input-field-name"
+  ],
+  "violations": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "description": "The approval banner uses a low-contrast warning background against body text.",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+      "selectors": [
+        "[data-qa='changes-approval-banner']"
+      ],
+      "nodeCount": 1
+    },
+    {
+      "id": "aria-input-field-name",
+      "impact": "moderate",
+      "description": "The exception note field lost its accessible label in the preview state.",
+      "help": "Form elements must have labels",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-input-field-name",
+      "selectors": [
+        "[data-qa='qa-exception-input']"
+      ],
+      "nodeCount": 1
+    }
+  ],
+  "artifactJson": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack-a11y.json",
+  "artifactMarkdown": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack-a11y.md"
+}

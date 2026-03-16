@@ -122,6 +122,7 @@ Start it:
 
 ```bash
 bun run demo:start
+bun run demo:publish-qa
 ```
 
 Then run the core live sequence:
@@ -141,6 +142,7 @@ What that sequence demonstrates:
 - shipping decisions backed by the same evidence
 
 The checked-in `release-login` flow clears the demo app's stored login state before navigation so you can re-run it safely on the same named browser session.
+`bun run demo:publish-qa` refreshes the tracked sample report at `docs/qa/release-readiness-demo/`, which is what keeps the public QA Pages landing view useful before you ship a real branch report.
 
 ## Issue to merge flow
 
@@ -417,6 +419,7 @@ The upgrade report covers:
 Build the static QA site locally:
 
 ```bash
+bun run demo:publish-qa
 bun run qa:site
 open .site/index.html
 ```
@@ -431,6 +434,7 @@ Those visual packs now include a diff heatmap and an image-diff score so regress
 The merged QA Pages site also renders visual history charts for risk score, image-diff score, and baseline age so drift over time is visible without opening each report one by one.
 When a report includes accessibility or performance data, the Pages site also exposes the latest violation counts, perf-budget failures, LCP/CLS summaries, and matching history charts.
 Snapshot baselines now carry route and device metadata, and QA/deploy/preview runs flag stale baselines automatically when the saved reference is too old.
+The repo also keeps a tracked sample report at `docs/qa/release-readiness-demo/` so the Pages root is never empty for evaluators landing on the project cold.
 
 The same `gh-pages` branch also hosts PR previews under `pr-preview/pr-<number>/`. Configure these repo variables if you want richer automatic preview coverage in `pr-review.yml`:
 

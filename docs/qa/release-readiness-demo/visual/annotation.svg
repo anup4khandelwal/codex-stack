@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect x="980" y="180" width="168" height="54" fill="rgba(225,75,56,0.18)" stroke="#7a1f15" stroke-width="4"/>
+  <rect x="456" y="466" width="648" height="50" fill="rgba(255,182,141,0.18)" stroke="#7a1f15" stroke-width="4"/>
+  <text x="980" y="168" font-family="monospace" font-size="20" fill="#7a1f15">release status drift</text>
+  <text x="456" y="454" font-family="monospace" font-size="20" fill="#7a1f15">approval banner shifted checklist</text>
+</svg>

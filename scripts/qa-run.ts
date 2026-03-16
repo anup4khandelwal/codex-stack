@@ -2002,6 +2002,10 @@ function rewriteEvidencePaths(report: QaReport, pathMap: Record<string, string>)
     if (report.artifacts.visualPack.currentScreenshot && pathMap[report.artifacts.visualPack.currentScreenshot]) report.artifacts.visualPack.currentScreenshot = pathMap[report.artifacts.visualPack.currentScreenshot];
     if (report.artifacts.visualPack.diffImage && pathMap[report.artifacts.visualPack.diffImage]) report.artifacts.visualPack.diffImage = pathMap[report.artifacts.visualPack.diffImage];
   }
+  if (report.artifacts.accessibilityJson && pathMap[report.artifacts.accessibilityJson]) report.artifacts.accessibilityJson = pathMap[report.artifacts.accessibilityJson];
+  if (report.artifacts.accessibilityMarkdown && pathMap[report.artifacts.accessibilityMarkdown]) report.artifacts.accessibilityMarkdown = pathMap[report.artifacts.accessibilityMarkdown];
+  if (report.artifacts.performanceJson && pathMap[report.artifacts.performanceJson]) report.artifacts.performanceJson = pathMap[report.artifacts.performanceJson];
+  if (report.artifacts.performanceMarkdown && pathMap[report.artifacts.performanceMarkdown]) report.artifacts.performanceMarkdown = pathMap[report.artifacts.performanceMarkdown];
 
   for (const item of report.findings) {
     for (const [key, value] of Object.entries(item.evidence)) {
