@@ -27,6 +27,8 @@ Usage:
   codex-stack deploy [--url <url> | --url-template <template>] [--pr <number>] [--branch <ref>] [--sha <sha>] [--repo <owner/name>] [--path <path>] [--device <desktop|tablet|mobile>] [--flow <name>] [--snapshot <name>] [--session <name>] [--session-bundle <path>] [--publish-dir <path>] [--markdown-out <path>] [--json-out <path>] [--comment-out <path>] [--strict-console] [--strict-http] [--wait-timeout <seconds>] [--wait-interval <seconds>] [--fixture <path>] [--qa-fixture <path>] [--readiness-fixture <path>] [--json]
   codex-stack ship [--dry-run] [--message <msg>] [--push] [--pr] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--update-verify-snapshot] [--draft]
   codex-stack fleet <validate|sync|collect|dashboard> --manifest <path> [args...]
+  codex-stack agents <list|show|add|update|dashboard> [args...]
+  codex-stack goals <list|show|add|queue|task> [args...]
   codex-stack mcp <serve|inspect> [args...]
   codex-stack retro [--since <range>] [--out <path>] [--json] [--artifact-dir <path>] [--no-artifacts] [--repo <owner/name>] [--no-github]
   codex-stack upgrade [--json] [--json-out <path>] [--markdown-out <path>] [--repo <owner/name>] [--offline] [--apply]
@@ -123,6 +125,14 @@ if (command === "ship") {
 
 if (command === "fleet") {
   runScript(path.join("scripts", "fleet.ts"), rest);
+}
+
+if (command === "agents") {
+  runScript(path.join("scripts", "agents.ts"), rest);
+}
+
+if (command === "goals") {
+  runScript(path.join("scripts", "goals.ts"), rest);
 }
 
 if (command === "mcp") {

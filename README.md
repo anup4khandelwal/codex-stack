@@ -2,7 +2,7 @@
 
 `codex-stack` turns Codex from a generic coding assistant into a team of workflow specialists you can call on demand.
 
-Thirteen opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, fleet rollout plus auto-remediation control, and local MCP interoperability.
+Sixteen opinionated workflow modes for Codex: product framing, technical planning, paranoid diff review, scored QA, regression triage, preview verification, deploy verification, release shipping, browser automation, engineering retrospectives, upgrade audits, fleet rollout plus auto-remediation control, local agent staffing, goal and queue tracking, and local MCP interoperability.
 
 Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts the same specialist-workflow idea for Codex. If `gstack` is the Claude Code version of this pattern, `codex-stack` is the Codex-native version. This project is independently maintained and is not affiliated with `gstack`.
 
@@ -31,6 +31,8 @@ Inspired by [`gstack`](https://github.com/garrytan/gstack), `codex-stack` adapts
 | `retro` | Engineering manager | Summarizes delivery patterns from git history and optional GitHub PR analytics. |
 | `upgrade` | Repo maintainer | Audits Bun, dependency drift, workflow action drift, and install health for codex-stack itself. |
 | `fleet` | Control plane operator | Pushes shared policy packs across repos, collects normalized health, and renders a GitHub-native rollout dashboard. |
+| `agents` | Agent manager | Registers named engineering agents, reporting lines, and staffing status for local orchestration. |
+| `goals` | Program lead | Tracks goal hierarchy and assignable work queues for multiple agents. |
 | `mcp` | Interop engineer | Exposes read-only codex-stack tools and evidence resources to MCP-capable clients over local stdio. |
 
 ## Default workflow
@@ -64,6 +66,7 @@ Use the repo in this order:
 - GitHub Pages publishing for `docs/qa/` so merged QA reports keep a stable URL after branch cleanup
 - Issue-first workflow automation with PR review comments and opt-in auto-merge
 - Fleet rollout controls for multi-repo policy packs, policy-aware health expectations, rollout PR planning, auto-remediation issues, and org-level dashboard rendering
+- Local control-plane state under `.codex-stack/control-plane/` with named agents, goals, task queues, and a static dashboard view
 - Local stdio MCP server with read-only and dry-run wrappers for review, QA, preview, deploy, ship planning, fleet planning, retro, and upgrade workflows
 - Retrospective analytics plus weekly digest publishing outputs for markdown, Slack, and email, including visual regression rollups from published QA evidence
 - Upgrade auditing via CLI plus a daily scheduled update-check workflow that syncs a stable issue
@@ -95,6 +98,8 @@ bun src/cli.ts list
 - `retro`
 - `upgrade`
 - `fleet`
+- `agents`
+- `goals`
 - `mcp`
 
 If you want shell-level commands, link those wrappers into your `PATH`:
@@ -200,6 +205,11 @@ bun src/cli.ts fleet sync --manifest .codex-stack/fleet.example.json --dry-run -
 bun src/cli.ts fleet collect --manifest .codex-stack/fleet.example.json --json
 bun src/cli.ts fleet dashboard --manifest .codex-stack/fleet.example.json --out .fleet-site
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --json
+bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
+bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
+bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals queue --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
 bun src/cli.ts retro --since "7 days ago" --repo anup4khandelwal/codex-stack
@@ -238,11 +248,35 @@ bun src/cli.ts qa-decide list --active-only
 bun run preview -- --url-template "https://preview-{pr}.example.com" --pr 42 --branch feat/42-preview --sha abcdef123 --path / --device desktop --flow landing-smoke --snapshot landing-home
 bun run deploy -- --url https://staging.example.com --path /dashboard --device desktop --flow release-dashboard --snapshot release-dashboard
 bun run ship:dry
+bun run agents -- list --json
+bun run goals -- queue --json
 bun run mcp -- inspect --json
 bun run retro
 bun run upgrade
 bun run upgrade:apply
 bun run weekly
+```
+
+## Control plane
+
+`codex-stack` now has a local control-plane layer for multi-agent engineering work before you need a full remote scheduler.
+
+Core ideas:
+
+- register named agents with roles, runtimes, teams, and managers
+- track initiative and repo goals explicitly
+- assign persistent queued work instead of only running one-shot commands
+- render a static dashboard under `.codex-stack/control-plane/dashboard/`
+
+Useful commands:
+
+```bash
+bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
+bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
+bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals queue --assignee reviewer-1
+bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 ```
 
 ## MCP interop

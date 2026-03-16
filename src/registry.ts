@@ -86,6 +86,18 @@ export const modeRegistry: ModeDefinition[] = [
     skillPath: path.join(rootDir, "skills", "fleet", "SKILL.md"),
   },
   {
+    name: "agents",
+    role: "Agent manager",
+    summary: "Register named engineering agents, reporting lines, and staffing status.",
+    skillPath: path.join(rootDir, "skills", "agents", "SKILL.md"),
+  },
+  {
+    name: "goals",
+    role: "Program lead",
+    summary: "Track goal hierarchy and assignable work queues for multiple agents.",
+    skillPath: path.join(rootDir, "skills", "goals", "SKILL.md"),
+  },
+  {
     name: "mcp",
     role: "Interop engineer",
     summary: "Expose codex-stack workflows and evidence to MCP-capable clients over stdio.",
