@@ -85,6 +85,12 @@ export const modeRegistry: ModeDefinition[] = [
     summary: "Roll out codex-stack policies across multiple repos and aggregate org-level health.",
     skillPath: path.join(rootDir, "skills", "fleet", "SKILL.md"),
   },
+  {
+    name: "mcp",
+    role: "Interop engineer",
+    summary: "Expose codex-stack workflows and evidence to MCP-capable clients over stdio.",
+    skillPath: path.join(rootDir, "skills", "mcp", "SKILL.md"),
+  },
 ];
 
 export function findMode(name: string): ModeDefinition | undefined {

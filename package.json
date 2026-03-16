@@ -25,6 +25,7 @@
     "preview": "bun scripts/preview-verify.ts",
     "deploy": "bun scripts/deploy-verify.ts",
     "fleet": "bun scripts/fleet.ts",
+    "mcp": "bun scripts/mcp-server.ts",
     "ship:dry": "bun scripts/ship-branch.ts --dry-run",
     "retro": "bun scripts/retro-report.ts --since '7 days ago'",
     "upgrade": "bun scripts/upgrade-check.ts",
@@ -38,9 +39,11 @@
     "browse:screenshot": "bun browse/src/cli.ts screenshot"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "axe-core": "^4.11.0",
     "playwright": "^1.58.2",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
