@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Release readiness visual pack</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe6;
+      --ink: #1f2321;
+      --muted: #5c645d;
+      --card: #fff9ef;
+      --line: #d7cab8;
+      --accent: #a74a1f;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Iowan Old Style", "Palatino Linotype", serif; background: var(--bg); color: var(--ink); }
+    main { max-width: 1180px; margin: 0 auto; padding: 48px 24px 64px; }
+    h1 { margin: 0 0 12px; font-size: 42px; }
+    p { color: var(--muted); line-height: 1.55; }
+    .summary, .gallery { display: grid; gap: 18px; }
+    .summary { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 28px 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+    .card strong { display: block; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .metric { font-size: 30px; font-weight: 700; }
+    .gallery { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+    figcaption { font-weight: 700; margin-bottom: 12px; }
+    img { width: 100%; border-radius: 12px; display: block; background: #fff; }
+    ul { margin: 0; padding-left: 18px; }
+    code { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Release readiness visual pack</h1>
+    <p>This pack shows the demo regression used on the public QA Pages site. It is intentionally reviewable: one release-status drift, one checklist shift, and linked machine-readable evidence.</p>
+    <section class="summary">
+      <article class="card"><strong>Status</strong><div class="metric">Changed</div></article>
+      <article class="card"><strong>Image diff score</strong><div class="metric">84.3</div></article>
+      <article class="card"><strong>Diff ratio</strong><div class="metric">15.7%</div></article>
+      <article class="card"><strong>Selectors</strong><div class="metric">2 drifted</div></article>
+    </section>
+    <section class="gallery">
+      <figure>
+        <figcaption>Baseline release dashboard</figcaption>
+        <img src="baseline.png" alt="Baseline release dashboard screenshot" />
+      </figure>
+      <figure>
+        <figcaption>Current release dashboard</figcaption>
+        <img src="current.png" alt="Current release dashboard screenshot" />
+      </figure>
+      <figure>
+        <figcaption>Diff highlight</figcaption>
+        <img src="diff.png" alt="Diff highlight" />
+      </figure>
+      <figure>
+        <figcaption>Annotated review overlay</figcaption>
+        <img src="annotation.svg" alt="Annotated overlay" />
+      </figure>
+    </section>
+    <section class="card" style="margin-top: 24px;">
+      <strong>Evidence</strong>
+      <ul>
+        <li><a href="manifest.json">Manifest JSON</a></li>
+        <li><a href="baseline.json">Baseline DOM snapshot</a></li>
+        <li><a href="current.json">Current DOM snapshot</a></li>
+        <li><code>[data-qa='release-status-card']</code> drifted from pass to hold.</li>
+        <li><code>[data-qa='changes-approval-banner']</code> introduced layout shift on the checklist.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

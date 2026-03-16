@@ -17,6 +17,7 @@
     "build": "bun build ./examples/customer-portal-demo/src/app.ts --target browser --format iife --outfile ./examples/customer-portal-demo/public/app.js",
     "demo:start": "bun run build && bun examples/customer-portal-demo/server.ts",
     "demo:smoke": "bun run build && bun scripts/demo-smoke.ts",
+    "demo:publish-qa": "bun scripts/publish-demo-qa.ts",
     "review": "bun scripts/review-diff.ts",
     "issue": "bun scripts/issue-flow.ts",
     "qa": "bun scripts/qa-run.ts",

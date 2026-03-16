@@ -12,6 +12,7 @@ It is not a toy landing page. It is a small release-readiness workspace that let
 
 ```bash
 bun run demo:start
+bun run demo:publish-qa
 ```
 
 Default URL:
@@ -72,6 +73,14 @@ bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-p
 What this proves:
 - shipping is connected to evidence, not just git automation
 - the same demo story flows from browse -> qa -> deploy -> ship
+
+## Publish the tracked sample QA pack
+
+```bash
+bun run demo:publish-qa
+```
+
+This refreshes `docs/qa/release-readiness-demo/`, the committed sample evidence pack that keeps the GitHub Pages QA site non-empty and gives evaluators a stable report link to inspect.
 
 ## Best pages to talk through
 

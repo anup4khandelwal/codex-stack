@@ -83,6 +83,7 @@ bun src/cli.ts ship --dry-run --pr --verify-url http://127.0.0.1:4173 --verify-p
 
 ```bash
 bun run demo:start
+bun run demo:publish-qa
 bun src/cli.ts browse flows
 bun src/cli.ts browse export-flow release-full-demo /tmp/release-full-demo.md
 bun src/cli.ts browse import-flow portal-copy /tmp/release-full-demo.md
@@ -108,6 +109,8 @@ bun src/cli.ts browse run-flow http://127.0.0.1:4173/changes release-changes --s
 bun src/cli.ts browse run-flow http://127.0.0.1:4173/login release-full-demo --session friend-demo
 bun src/cli.ts browse screenshot http://127.0.0.1:4173/changes /tmp/release-readiness-demo.png --session friend-demo
 ```
+
+The public QA Pages landing view is backed by the tracked sample report in `docs/qa/release-readiness-demo/`. Refresh it with `bun run demo:publish-qa` whenever the demo story or evidence model changes.
 
 ## Authenticated preview verification
 

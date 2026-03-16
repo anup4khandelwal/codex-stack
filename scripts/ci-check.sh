@@ -101,6 +101,7 @@ run_ts scripts/deploy-verify.ts --help >/tmp/codex-stack-deploy-help.log
 run_ts scripts/build-preview-site.ts --help >/tmp/codex-stack-build-preview-help.log
 run_ts scripts/deploy-verify.spec.ts >/tmp/codex-stack-deploy-spec.log
 run_ts scripts/build-preview-site.spec.ts >/tmp/codex-stack-build-preview-spec.log
+run_ts scripts/publish-demo-qa.spec.ts >/tmp/codex-stack-publish-demo-qa-spec.log
 run_ts scripts/cleanup-preview-site.spec.ts >/tmp/codex-stack-preview-cleanup-spec.log
 run_ts scripts/preview-workflow-auth.spec.ts >/tmp/codex-stack-preview-workflow-auth-spec.log
 run_ts scripts/ship-branch.ts --help >/tmp/codex-stack-ship-help.log

@@ -1,0 +1,37 @@
+{
+  "name": "release-dashboard",
+  "status": "changed",
+  "summary": {
+    "changedSelectors": [
+      "[data-qa='release-status-card']",
+      "[data-qa='changes-approval-banner']"
+    ],
+    "missingSelectors": [],
+    "newSelectors": [
+      "[data-qa='changes-escalation-chip']"
+    ]
+  },
+  "imageDiff": {
+    "comparedPixels": 921600,
+    "changedPixels": 144576,
+    "diffRatio": 0.157,
+    "score": 84.3,
+    "dimensionsMatch": true,
+    "baseline": {
+      "width": 1280,
+      "height": 720
+    },
+    "current": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "assets": {
+    "baselineScreenshot": "baseline.png",
+    "currentScreenshot": "current.png",
+    "diffImage": "diff.png",
+    "annotation": "annotation.svg",
+    "baselineJson": "baseline.json",
+    "currentJson": "current.json"
+  }
+}
