@@ -5,6 +5,12 @@ import path from "node:path";
 import process from "node:process";
 import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  ensureApprovalGate,
+  readState as readControlPlaneState,
+  resolveStatePath as resolveControlStatePath,
+  writeState as writeControlPlaneState,
+} from "./control-plane.ts";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +47,8 @@ interface ParsedArgs {
   openPrs: boolean;
   branchName: string;
   issueRepo: string;
+  controlAgent: string;
+  controlState: string;
 }
 
 interface FleetManifest {
@@ -292,6 +300,9 @@ interface FleetRemediationRepoResult {
   remediationState: RemediationState;
   remediationPrUrl: string;
   remediationIssueUrl: string;
+  controlPlaneAllowed: boolean | null;
+  controlPlaneApprovalId: string;
+  controlPlaneStatePath: string;
   notes: string[];
 }
 
@@ -335,7 +346,7 @@ Usage:
   bun scripts/fleet.ts sync --manifest <path> [--dry-run] [--open-prs] [--branch-name <name>] [--json] [--json-out <path>] [--markdown-out <path>]
   bun scripts/fleet.ts collect --manifest <path> [--json] [--json-out <path>] [--markdown-out <path>]
   bun scripts/fleet.ts dashboard --manifest <path> --out <dir> [--json] [--json-out <path>]
-  bun scripts/fleet.ts remediate --manifest <path> [--dry-run] [--open-prs] [--issue-repo <owner/repo>] [--json] [--json-out <path>] [--markdown-out <path>]
+  bun scripts/fleet.ts remediate --manifest <path> [--dry-run] [--open-prs] [--issue-repo <owner/repo>] [--control-agent <name>] [--control-state <path>] [--json] [--json-out <path>] [--markdown-out <path>]
 `);
   process.exit(0);
 }
@@ -463,6 +474,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     openPrs: false,
     branchName: DEFAULT_SYNC_BRANCH,
     issueRepo: "",
+    controlAgent: "",
+    controlState: "",
   };
 
   for (let i = 1; i < argv.length; i += 1) {
@@ -490,6 +503,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       i += 1;
     } else if (arg === "--issue-repo") {
       out.issueRepo = clean(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--control-agent") {
+      out.controlAgent = clean(argv[i + 1] || "");
+      i += 1;
+    } else if (arg === "--control-state") {
+      out.controlState = clean(argv[i + 1] || "");
       i += 1;
     } else if (arg === "--help" || arg === "-h") {
       usage();
@@ -1489,6 +1508,9 @@ function renderRemediationMarkdown(report: FleetRemediationReport): string {
 function handleRemediate(args: ParsedArgs, context: FleetContext): void {
   const collectReport = collectFleet(context);
   const issueRepo = clean(args.issueRepo || "") || context.controlRepo;
+  const controlState = args.controlAgent ? readControlPlaneState(args.controlState) : null;
+  const controlStatePath = args.controlAgent ? resolveControlStatePath(args.controlState) : "";
+  let controlStateDirty = false;
   const results: FleetRemediationRepoResult[] = [];
 
   for (const repo of collectReport.repos) {
@@ -1505,6 +1527,8 @@ function handleRemediate(args: ParsedArgs, context: FleetContext): void {
     let remediationState: RemediationState = repo.remediationState;
     let remediationPrUrl = repo.remediationPrUrl;
     let remediationIssueUrl = existingIssue?.url || repo.remediationIssueUrl;
+    let controlPlaneAllowed: boolean | null = null;
+    let controlPlaneApprovalId = "";
     const notes: string[] = [];
 
     if (bucket === "config-drift" || bucket === "missing-install") {
@@ -1512,21 +1536,46 @@ function handleRemediate(args: ParsedArgs, context: FleetContext): void {
       if (!target) {
         action = "skipped";
         notes.push("Repo missing from manifest during remediation.");
-      } else if (!args.openPrs || args.dryRun) {
-        const plan = planSync(context, target);
-        action = "planned";
-        remediationState = "rollout-pr-open";
-        notes.push(`Would open rollout PR for ${plan.files.filter((item) => item.changed).map((item) => item.path).join(", ") || "fleet files"}.`);
-      } else if (!repo.remediationPolicy.autoOpenPrs) {
-        action = "skipped";
-        notes.push("Policy disables automatic rollout PR creation.");
       } else {
-        const plan = planSync(context, target);
-        const syncResult = openPrSync(plan, args.branchName || context.syncBranch);
-        action = syncResult.action === "opened-pr" ? "opened-pr" : "skipped";
-        remediationPrUrl = syncResult.prUrl;
-        remediationState = remediationPrUrl ? "rollout-pr-open" : remediationState;
-        notes.push(...(syncResult.notes || []));
+        if (args.openPrs && controlState && repo.remediationPolicy.autoOpenPrs) {
+          const gate = ensureApprovalGate(controlState, {
+            agent: args.controlAgent,
+            kind: "fleet-remediate",
+            target: repo.repo,
+            summary: `Fleet remediation rollout PR for ${repo.repo}`,
+            requestedBy: args.controlAgent,
+            createPending: !args.dryRun,
+          });
+          controlPlaneAllowed = gate.allowed;
+          controlPlaneApprovalId = gate.pending?.id || gate.approved?.id || "";
+          if (gate.createdPending) {
+            controlStateDirty = true;
+          }
+          if (!gate.allowed) {
+            action = args.dryRun ? "planned" : "skipped";
+            notes.push(gate.pending
+              ? `Blocked by control-plane approval ${gate.pending.id}.`
+              : `Would request control-plane approval for ${repo.repo}.`);
+          }
+        }
+        if (action === "skipped" || (action === "planned" && controlPlaneAllowed === false)) {
+          remediationState = remediationIssueUrl ? remediationState : "none";
+        } else if (!args.openPrs || args.dryRun) {
+          const plan = planSync(context, target);
+          action = "planned";
+          remediationState = "rollout-pr-open";
+          notes.push(`Would open rollout PR for ${plan.files.filter((item) => item.changed).map((item) => item.path).join(", ") || "fleet files"}.`);
+        } else if (!repo.remediationPolicy.autoOpenPrs) {
+          action = "skipped";
+          notes.push("Policy disables automatic rollout PR creation.");
+        } else {
+          const plan = planSync(context, target);
+          const syncResult = openPrSync(plan, args.branchName || context.syncBranch);
+          action = syncResult.action === "opened-pr" ? "opened-pr" : "skipped";
+          remediationPrUrl = syncResult.prUrl;
+          remediationState = remediationPrUrl ? "rollout-pr-open" : remediationState;
+          notes.push(...(syncResult.notes || []));
+        }
       }
     } else if (bucket === "runtime-warning" || bucket === "runtime-critical") {
       const shouldIssue = bucket === "runtime-critical" ? repo.remediationPolicy.issueOnCritical : repo.remediationPolicy.issueOnWarning;
@@ -1575,8 +1624,15 @@ function handleRemediate(args: ParsedArgs, context: FleetContext): void {
       remediationState,
       remediationPrUrl,
       remediationIssueUrl,
+      controlPlaneAllowed,
+      controlPlaneApprovalId,
+      controlPlaneStatePath: controlStatePath,
       notes,
     });
+  }
+
+  if (controlState && controlStateDirty) {
+    writeControlPlaneState(controlState, args.controlState);
   }
 
   const report: FleetRemediationReport = {

@@ -46,6 +46,8 @@ export interface TaskRecord {
   goalId: string;
   title: string;
   assignee: string;
+  parentTaskId: string;
+  delegatedBy: string;
   status: TaskStatus;
   summary: string;
   blockedReason: string;
@@ -64,6 +66,11 @@ export interface HeartbeatScheduleRecord {
   expression: string;
   summary: string;
   active: boolean;
+  retryLimit: number;
+  cooldownMinutes: number;
+  failureCount: number;
+  lastAttemptAt: string;
+  nextRunAfter: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -143,7 +150,7 @@ export interface HeartbeatOutcome {
 }
 
 export interface ControlPlaneState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   updatedAt: string;
   agents: AgentRecord[];
   goals: GoalRecord[];
@@ -167,6 +174,9 @@ export interface DashboardReport {
     blockedTasks: number;
     doneTasks: number;
     schedules: number;
+    coolingSchedules: number;
+    pausedSchedules: number;
+    exhaustedSchedules: number;
     recentHeartbeats: number;
     pendingApprovals: number;
     exceededBudgets: number;
@@ -187,6 +197,14 @@ export interface DashboardReport {
   schedules: HeartbeatScheduleRecord[];
   heartbeats: HeartbeatRecord[];
   approvals: ApprovalRecord[];
+}
+
+export interface ApprovalGateResult {
+  allowed: boolean;
+  pending: ApprovalRecord | null;
+  approved: ApprovalRecord | null;
+  createdPending: boolean;
+  plannedPending: boolean;
 }
 
 const DEFAULT_STATE_PATH = path.resolve(process.cwd(), ".codex-stack", "control-plane", "state.json");
@@ -216,7 +234,7 @@ function sortByKey<T>(items: T[], getter: (item: T) => string): T[] {
 
 export function defaultState(): ControlPlaneState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: now(),
     agents: [],
     goals: [],
@@ -239,12 +257,32 @@ export function readState(inputPath = ""): ControlPlaneState {
   if (!fs.existsSync(statePath)) return defaultState();
   const parsed = JSON.parse(fs.readFileSync(statePath, "utf8")) as Partial<ControlPlaneState> & Record<string, unknown>;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: clean(parsed.updatedAt) || now(),
     agents: Array.isArray(parsed.agents) ? parsed.agents as AgentRecord[] : [],
     goals: Array.isArray(parsed.goals) ? parsed.goals as GoalRecord[] : [],
-    tasks: Array.isArray(parsed.tasks) ? parsed.tasks as TaskRecord[] : [],
-    schedules: Array.isArray(parsed.schedules) ? parsed.schedules as HeartbeatScheduleRecord[] : [],
+    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map((task) => ({
+      ...(task as TaskRecord),
+      parentTaskId: clean((task as Partial<TaskRecord>).parentTaskId),
+      delegatedBy: clean((task as Partial<TaskRecord>).delegatedBy),
+      blockedBy: Array.isArray((task as Partial<TaskRecord>).blockedBy)
+        ? [...new Set(((task as Partial<TaskRecord>).blockedBy as string[]).map((value) => clean(value)).filter(Boolean))]
+        : [],
+    })) : [],
+    schedules: Array.isArray(parsed.schedules) ? parsed.schedules.map((schedule) => ({
+      ...(schedule as HeartbeatScheduleRecord),
+      retryLimit: Number.isFinite(Number((schedule as Partial<HeartbeatScheduleRecord>).retryLimit))
+        ? Number((schedule as Partial<HeartbeatScheduleRecord>).retryLimit)
+        : 0,
+      cooldownMinutes: Number.isFinite(Number((schedule as Partial<HeartbeatScheduleRecord>).cooldownMinutes))
+        ? Number((schedule as Partial<HeartbeatScheduleRecord>).cooldownMinutes)
+        : 0,
+      failureCount: Number.isFinite(Number((schedule as Partial<HeartbeatScheduleRecord>).failureCount))
+        ? Number((schedule as Partial<HeartbeatScheduleRecord>).failureCount)
+        : 0,
+      lastAttemptAt: clean((schedule as Partial<HeartbeatScheduleRecord>).lastAttemptAt),
+      nextRunAfter: clean((schedule as Partial<HeartbeatScheduleRecord>).nextRunAfter),
+    })) : [],
     heartbeats: Array.isArray(parsed.heartbeats) ? parsed.heartbeats as HeartbeatRecord[] : [],
     sessions: Array.isArray(parsed.sessions) ? parsed.sessions as AgentSessionRecord[] : [],
     budgets: Array.isArray(parsed.budgets) ? parsed.budgets as BudgetPolicyRecord[] : [],
@@ -420,10 +458,19 @@ export function upsertTask(state: ControlPlaneState, input: Omit<TaskRecord, "cr
   const existing = findTask(state, input.id);
   requireGoal(state, input.goalId);
   if (input.assignee) requireAgent(state, input.assignee);
+  if (input.parentTaskId) {
+    if (clean(input.parentTaskId) === clean(input.id)) {
+      throw new Error(`Task cannot delegate to itself: ${JSON.stringify(input.id)}`);
+    }
+    requireTask(state, input.parentTaskId);
+  }
   for (const dependency of input.blockedBy) requireTask(state, dependency);
   const timestamp = now();
   const record: TaskRecord = {
     ...input,
+    parentTaskId: clean(input.parentTaskId),
+    delegatedBy: clean(input.delegatedBy),
+    blockedBy: [...new Set(input.blockedBy.map((dependency) => clean(dependency)).filter(Boolean))],
     claimedAt: input.status === "claimed" || input.status === "working" ? (existing?.claimedAt || input.claimedAt || timestamp) : (input.claimedAt || existing?.claimedAt || ""),
     completedAt: input.status === "done" ? (input.completedAt || existing?.completedAt || timestamp) : (input.completedAt || existing?.completedAt || ""),
     createdAt: existing?.createdAt || timestamp,
@@ -445,6 +492,11 @@ export function upsertSchedule(state: ControlPlaneState, input: Omit<HeartbeatSc
   const timestamp = now();
   const record: HeartbeatScheduleRecord = {
     ...input,
+    retryLimit: Number.isFinite(Number(input.retryLimit)) ? Number(input.retryLimit) : 0,
+    cooldownMinutes: Number.isFinite(Number(input.cooldownMinutes)) ? Number(input.cooldownMinutes) : 0,
+    failureCount: Number.isFinite(Number(input.failureCount)) ? Number(input.failureCount) : 0,
+    lastAttemptAt: clean(input.lastAttemptAt),
+    nextRunAfter: clean(input.nextRunAfter),
     createdAt: existing?.createdAt || timestamp,
     updatedAt: timestamp,
   };
@@ -455,6 +507,85 @@ export function upsertSchedule(state: ControlPlaneState, input: Omit<HeartbeatSc
   state.schedules.push(record);
   sortByKey(state.schedules, (item) => item.id);
   return record;
+}
+
+export function listChildTasks(state: ControlPlaneState, parentTaskId: string): TaskRecord[] {
+  const target = clean(parentTaskId);
+  return state.tasks.filter((task) => task.parentTaskId === target).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function delegatedBlockedReason(taskIds: string[]): string {
+  return taskIds.length === 1
+    ? `Waiting on delegated task ${taskIds[0]}`
+    : `Waiting on delegated tasks ${taskIds.join(", ")}`;
+}
+
+function taskBlockedReason(taskIds: string[]): string {
+  return taskIds.length === 1
+    ? `Waiting on task blocker ${taskIds[0]}`
+    : `Waiting on task blockers ${taskIds.join(", ")}`;
+}
+
+export function syncDelegatedParent(state: ControlPlaneState, parentTaskId: string): TaskRecord {
+  const parent = requireTask(state, parentTaskId);
+  if (parent.status === "done") return parent;
+  const children = listChildTasks(state, parent.id);
+  const childIds = new Set(children.map((child) => child.id));
+  const outstandingChildren = children.filter((child) => child.status !== "done").map((child) => child.id);
+  const externalBlockers = parent.blockedBy.filter((dependency) => !childIds.has(dependency));
+  parent.blockedBy = [...new Set([...externalBlockers, ...outstandingChildren])];
+  if (outstandingChildren.length) {
+    parent.status = "blocked";
+    parent.blockedReason = delegatedBlockedReason(outstandingChildren);
+  } else if (/^Waiting on delegated task/.test(parent.blockedReason)) {
+    if (externalBlockers.length) {
+      parent.status = "blocked";
+      parent.blockedReason = taskBlockedReason(externalBlockers);
+    } else {
+      parent.status = parent.assignee ? "claimed" : "queued";
+      parent.blockedReason = "";
+    }
+  }
+  parent.updatedAt = now();
+  return parent;
+}
+
+export function delegateTask(state: ControlPlaneState, input: {
+  parentTaskId: string;
+  id: string;
+  title: string;
+  assignee?: string;
+  goalId?: string;
+  status?: TaskStatus;
+  summary?: string;
+  blockedReason?: string;
+  blockedBy?: string[];
+  delegatedBy?: string;
+}): { parent: TaskRecord; child: TaskRecord } {
+  const parent = requireTask(state, input.parentTaskId);
+  if (parent.status === "done") {
+    throw new Error(`Cannot delegate from completed task: ${JSON.stringify(parent.id)}`);
+  }
+  const existing = findTask(state, input.id);
+  if (existing?.parentTaskId && existing.parentTaskId !== parent.id) {
+    throw new Error(`Task ${JSON.stringify(existing.id)} is already delegated from ${JSON.stringify(existing.parentTaskId)}`);
+  }
+  const child = upsertTask(state, {
+    id: input.id,
+    goalId: clean(input.goalId) || parent.goalId,
+    title: input.title,
+    assignee: clean(input.assignee),
+    parentTaskId: parent.id,
+    delegatedBy: clean(input.delegatedBy) || parent.assignee,
+    status: input.status || "queued",
+    summary: clean(input.summary),
+    blockedReason: clean(input.blockedReason),
+    blockedBy: input.blockedBy || [],
+  });
+  return {
+    parent: syncDelegatedParent(state, parent.id),
+    child,
+  };
 }
 
 export function upsertSession(state: ControlPlaneState, input: Omit<AgentSessionRecord, "updatedAt">): AgentSessionRecord {
@@ -543,6 +674,59 @@ export function ensurePendingApproval(state: ControlPlaneState, input: Omit<Appr
   const existing = findPendingApproval(state, input.agent, input.kind, input.target);
   if (existing) return existing;
   return requestApproval(state, input);
+}
+
+export function ensureApprovalGate(state: ControlPlaneState, input: {
+  agent: string;
+  kind: ApprovalKind;
+  target: string;
+  summary: string;
+  requestedBy: string;
+  createPending?: boolean;
+}): ApprovalGateResult {
+  requireAgent(state, input.agent);
+  const approved = findApprovedApproval(state, input.agent, input.kind, input.target) || null;
+  if (approved) {
+    return {
+      allowed: true,
+      pending: null,
+      approved,
+      createdPending: false,
+      plannedPending: false,
+    };
+  }
+  const pending = findPendingApproval(state, input.agent, input.kind, input.target) || null;
+  if (pending) {
+    return {
+      allowed: false,
+      pending,
+      approved: null,
+      createdPending: false,
+      plannedPending: false,
+    };
+  }
+  if (!input.createPending) {
+    return {
+      allowed: false,
+      pending: null,
+      approved: null,
+      createdPending: false,
+      plannedPending: true,
+    };
+  }
+  return {
+    allowed: false,
+    pending: ensurePendingApproval(state, {
+      agent: input.agent,
+      kind: input.kind,
+      target: input.target,
+      summary: input.summary,
+      requestedBy: input.requestedBy,
+    }),
+    approved: null,
+    createdPending: true,
+    plannedPending: false,
+  };
 }
 
 export function listQueue(state: ControlPlaneState, assignee = ""): TaskRecord[] {
@@ -635,15 +819,16 @@ export function recordHeartbeat(state: ControlPlaneState, input: {
 
   if (input.requireApprovalKind) {
     const target = clean(input.approvalTarget) || taskId || agent.name;
-    const approved = findApprovedApproval(state, agent.name, input.requireApprovalKind, target);
-    if (!approved) {
-      approvals.push(ensurePendingApproval(state, {
-        agent: agent.name,
-        kind: input.requireApprovalKind,
-        target,
-        summary: clean(input.summary) || `${input.requireApprovalKind} approval required`,
-        requestedBy: clean(input.requestedBy) || agent.name,
-      }));
+    const gate = ensureApprovalGate(state, {
+      agent: agent.name,
+      kind: input.requireApprovalKind,
+      target,
+      summary: clean(input.summary) || `${input.requireApprovalKind} approval required`,
+      requestedBy: clean(input.requestedBy) || agent.name,
+      createPending: true,
+    });
+    if (!gate.allowed) {
+      if (gate.pending) approvals.push(gate.pending);
       blocked = true;
     }
   }
@@ -657,15 +842,16 @@ export function recordHeartbeat(state: ControlPlaneState, input: {
     });
     usage = projected;
     if (projected.exceeded) {
-      const budgetApproval = findApprovedApproval(state, agent.name, "budget-override", agent.name);
-      if (!budgetApproval) {
-        approvals.push(ensurePendingApproval(state, {
-          agent: agent.name,
-          kind: "budget-override",
-          target: agent.name,
-          summary: `Budget override required for ${agent.name}: exceeded ${projected.exceededFields.join(", ")}`,
-          requestedBy: clean(input.requestedBy) || agent.name,
-        }));
+      const gate = ensureApprovalGate(state, {
+        agent: agent.name,
+        kind: "budget-override",
+        target: agent.name,
+        summary: `Budget override required for ${agent.name}: exceeded ${projected.exceededFields.join(", ")}`,
+        requestedBy: clean(input.requestedBy) || agent.name,
+        createPending: true,
+      });
+      if (!gate.allowed) {
+        if (gate.pending) approvals.push(gate.pending);
         blocked = true;
       }
     }
@@ -727,6 +913,39 @@ export function buildApprovalGate(state: ControlPlaneState, input: { agent: stri
   };
 }
 
+export function listDueSchedules(state: ControlPlaneState, agent = ""): HeartbeatScheduleRecord[] {
+  const target = clean(agent);
+  const currentTime = Date.now();
+  return state.schedules
+    .filter((schedule) => {
+      if (!schedule.active) return false;
+      if (target && schedule.agent !== target) return false;
+      const nextRunAt = parseDate(schedule.nextRunAfter);
+      return !nextRunAt || nextRunAt.getTime() <= currentTime;
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function applyHeartbeatScheduleResult(state: ControlPlaneState, scheduleId: string, status: HeartbeatStatus, referenceDate = new Date()): HeartbeatScheduleRecord {
+  const schedule = requireSchedule(state, scheduleId);
+  const timestamp = referenceDate.toISOString();
+  schedule.lastAttemptAt = timestamp;
+  if (status === "blocked" || status === "error") {
+    schedule.failureCount += 1;
+    schedule.nextRunAfter = schedule.cooldownMinutes > 0
+      ? new Date(referenceDate.getTime() + schedule.cooldownMinutes * 60 * 1000).toISOString()
+      : "";
+    if (schedule.retryLimit > 0 && schedule.failureCount >= schedule.retryLimit) {
+      schedule.active = false;
+    }
+  } else {
+    schedule.failureCount = 0;
+    schedule.nextRunAfter = "";
+  }
+  schedule.updatedAt = timestamp;
+  return schedule;
+}
+
 export function listRecentHeartbeats(state: ControlPlaneState, agent = "", limit = 20): HeartbeatRecord[] {
   const target = clean(agent);
   return state.heartbeats
@@ -739,6 +958,13 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
   const queued = state.tasks.filter((task) => task.status === "queued");
   const active = state.tasks.filter((task) => task.status === "claimed" || task.status === "working");
   const blocked = state.tasks.filter((task) => task.status === "blocked");
+  const activeSchedules = state.schedules.filter((schedule) => schedule.active);
+  const coolingSchedules = activeSchedules.filter((schedule) => {
+    const nextRunAt = parseDate(schedule.nextRunAfter);
+    return Boolean(nextRunAt && nextRunAt.getTime() > Date.now());
+  });
+  const exhaustedSchedules = state.schedules.filter((schedule) => !schedule.active && schedule.retryLimit > 0 && schedule.failureCount >= schedule.retryLimit);
+  const pausedSchedules = state.schedules.filter((schedule) => !schedule.active && !(schedule.retryLimit > 0 && schedule.failureCount >= schedule.retryLimit));
   const directReports = new Map<string, string[]>();
   for (const agent of state.agents) {
     if (!agent.manager) continue;
@@ -767,7 +993,10 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
       activeTasks: active.length,
       blockedTasks: blocked.length,
       doneTasks: state.tasks.filter((task) => task.status === "done").length,
-      schedules: state.schedules.filter((schedule) => schedule.active).length,
+      schedules: activeSchedules.length,
+      coolingSchedules: coolingSchedules.length,
+      pausedSchedules: pausedSchedules.length,
+      exhaustedSchedules: exhaustedSchedules.length,
       recentHeartbeats: recentHeartbeats.length,
       pendingApprovals: pendingApprovals.length,
       exceededBudgets: exceededBudgets.length,
@@ -790,7 +1019,7 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
     queue: queued,
     active,
     blocked,
-    schedules: state.schedules.filter((schedule) => schedule.active).sort((a, b) => a.id.localeCompare(b.id)),
+    schedules: [...state.schedules].sort((a, b) => a.id.localeCompare(b.id)),
     heartbeats: recentHeartbeats,
     approvals: pendingApprovals.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)),
   };
@@ -816,7 +1045,7 @@ function renderAgentRow(agent: DashboardReport["agents"][number]): string {
 }
 
 function renderTaskRow(task: TaskRecord): string {
-  return `<tr><td>${escapeHtml(task.id)}</td><td>${escapeHtml(task.goalId)}</td><td>${escapeHtml(task.title)}</td><td>${escapeHtml(task.assignee || "-")}</td><td>${escapeHtml(task.status)}</td><td>${escapeHtml(task.blockedReason || "-")}</td></tr>`;
+  return `<tr><td>${escapeHtml(task.id)}</td><td>${escapeHtml(task.goalId)}</td><td>${escapeHtml(task.title)}</td><td>${escapeHtml(task.assignee || "-")}</td><td>${escapeHtml(task.parentTaskId || "-")}</td><td>${escapeHtml(task.status)}</td><td>${escapeHtml(task.blockedReason || "-")}</td></tr>`;
 }
 
 function renderGoalRow(goal: DashboardReport["goals"][number]): string {
@@ -832,7 +1061,10 @@ function renderApprovalRow(approval: ApprovalRecord): string {
 }
 
 function renderScheduleRow(schedule: HeartbeatScheduleRecord): string {
-  return `<tr><td>${escapeHtml(schedule.id)}</td><td>${escapeHtml(schedule.agent)}</td><td>${escapeHtml(schedule.taskId || "-")}</td><td>${escapeHtml(schedule.trigger)}</td><td>${escapeHtml(schedule.expression || "-")}</td><td>${escapeHtml(schedule.summary || "-")}</td></tr>`;
+  const stateLabel = schedule.active
+    ? schedule.nextRunAfter ? "cooling" : "active"
+    : schedule.retryLimit > 0 && schedule.failureCount >= schedule.retryLimit ? "exhausted" : "paused";
+  return `<tr><td>${escapeHtml(schedule.id)}</td><td>${escapeHtml(schedule.agent)}</td><td>${escapeHtml(schedule.taskId || "-")}</td><td>${escapeHtml(schedule.trigger)}</td><td>${escapeHtml(schedule.expression || "-")}</td><td>${escapeHtml(schedule.summary || "-")}</td><td>${escapeHtml(stateLabel)}</td><td>${schedule.failureCount}/${schedule.retryLimit || "∞"}</td><td>${escapeHtml(schedule.nextRunAfter || "-")}</td></tr>`;
 }
 
 export function renderDashboardHtml(report: DashboardReport): string {
@@ -912,6 +1144,9 @@ export function renderDashboardHtml(report: DashboardReport): string {
       ${card("Active tasks", String(report.counts.activeTasks))}
       ${card("Blocked tasks", String(report.counts.blockedTasks), report.counts.blockedTasks ? "danger" : "neutral")}
       ${card("Schedules", String(report.counts.schedules))}
+      ${card("Cooling schedules", String(report.counts.coolingSchedules), report.counts.coolingSchedules ? "warn" : "neutral")}
+      ${card("Paused schedules", String(report.counts.pausedSchedules), report.counts.pausedSchedules ? "warn" : "neutral")}
+      ${card("Exhausted schedules", String(report.counts.exhaustedSchedules), report.counts.exhaustedSchedules ? "danger" : "neutral")}
       ${card("Recent heartbeats", String(report.counts.recentHeartbeats))}
       ${card("Pending approvals", String(report.counts.pendingApprovals), report.counts.pendingApprovals ? "warn" : "neutral")}
       ${card("Exceeded budgets", String(report.counts.exceededBudgets), report.counts.exceededBudgets ? "danger" : "neutral")}
@@ -935,15 +1170,15 @@ export function renderDashboardHtml(report: DashboardReport): string {
       <section class="panel">
         <h2>Queue</h2>
         <table>
-          <thead><tr><th>ID</th><th>Goal</th><th>Task</th><th>Assignee</th><th>Status</th><th>Blocked reason</th></tr></thead>
-          <tbody>${report.queue.map(renderTaskRow).join("") || '<tr><td colspan="6">No queued work.</td></tr>'}</tbody>
+          <thead><tr><th>ID</th><th>Goal</th><th>Task</th><th>Assignee</th><th>Parent</th><th>Status</th><th>Blocked reason</th></tr></thead>
+          <tbody>${report.queue.map(renderTaskRow).join("") || '<tr><td colspan="7">No queued work.</td></tr>'}</tbody>
         </table>
       </section>
       <section class="panel">
         <h2>Schedules</h2>
         <table>
-          <thead><tr><th>ID</th><th>Agent</th><th>Task</th><th>Trigger</th><th>Expression</th><th>Summary</th></tr></thead>
-          <tbody>${report.schedules.map(renderScheduleRow).join("") || '<tr><td colspan="6">No schedules recorded.</td></tr>'}</tbody>
+          <thead><tr><th>ID</th><th>Agent</th><th>Task</th><th>Trigger</th><th>Expression</th><th>Summary</th><th>State</th><th>Failures</th><th>Next run after</th></tr></thead>
+          <tbody>${report.schedules.map(renderScheduleRow).join("") || '<tr><td colspan="9">No schedules recorded.</td></tr>'}</tbody>
         </table>
       </section>
       <section class="panel">
@@ -975,6 +1210,6 @@ export function writeDashboard(report: DashboardReport, outDir: string): { outDi
   const markdownPath = path.join(resolvedOutDir, "summary.md");
   fs.writeFileSync(htmlPath, renderDashboardHtml(report));
   fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  fs.writeFileSync(markdownPath, `# codex-stack control plane\n\n- Generated: ${report.generatedAt}\n- Agents: ${report.counts.agents}\n- Teams: ${report.counts.teams}\n- Goals: ${report.counts.goals}\n- Queued tasks: ${report.counts.queuedTasks}\n- Active tasks: ${report.counts.activeTasks}\n- Blocked tasks: ${report.counts.blockedTasks}\n- Schedules: ${report.counts.schedules}\n- Recent heartbeats: ${report.counts.recentHeartbeats}\n- Pending approvals: ${report.counts.pendingApprovals}\n- Exceeded budgets: ${report.counts.exceededBudgets}\n- Completed tasks: ${report.counts.doneTasks}\n`);
+  fs.writeFileSync(markdownPath, `# codex-stack control plane\n\n- Generated: ${report.generatedAt}\n- Agents: ${report.counts.agents}\n- Teams: ${report.counts.teams}\n- Goals: ${report.counts.goals}\n- Queued tasks: ${report.counts.queuedTasks}\n- Active tasks: ${report.counts.activeTasks}\n- Blocked tasks: ${report.counts.blockedTasks}\n- Schedules: ${report.counts.schedules}\n- Cooling schedules: ${report.counts.coolingSchedules}\n- Paused schedules: ${report.counts.pausedSchedules}\n- Exhausted schedules: ${report.counts.exhaustedSchedules}\n- Recent heartbeats: ${report.counts.recentHeartbeats}\n- Pending approvals: ${report.counts.pendingApprovals}\n- Exceeded budgets: ${report.counts.exceededBudgets}\n- Completed tasks: ${report.counts.doneTasks}\n`);
   return { outDir: resolvedOutDir, htmlPath, jsonPath, markdownPath };
 }

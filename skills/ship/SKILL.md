@@ -38,6 +38,7 @@ bun src/cli.ts ship --message "feat: ready for review" --push
 bun src/cli.ts ship --message "feat: ready for review" --push --pr
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --template .github/pull_request_template.md
 bun src/cli.ts ship --message "feat: ready for review" --push --pr --reviewer octocat --assignee @me --project "Engineering Roadmap" --label release-candidate
+bun src/cli.ts ship --dry-run --pr --control-agent ship-1 --control-state .codex-stack/control-plane/state.json
 bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --verify-path /dashboard --verify-device mobile --verify-console-errors --verify-flow landing-smoke --verify-snapshot landing-home
 bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --verify-path /dashboard --verify-device mobile --verify-flow landing-smoke --verify-snapshot landing-home --verify-a11y --verify-a11y-scope main --verify-perf --verify-perf-budget lcp=2s
 ```
@@ -49,6 +50,7 @@ bun src/cli.ts ship --dry-run --pr --verify-url https://staging.example.com --ve
 - Shipping action taken
 - PR details
 - Deploy verification status including visual, accessibility, and performance evidence when enabled
+- Control-plane approval gate status when `--control-agent` is used
 - Regression triage summary so approved drift stays visible and unresolved critical regressions remain blocking
 - Risks or blockers
 

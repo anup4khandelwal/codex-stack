@@ -3,6 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execSync, spawnSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import {
+  ensureApprovalGate,
+  readState as readControlPlaneState,
+  resolveStatePath as resolveControlStatePath,
+  writeState as writeControlPlaneState,
+} from "./control-plane.ts";
 
 interface RunOptions extends Partial<ExecSyncOptionsWithStringEncoding> {
   allowFailure?: boolean;
@@ -44,6 +50,9 @@ interface ShipArgs {
   verifyPerfBudgets: string[];
   verifyPerfWaitMs: number;
   updateVerifySnapshot: boolean;
+  controlAgent: string;
+  controlState: string;
+  controlTarget: string;
 }
 
 interface BaseParts {
@@ -331,6 +340,19 @@ interface VerificationSummary {
   commentPosted: boolean;
 }
 
+interface ControlPlaneSummary {
+  enabled: boolean;
+  agent: string;
+  statePath: string;
+  kind: string;
+  target: string;
+  allowed: boolean;
+  pendingApprovalId: string;
+  approvedApprovalId: string;
+  plannedRequest: boolean;
+  createdPending: boolean;
+}
+
 interface ShipResult {
   status: "ok" | "warning";
   branch: string;
@@ -341,6 +363,7 @@ interface ShipResult {
   pr: PrSummary | null;
   prUrl: string;
   verification: VerificationSummary;
+  controlPlane: ControlPlaneSummary;
   automation: AutomationPlan;
   warnings: string[];
   steps: string[];
@@ -364,7 +387,7 @@ function usage(): never {
   console.log(`ship-branch
 
 Usage:
-  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--verify-a11y] [--verify-a11y-scope <selector>] [--verify-a11y-impact <critical|serious|moderate|minor>] [--verify-perf] [--verify-perf-budget <metric=value>] [--verify-perf-wait-ms <n>] [--update-verify-snapshot] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
+  bun scripts/ship-branch.ts [--dry-run] [--skip-tests] [--base <ref>] [--message <msg>] [--push] [--pr] [--title <title>] [--body <body>] [--body-file <path>] [--template <path>] [--reviewer <user>] [--team-reviewer <org/team>] [--assignee <user>] [--assign-self] [--project <title>] [--label <name>] [--milestone <title>] [--verify-url <url>] [--verify-path <path>] [--verify-device <desktop|tablet|mobile>] [--verify-flow <name>] [--verify-snapshot <name>] [--verify-session <name>] [--verify-console-errors] [--verify-a11y] [--verify-a11y-scope <selector>] [--verify-a11y-impact <critical|serious|moderate|minor>] [--verify-perf] [--verify-perf-budget <metric=value>] [--verify-perf-wait-ms <n>] [--update-verify-snapshot] [--control-agent <name>] [--control-state <path>] [--control-target <id>] [--draft] [--no-auto-labels] [--no-auto-reviewers] [--json]
 `);
   process.exit(0);
 }
@@ -454,6 +477,9 @@ function parseArgs(argv: string[]): ShipArgs {
     verifyPerfBudgets: [],
     verifyPerfWaitMs: 250,
     updateVerifySnapshot: false,
+    controlAgent: "",
+    controlState: "",
+    controlTarget: "",
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -534,6 +560,15 @@ function parseArgs(argv: string[]): ShipArgs {
       i += 1;
     } else if (arg === "--update-verify-snapshot") {
       out.updateVerifySnapshot = true;
+    } else if (arg === "--control-agent") {
+      out.controlAgent = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--control-state") {
+      out.controlState = argv[i + 1] || "";
+      i += 1;
+    } else if (arg === "--control-target") {
+      out.controlTarget = argv[i + 1] || "";
+      i += 1;
     } else if (arg === "--label") {
       out.labels.push(argv[i + 1] || "");
       i += 1;
@@ -1053,6 +1088,52 @@ function shouldRunVerification(args: ShipArgs): boolean {
   );
 }
 
+function resolveControlTarget(args: ShipArgs, branch: string): string {
+  return cleanSubject(args.controlTarget) || branch;
+}
+
+function evaluateControlPlaneGate(args: ShipArgs, branch: string): ControlPlaneSummary {
+  if (!args.controlAgent) {
+    return {
+      enabled: false,
+      agent: "",
+      statePath: "",
+      kind: "",
+      target: "",
+      allowed: true,
+      pendingApprovalId: "",
+      approvedApprovalId: "",
+      plannedRequest: false,
+      createdPending: false,
+    };
+  }
+  const controlState = readControlPlaneState(args.controlState);
+  const target = resolveControlTarget(args, branch);
+  const gate = ensureApprovalGate(controlState, {
+    agent: args.controlAgent,
+    kind: "ship-pr",
+    target,
+    summary: `Ship approval required for ${branch}`,
+    requestedBy: args.controlAgent,
+    createPending: !args.dryRun,
+  });
+  if (gate.createdPending) {
+    writeControlPlaneState(controlState, args.controlState);
+  }
+  return {
+    enabled: true,
+    agent: args.controlAgent,
+    statePath: resolveControlStatePath(args.controlState),
+    kind: "ship-pr",
+    target,
+    allowed: gate.allowed,
+    pendingApprovalId: gate.pending?.id || "",
+    approvedApprovalId: gate.approved?.id || "",
+    plannedRequest: gate.plannedPending,
+    createdPending: gate.createdPending,
+  };
+}
+
 function runDeployVerification(args: ShipArgs, branch: string): DeployVerificationRun {
   if (!args.verifyUrl) {
     throw new Error("Verification requires --verify-url.");
@@ -1413,6 +1494,18 @@ function printText(result: ShipResult): void {
   if (result.automation.projects.length) {
     console.log(`- Projects: ${result.automation.projects.join(", ")}`);
   }
+  if (result.controlPlane.enabled) {
+    console.log(`- Control gate: ${result.controlPlane.kind} on ${result.controlPlane.target}`);
+    console.log(`- Control agent: ${result.controlPlane.agent}`);
+    console.log(`- Control state: ${result.controlPlane.statePath}`);
+    console.log(`- Control allowed: ${result.controlPlane.allowed ? "yes" : "no"}`);
+    if (result.controlPlane.approvedApprovalId) {
+      console.log(`- Control approval: ${result.controlPlane.approvedApprovalId}`);
+    }
+    if (result.controlPlane.pendingApprovalId) {
+      console.log(`- Control pending approval: ${result.controlPlane.pendingApprovalId}`);
+    }
+  }
   if (result.verification.url) {
     console.log(`- Verification URL: ${result.verification.url}`);
   }
@@ -1523,6 +1616,18 @@ const result: ShipResult = {
     commentPreview: "",
     commentPosted: false,
   },
+  controlPlane: {
+    enabled: false,
+    agent: "",
+    statePath: "",
+    kind: "",
+    target: "",
+    allowed: true,
+    pendingApprovalId: "",
+    approvedApprovalId: "",
+    plannedRequest: false,
+    createdPending: false,
+  },
   automation: {
     labels: [],
     manualLabels: [],
@@ -1593,6 +1698,26 @@ if (result.automation.autoReviewerSource !== "none" && result.automation.autoRev
 }
 if (result.automation.autoAssignees.length) {
   result.steps.push(`infer assignees ${result.automation.autoAssignees.join(", ")}`);
+}
+
+if (args.controlAgent) {
+  result.steps.push(`check control-plane approval ship-pr on ${resolveControlTarget(args, result.branch)}`);
+  result.controlPlane = evaluateControlPlaneGate(args, result.branch);
+  if (!result.controlPlane.allowed) {
+    result.status = "warning";
+    if (result.controlPlane.pendingApprovalId) {
+      result.steps.push(`pending control-plane approval ${result.controlPlane.pendingApprovalId}`);
+      result.warnings.push(`control-plane approval required: approve ${result.controlPlane.pendingApprovalId} for ${result.controlPlane.target}`);
+    } else if (result.controlPlane.plannedRequest) {
+      result.steps.push(`plan control-plane approval request for ${result.controlPlane.target}`);
+      result.warnings.push(`control-plane approval would be requested for ${result.controlPlane.target}`);
+    }
+    if (!args.dryRun) {
+      if (args.json) console.log(JSON.stringify(result, null, 2));
+      else printText(result);
+      process.exit(1);
+    }
+  }
 }
 
 if (shouldRunVerification(args)) {

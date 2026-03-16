@@ -180,6 +180,7 @@ CLI:
 ```bash
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
 bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
 bun src/cli.ts goals queue --json
 ```
 
@@ -192,7 +193,8 @@ Use codex-stack-heartbeat to schedule this agent on a loop, preserve its continu
 CLI:
 
 ```bash
-bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue"
+bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
+bun src/cli.ts heartbeat due --agent reviewer-1 --json
 bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Run QA after approval" --json
 bun src/cli.ts heartbeat show reviewer-1 --json
 ```
@@ -209,6 +211,8 @@ CLI:
 bun src/cli.ts approvals request --agent reviewer-1 --kind ship-pr --target review-contracts --summary "Open release PR"
 bun src/cli.ts approvals approve <approval-id> --by lead-1 --note "Approved release work"
 bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
+bun src/cli.ts ship --dry-run --pr --control-agent reviewer-1 --control-state .codex-stack/control-plane/state.json
+bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent lead-1 --control-state .codex-stack/control-plane/state.json --json
 ```
 
 ## MCP mode
