@@ -12,6 +12,9 @@ export type HeartbeatStatus = "ok" | "warning" | "blocked" | "error";
 export type BudgetWindow = "daily" | "weekly" | "monthly";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type ApprovalKind = "ship-pr" | "merge-pr" | "update-snapshot" | "fleet-remediate" | "budget-override" | "custom";
+export type TaskActionKind = "review" | "qa" | "preview" | "deploy" | "ship-plan" | "fleet-collect" | "fleet-remediate-plan" | "retro" | "upgrade" | "custom-command";
+export type TaskFailureClass = "transient" | "blocked-by-approval" | "blocked-by-budget" | "blocked-by-dependency" | "hard-failure";
+export type TaskExecutionStatus = "success" | "warning" | "blocked" | "error" | "skipped";
 
 export interface AgentRecord {
   name: string;
@@ -52,6 +55,27 @@ export interface TaskRecord {
   summary: string;
   blockedReason: string;
   blockedBy: string[];
+  actionKind: TaskActionKind | "";
+  actionArgs: string[];
+  expectedDurationMinutes: number;
+  expectedCostUnits: number;
+  requireApprovalKind: ApprovalKind | "";
+  approvalTarget: string;
+  nextRunAfter: string;
+  failureCount: number;
+  lastFailureClass: TaskFailureClass | "";
+  stuck: boolean;
+  delegateTaskId: string;
+  delegateTitle: string;
+  delegateAssignee: string;
+  delegateGoalId: string;
+  delegateSummary: string;
+  delegateBlockedReason: string;
+  delegateBlockedBy: string[];
+  delegateActionKind: TaskActionKind | "";
+  delegateActionArgs: string[];
+  delegateExpectedDurationMinutes: number;
+  delegateExpectedCostUnits: number;
   createdAt: string;
   updatedAt: string;
   claimedAt: string;
@@ -90,6 +114,29 @@ export interface HeartbeatRecord {
   costUnits: number;
   scheduledBy: string;
   createdAt: string;
+}
+
+export interface TaskExecutionRecord {
+  id: string;
+  agent: string;
+  taskId: string;
+  scheduleId: string;
+  trigger: HeartbeatTrigger;
+  actionKind: TaskActionKind | "";
+  status: TaskExecutionStatus;
+  summary: string;
+  nextAction: string;
+  output: string;
+  branch: string;
+  prUrl: string;
+  failureClass: TaskFailureClass | "";
+  approvalId: string;
+  budgetExceeded: boolean;
+  createdTaskIds: string[];
+  durationMinutes: number;
+  costUnits: number;
+  startedAt: string;
+  finishedAt: string;
 }
 
 export interface AgentSessionRecord {
@@ -150,13 +197,14 @@ export interface HeartbeatOutcome {
 }
 
 export interface ControlPlaneState {
-  schemaVersion: 3;
+  schemaVersion: 4;
   updatedAt: string;
   agents: AgentRecord[];
   goals: GoalRecord[];
   tasks: TaskRecord[];
   schedules: HeartbeatScheduleRecord[];
   heartbeats: HeartbeatRecord[];
+  executions: TaskExecutionRecord[];
   sessions: AgentSessionRecord[];
   budgets: BudgetPolicyRecord[];
   approvals: ApprovalRecord[];
@@ -178,24 +226,31 @@ export interface DashboardReport {
     pausedSchedules: number;
     exhaustedSchedules: number;
     recentHeartbeats: number;
+    recentExecutions: number;
     pendingApprovals: number;
     exceededBudgets: number;
+    stuckTasks: number;
+    runnableAgents: number;
   };
   agents: Array<AgentRecord & {
     directReports: string[];
     queuedTasks: number;
     activeTasks: number;
     blockedTasks: number;
+    stuckTasks: number;
     session: AgentSessionRecord | null;
     budget: BudgetUsage | null;
     pendingApprovals: number;
+    runnable: boolean;
   }>;
   goals: Array<GoalRecord & { childGoals: string[]; taskIds: string[] }>;
   queue: TaskRecord[];
   active: TaskRecord[];
   blocked: TaskRecord[];
+  stuck: TaskRecord[];
   schedules: HeartbeatScheduleRecord[];
   heartbeats: HeartbeatRecord[];
+  executions: TaskExecutionRecord[];
   approvals: ApprovalRecord[];
 }
 
@@ -234,13 +289,14 @@ function sortByKey<T>(items: T[], getter: (item: T) => string): T[] {
 
 export function defaultState(): ControlPlaneState {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     updatedAt: now(),
     agents: [],
     goals: [],
     tasks: [],
     schedules: [],
     heartbeats: [],
+    executions: [],
     sessions: [],
     budgets: [],
     approvals: [],
@@ -257,7 +313,7 @@ export function readState(inputPath = ""): ControlPlaneState {
   if (!fs.existsSync(statePath)) return defaultState();
   const parsed = JSON.parse(fs.readFileSync(statePath, "utf8")) as Partial<ControlPlaneState> & Record<string, unknown>;
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     updatedAt: clean(parsed.updatedAt) || now(),
     agents: Array.isArray(parsed.agents) ? parsed.agents as AgentRecord[] : [],
     goals: Array.isArray(parsed.goals) ? parsed.goals as GoalRecord[] : [],
@@ -268,6 +324,43 @@ export function readState(inputPath = ""): ControlPlaneState {
       blockedBy: Array.isArray((task as Partial<TaskRecord>).blockedBy)
         ? [...new Set(((task as Partial<TaskRecord>).blockedBy as string[]).map((value) => clean(value)).filter(Boolean))]
         : [],
+      actionKind: normalizeTaskActionKind(String((task as Partial<TaskRecord>).actionKind || ""), true),
+      actionArgs: Array.isArray((task as Partial<TaskRecord>).actionArgs)
+        ? [...new Set(((task as Partial<TaskRecord>).actionArgs as string[]).map((value) => String(value)))]
+        : [],
+      expectedDurationMinutes: Number.isFinite(Number((task as Partial<TaskRecord>).expectedDurationMinutes))
+        ? Number((task as Partial<TaskRecord>).expectedDurationMinutes)
+        : 0,
+      expectedCostUnits: Number.isFinite(Number((task as Partial<TaskRecord>).expectedCostUnits))
+        ? Number((task as Partial<TaskRecord>).expectedCostUnits)
+        : 0,
+      requireApprovalKind: normalizeApprovalKind(String((task as Partial<TaskRecord>).requireApprovalKind || ""), true),
+      approvalTarget: clean((task as Partial<TaskRecord>).approvalTarget),
+      nextRunAfter: clean((task as Partial<TaskRecord>).nextRunAfter),
+      failureCount: Number.isFinite(Number((task as Partial<TaskRecord>).failureCount))
+        ? Number((task as Partial<TaskRecord>).failureCount)
+        : 0,
+      lastFailureClass: normalizeTaskFailureClass(String((task as Partial<TaskRecord>).lastFailureClass || ""), true),
+      stuck: Boolean((task as Partial<TaskRecord>).stuck),
+      delegateTaskId: clean((task as Partial<TaskRecord>).delegateTaskId),
+      delegateTitle: clean((task as Partial<TaskRecord>).delegateTitle),
+      delegateAssignee: clean((task as Partial<TaskRecord>).delegateAssignee),
+      delegateGoalId: clean((task as Partial<TaskRecord>).delegateGoalId),
+      delegateSummary: clean((task as Partial<TaskRecord>).delegateSummary),
+      delegateBlockedReason: clean((task as Partial<TaskRecord>).delegateBlockedReason),
+      delegateBlockedBy: Array.isArray((task as Partial<TaskRecord>).delegateBlockedBy)
+        ? [...new Set(((task as Partial<TaskRecord>).delegateBlockedBy as string[]).map((value) => clean(value)).filter(Boolean))]
+        : [],
+      delegateActionKind: normalizeTaskActionKind(String((task as Partial<TaskRecord>).delegateActionKind || ""), true),
+      delegateActionArgs: Array.isArray((task as Partial<TaskRecord>).delegateActionArgs)
+        ? [...new Set(((task as Partial<TaskRecord>).delegateActionArgs as string[]).map((value) => String(value)))]
+        : [],
+      delegateExpectedDurationMinutes: Number.isFinite(Number((task as Partial<TaskRecord>).delegateExpectedDurationMinutes))
+        ? Number((task as Partial<TaskRecord>).delegateExpectedDurationMinutes)
+        : 0,
+      delegateExpectedCostUnits: Number.isFinite(Number((task as Partial<TaskRecord>).delegateExpectedCostUnits))
+        ? Number((task as Partial<TaskRecord>).delegateExpectedCostUnits)
+        : 0,
     })) : [],
     schedules: Array.isArray(parsed.schedules) ? parsed.schedules.map((schedule) => ({
       ...(schedule as HeartbeatScheduleRecord),
@@ -284,6 +377,22 @@ export function readState(inputPath = ""): ControlPlaneState {
       nextRunAfter: clean((schedule as Partial<HeartbeatScheduleRecord>).nextRunAfter),
     })) : [],
     heartbeats: Array.isArray(parsed.heartbeats) ? parsed.heartbeats as HeartbeatRecord[] : [],
+    executions: Array.isArray(parsed.executions) ? parsed.executions.map((execution) => ({
+      ...(execution as TaskExecutionRecord),
+      actionKind: normalizeTaskActionKind(String((execution as Partial<TaskExecutionRecord>).actionKind || ""), true),
+      status: normalizeTaskExecutionStatus(String((execution as Partial<TaskExecutionRecord>).status || ""), true) || "success",
+      failureClass: normalizeTaskFailureClass(String((execution as Partial<TaskExecutionRecord>).failureClass || ""), true),
+      approvalId: clean((execution as Partial<TaskExecutionRecord>).approvalId),
+      createdTaskIds: Array.isArray((execution as Partial<TaskExecutionRecord>).createdTaskIds)
+        ? [...new Set(((execution as Partial<TaskExecutionRecord>).createdTaskIds as string[]).map((value) => clean(value)).filter(Boolean))]
+        : [],
+      durationMinutes: Number.isFinite(Number((execution as Partial<TaskExecutionRecord>).durationMinutes))
+        ? Number((execution as Partial<TaskExecutionRecord>).durationMinutes)
+        : 0,
+      costUnits: Number.isFinite(Number((execution as Partial<TaskExecutionRecord>).costUnits))
+        ? Number((execution as Partial<TaskExecutionRecord>).costUnits)
+        : 0,
+    })) : [],
     sessions: Array.isArray(parsed.sessions) ? parsed.sessions as AgentSessionRecord[] : [],
     budgets: Array.isArray(parsed.budgets) ? parsed.budgets as BudgetPolicyRecord[] : [],
     approvals: Array.isArray(parsed.approvals) ? parsed.approvals as ApprovalRecord[] : [],
@@ -411,10 +520,61 @@ export function normalizeApprovalStatus(value: string): ApprovalStatus {
   throw new Error(`Unknown approval status: ${JSON.stringify(value)}`);
 }
 
-export function normalizeApprovalKind(value: string): ApprovalKind {
+export function normalizeApprovalKind(value: string): ApprovalKind;
+export function normalizeApprovalKind(value: string, allowEmpty: false): ApprovalKind;
+export function normalizeApprovalKind(value: string, allowEmpty: true): ApprovalKind | "";
+export function normalizeApprovalKind(value: string, allowEmpty = false): ApprovalKind | "" {
   const normalized = clean(value).toLowerCase();
+  if (!normalized && allowEmpty) return "";
   if (normalized === "ship-pr" || normalized === "merge-pr" || normalized === "update-snapshot" || normalized === "fleet-remediate" || normalized === "budget-override" || normalized === "custom") return normalized;
   throw new Error(`Unknown approval kind: ${JSON.stringify(value)}`);
+}
+
+export function normalizeTaskActionKind(value: string): TaskActionKind;
+export function normalizeTaskActionKind(value: string, allowEmpty: false): TaskActionKind;
+export function normalizeTaskActionKind(value: string, allowEmpty: true): TaskActionKind | "";
+export function normalizeTaskActionKind(value: string, allowEmpty = false): TaskActionKind | "" {
+  const normalized = clean(value).toLowerCase();
+  if (!normalized && allowEmpty) return "";
+  if (
+    normalized === "review" ||
+    normalized === "qa" ||
+    normalized === "preview" ||
+    normalized === "deploy" ||
+    normalized === "ship-plan" ||
+    normalized === "fleet-collect" ||
+    normalized === "fleet-remediate-plan" ||
+    normalized === "retro" ||
+    normalized === "upgrade" ||
+    normalized === "custom-command"
+  ) return normalized;
+  throw new Error(`Unknown task action kind: ${JSON.stringify(value)}`);
+}
+
+export function normalizeTaskFailureClass(value: string): TaskFailureClass;
+export function normalizeTaskFailureClass(value: string, allowEmpty: false): TaskFailureClass;
+export function normalizeTaskFailureClass(value: string, allowEmpty: true): TaskFailureClass | "";
+export function normalizeTaskFailureClass(value: string, allowEmpty = false): TaskFailureClass | "" {
+  const normalized = clean(value).toLowerCase();
+  if (!normalized && allowEmpty) return "";
+  if (
+    normalized === "transient" ||
+    normalized === "blocked-by-approval" ||
+    normalized === "blocked-by-budget" ||
+    normalized === "blocked-by-dependency" ||
+    normalized === "hard-failure"
+  ) return normalized;
+  throw new Error(`Unknown task failure class: ${JSON.stringify(value)}`);
+}
+
+export function normalizeTaskExecutionStatus(value: string): TaskExecutionStatus;
+export function normalizeTaskExecutionStatus(value: string, allowEmpty: false): TaskExecutionStatus;
+export function normalizeTaskExecutionStatus(value: string, allowEmpty: true): TaskExecutionStatus | "";
+export function normalizeTaskExecutionStatus(value: string, allowEmpty = false): TaskExecutionStatus | "" {
+  const normalized = clean(value).toLowerCase();
+  if (!normalized && allowEmpty) return "";
+  if (normalized === "success" || normalized === "warning" || normalized === "blocked" || normalized === "error" || normalized === "skipped") return normalized;
+  throw new Error(`Unknown task execution status: ${JSON.stringify(value)}`);
 }
 
 export function upsertAgent(state: ControlPlaneState, input: Omit<AgentRecord, "createdAt" | "updatedAt">): AgentRecord {
@@ -465,12 +625,39 @@ export function upsertTask(state: ControlPlaneState, input: Omit<TaskRecord, "cr
     requireTask(state, input.parentTaskId);
   }
   for (const dependency of input.blockedBy) requireTask(state, dependency);
+  for (const dependency of input.delegateBlockedBy) requireTask(state, dependency);
+  if (input.requireApprovalKind) normalizeApprovalKind(input.requireApprovalKind);
+  if (input.actionKind) normalizeTaskActionKind(input.actionKind);
+  if (input.delegateActionKind) normalizeTaskActionKind(input.delegateActionKind);
+  const delegateGoalId = clean(input.delegateGoalId) || input.goalId;
+  if (input.delegateTaskId) requireGoal(state, delegateGoalId);
   const timestamp = now();
   const record: TaskRecord = {
     ...input,
     parentTaskId: clean(input.parentTaskId),
     delegatedBy: clean(input.delegatedBy),
     blockedBy: [...new Set(input.blockedBy.map((dependency) => clean(dependency)).filter(Boolean))],
+    actionKind: normalizeTaskActionKind(input.actionKind, true),
+    actionArgs: [...new Set((input.actionArgs || []).map((value) => String(value)))],
+    expectedDurationMinutes: Number.isFinite(Number(input.expectedDurationMinutes)) ? Number(input.expectedDurationMinutes) : 0,
+    expectedCostUnits: Number.isFinite(Number(input.expectedCostUnits)) ? Number(input.expectedCostUnits) : 0,
+    requireApprovalKind: normalizeApprovalKind(input.requireApprovalKind, true),
+    approvalTarget: clean(input.approvalTarget),
+    nextRunAfter: clean(input.nextRunAfter),
+    failureCount: Number.isFinite(Number(input.failureCount)) ? Number(input.failureCount) : 0,
+    lastFailureClass: normalizeTaskFailureClass(input.lastFailureClass, true),
+    stuck: Boolean(input.stuck),
+    delegateTaskId: clean(input.delegateTaskId),
+    delegateTitle: clean(input.delegateTitle),
+    delegateAssignee: clean(input.delegateAssignee),
+    delegateGoalId,
+    delegateSummary: clean(input.delegateSummary),
+    delegateBlockedReason: clean(input.delegateBlockedReason),
+    delegateBlockedBy: [...new Set((input.delegateBlockedBy || []).map((dependency) => clean(dependency)).filter(Boolean))],
+    delegateActionKind: normalizeTaskActionKind(input.delegateActionKind, true),
+    delegateActionArgs: [...new Set((input.delegateActionArgs || []).map((value) => String(value)))],
+    delegateExpectedDurationMinutes: Number.isFinite(Number(input.delegateExpectedDurationMinutes)) ? Number(input.delegateExpectedDurationMinutes) : 0,
+    delegateExpectedCostUnits: Number.isFinite(Number(input.delegateExpectedCostUnits)) ? Number(input.delegateExpectedCostUnits) : 0,
     claimedAt: input.status === "claimed" || input.status === "working" ? (existing?.claimedAt || input.claimedAt || timestamp) : (input.claimedAt || existing?.claimedAt || ""),
     completedAt: input.status === "done" ? (input.completedAt || existing?.completedAt || timestamp) : (input.completedAt || existing?.completedAt || ""),
     createdAt: existing?.createdAt || timestamp,
@@ -561,6 +748,12 @@ export function delegateTask(state: ControlPlaneState, input: {
   blockedReason?: string;
   blockedBy?: string[];
   delegatedBy?: string;
+  actionKind?: TaskActionKind | "";
+  actionArgs?: string[];
+  expectedDurationMinutes?: number;
+  expectedCostUnits?: number;
+  requireApprovalKind?: ApprovalKind | "";
+  approvalTarget?: string;
 }): { parent: TaskRecord; child: TaskRecord } {
   const parent = requireTask(state, input.parentTaskId);
   if (parent.status === "done") {
@@ -581,6 +774,27 @@ export function delegateTask(state: ControlPlaneState, input: {
     summary: clean(input.summary),
     blockedReason: clean(input.blockedReason),
     blockedBy: input.blockedBy || [],
+    actionKind: input.actionKind || "",
+    actionArgs: input.actionArgs || [],
+    expectedDurationMinutes: Number.isFinite(Number(input.expectedDurationMinutes)) ? Number(input.expectedDurationMinutes) : 0,
+    expectedCostUnits: Number.isFinite(Number(input.expectedCostUnits)) ? Number(input.expectedCostUnits) : 0,
+    requireApprovalKind: input.requireApprovalKind || "",
+    approvalTarget: clean(input.approvalTarget),
+    nextRunAfter: "",
+    failureCount: 0,
+    lastFailureClass: "",
+    stuck: false,
+    delegateTaskId: "",
+    delegateTitle: "",
+    delegateAssignee: "",
+    delegateGoalId: "",
+    delegateSummary: "",
+    delegateBlockedReason: "",
+    delegateBlockedBy: [],
+    delegateActionKind: "",
+    delegateActionArgs: [],
+    delegateExpectedDurationMinutes: 0,
+    delegateExpectedCostUnits: 0,
   });
   return {
     parent: syncDelegatedParent(state, parent.id),
@@ -903,6 +1117,33 @@ export function recordHeartbeat(state: ControlPlaneState, input: {
   };
 }
 
+export function recordExecution(state: ControlPlaneState, input: Omit<TaskExecutionRecord, "id"> & { id?: string }): TaskExecutionRecord {
+  const record: TaskExecutionRecord = {
+    ...input,
+    id: clean(input.id) || randomUUID(),
+    taskId: clean(input.taskId),
+    scheduleId: clean(input.scheduleId),
+    actionKind: normalizeTaskActionKind(input.actionKind, true),
+    status: normalizeTaskExecutionStatus(input.status),
+    summary: clean(input.summary),
+    nextAction: clean(input.nextAction),
+    output: String(input.output || ""),
+    branch: clean(input.branch),
+    prUrl: clean(input.prUrl),
+    failureClass: normalizeTaskFailureClass(input.failureClass, true),
+    approvalId: clean(input.approvalId),
+    budgetExceeded: Boolean(input.budgetExceeded),
+    createdTaskIds: [...new Set((input.createdTaskIds || []).map((value) => clean(value)).filter(Boolean))],
+    durationMinutes: Number.isFinite(Number(input.durationMinutes)) ? Number(input.durationMinutes) : 0,
+    costUnits: Number.isFinite(Number(input.costUnits)) ? Number(input.costUnits) : 0,
+    startedAt: clean(input.startedAt) || now(),
+    finishedAt: clean(input.finishedAt) || clean(input.startedAt) || now(),
+  };
+  state.executions.push(record);
+  state.executions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  return record;
+}
+
 export function buildApprovalGate(state: ControlPlaneState, input: { agent: string; kind: ApprovalKind; target: string }) {
   const pending = findPendingApproval(state, input.agent, input.kind, input.target) || null;
   const approved = findApprovedApproval(state, input.agent, input.kind, input.target) || null;
@@ -954,10 +1195,19 @@ export function listRecentHeartbeats(state: ControlPlaneState, agent = "", limit
     .slice(0, limit);
 }
 
+export function listRecentExecutions(state: ControlPlaneState, agent = "", limit = 20): TaskExecutionRecord[] {
+  const target = clean(agent);
+  return state.executions
+    .filter((execution) => !target || execution.agent === target)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .slice(0, limit);
+}
+
 export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): DashboardReport {
   const queued = state.tasks.filter((task) => task.status === "queued");
   const active = state.tasks.filter((task) => task.status === "claimed" || task.status === "working");
   const blocked = state.tasks.filter((task) => task.status === "blocked");
+  const stuck = state.tasks.filter((task) => task.stuck);
   const activeSchedules = state.schedules.filter((schedule) => schedule.active);
   const coolingSchedules = activeSchedules.filter((schedule) => {
     const nextRunAt = parseDate(schedule.nextRunAfter);
@@ -978,10 +1228,20 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
       return Boolean(createdAt && Date.now() - createdAt.getTime() <= 24 * 60 * 60 * 1000);
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const recentExecutions = state.executions
+    .filter((execution) => {
+      const startedAt = parseDate(execution.startedAt);
+      return Boolean(startedAt && Date.now() - startedAt.getTime() <= 24 * 60 * 60 * 1000);
+    })
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const pendingApprovals = state.approvals.filter((approval) => approval.status === "pending");
   const exceededBudgets = state.budgets
     .map((policy) => computeBudgetUsage(state, policy))
     .filter((usage) => usage.exceeded);
+  const runnableAgents = state.agents.filter((agent) => {
+    if (agent.status === "paused" || agent.status === "offline") return false;
+    return state.tasks.some((task) => task.assignee === agent.name && !task.stuck && task.status !== "done");
+  });
   return {
     generatedAt: now(),
     statePath: resolveStatePath(inputPath),
@@ -998,8 +1258,11 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
       pausedSchedules: pausedSchedules.length,
       exhaustedSchedules: exhaustedSchedules.length,
       recentHeartbeats: recentHeartbeats.length,
+      recentExecutions: recentExecutions.length,
       pendingApprovals: pendingApprovals.length,
       exceededBudgets: exceededBudgets.length,
+      stuckTasks: stuck.length,
+      runnableAgents: runnableAgents.length,
     },
     agents: state.agents.map((agent) => ({
       ...agent,
@@ -1007,9 +1270,11 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
       queuedTasks: queued.filter((task) => task.assignee === agent.name).length,
       activeTasks: active.filter((task) => task.assignee === agent.name).length,
       blockedTasks: blocked.filter((task) => task.assignee === agent.name).length,
+      stuckTasks: stuck.filter((task) => task.assignee === agent.name).length,
       session: findSession(state, agent.name) || null,
       budget: findBudgetPolicy(state, agent.name) ? computeBudgetUsage(state, findBudgetPolicy(state, agent.name) as BudgetPolicyRecord) : null,
       pendingApprovals: pendingApprovals.filter((approval) => approval.agent === agent.name).length,
+      runnable: runnableAgents.some((candidate) => candidate.name === agent.name),
     })),
     goals: state.goals.map((goal) => ({
       ...goal,
@@ -1019,8 +1284,10 @@ export function buildDashboardReport(state: ControlPlaneState, inputPath = ""): 
     queue: queued,
     active,
     blocked,
+    stuck,
     schedules: [...state.schedules].sort((a, b) => a.id.localeCompare(b.id)),
     heartbeats: recentHeartbeats,
+    executions: recentExecutions,
     approvals: pendingApprovals.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)),
   };
 }
@@ -1041,11 +1308,13 @@ function card(title: string, value: string, tone = "neutral"): string {
 function renderAgentRow(agent: DashboardReport["agents"][number]): string {
   const session = agent.session?.nextAction ? ` / ${agent.session.nextAction}` : "";
   const budget = agent.budget?.exceeded ? `over ${agent.budget.window}` : agent.budget ? `${agent.budget.runs} runs` : "-";
-  return `<tr><td>${escapeHtml(agent.name)}</td><td>${escapeHtml(agent.role)}</td><td>${escapeHtml(agent.runtime)}</td><td>${escapeHtml(agent.team || "-")}</td><td>${escapeHtml(agent.manager || "-")}</td><td>${escapeHtml(agent.status)}</td><td>${agent.queuedTasks}</td><td>${agent.activeTasks}</td><td>${agent.blockedTasks}</td><td>${escapeHtml(budget)}</td><td>${escapeHtml(session || "-")}</td><td>${agent.pendingApprovals}</td></tr>`;
+  return `<tr><td>${escapeHtml(agent.name)}</td><td>${escapeHtml(agent.role)}</td><td>${escapeHtml(agent.runtime)}</td><td>${escapeHtml(agent.team || "-")}</td><td>${escapeHtml(agent.manager || "-")}</td><td>${escapeHtml(agent.status)}</td><td>${agent.runnable ? "yes" : "no"}</td><td>${agent.queuedTasks}</td><td>${agent.activeTasks}</td><td>${agent.blockedTasks}</td><td>${agent.stuckTasks}</td><td>${escapeHtml(budget)}</td><td>${escapeHtml(session || "-")}</td><td>${agent.pendingApprovals}</td></tr>`;
 }
 
 function renderTaskRow(task: TaskRecord): string {
-  return `<tr><td>${escapeHtml(task.id)}</td><td>${escapeHtml(task.goalId)}</td><td>${escapeHtml(task.title)}</td><td>${escapeHtml(task.assignee || "-")}</td><td>${escapeHtml(task.parentTaskId || "-")}</td><td>${escapeHtml(task.status)}</td><td>${escapeHtml(task.blockedReason || "-")}</td></tr>`;
+  const action = task.actionKind || (task.delegateTaskId ? `delegate:${task.delegateTaskId}` : "-");
+  const failure = task.lastFailureClass || "-";
+  return `<tr><td>${escapeHtml(task.id)}</td><td>${escapeHtml(task.goalId)}</td><td>${escapeHtml(task.title)}</td><td>${escapeHtml(task.assignee || "-")}</td><td>${escapeHtml(task.parentTaskId || "-")}</td><td>${escapeHtml(task.status)}</td><td>${escapeHtml(action)}</td><td>${escapeHtml(failure)}</td><td>${task.failureCount}</td><td>${task.stuck ? "yes" : "no"}</td><td>${escapeHtml(task.blockedReason || "-")}</td></tr>`;
 }
 
 function renderGoalRow(goal: DashboardReport["goals"][number]): string {
@@ -1054,6 +1323,10 @@ function renderGoalRow(goal: DashboardReport["goals"][number]): string {
 
 function renderHeartbeatRow(heartbeat: HeartbeatRecord): string {
   return `<tr><td>${escapeHtml(heartbeat.agent)}</td><td>${escapeHtml(heartbeat.taskId || "-")}</td><td>${escapeHtml(heartbeat.trigger)}</td><td>${escapeHtml(heartbeat.status)}</td><td>${escapeHtml(heartbeat.summary || "-")}</td><td>${escapeHtml(heartbeat.nextAction || "-")}</td><td>${heartbeat.durationMinutes}</td></tr>`;
+}
+
+function renderExecutionRow(execution: TaskExecutionRecord): string {
+  return `<tr><td>${escapeHtml(execution.agent)}</td><td>${escapeHtml(execution.taskId || "-")}</td><td>${escapeHtml(execution.actionKind || "-")}</td><td>${escapeHtml(execution.status)}</td><td>${escapeHtml(execution.failureClass || "-")}</td><td>${escapeHtml(execution.summary || "-")}</td><td>${escapeHtml(execution.nextAction || "-")}</td><td>${execution.createdTaskIds.length}</td></tr>`;
 }
 
 function renderApprovalRow(approval: ApprovalRecord): string {
@@ -1145,21 +1418,24 @@ export function renderDashboardHtml(report: DashboardReport): string {
       ${card("Blocked tasks", String(report.counts.blockedTasks), report.counts.blockedTasks ? "danger" : "neutral")}
       ${card("Schedules", String(report.counts.schedules))}
       ${card("Cooling schedules", String(report.counts.coolingSchedules), report.counts.coolingSchedules ? "warn" : "neutral")}
-      ${card("Paused schedules", String(report.counts.pausedSchedules), report.counts.pausedSchedules ? "warn" : "neutral")}
-      ${card("Exhausted schedules", String(report.counts.exhaustedSchedules), report.counts.exhaustedSchedules ? "danger" : "neutral")}
-      ${card("Recent heartbeats", String(report.counts.recentHeartbeats))}
-      ${card("Pending approvals", String(report.counts.pendingApprovals), report.counts.pendingApprovals ? "warn" : "neutral")}
-      ${card("Exceeded budgets", String(report.counts.exceededBudgets), report.counts.exceededBudgets ? "danger" : "neutral")}
-      ${card("Completed tasks", String(report.counts.doneTasks))}
-    </div>
+	      ${card("Paused schedules", String(report.counts.pausedSchedules), report.counts.pausedSchedules ? "warn" : "neutral")}
+	      ${card("Exhausted schedules", String(report.counts.exhaustedSchedules), report.counts.exhaustedSchedules ? "danger" : "neutral")}
+	      ${card("Recent heartbeats", String(report.counts.recentHeartbeats))}
+	      ${card("Recent executions", String(report.counts.recentExecutions))}
+	      ${card("Pending approvals", String(report.counts.pendingApprovals), report.counts.pendingApprovals ? "warn" : "neutral")}
+	      ${card("Exceeded budgets", String(report.counts.exceededBudgets), report.counts.exceededBudgets ? "danger" : "neutral")}
+	      ${card("Stuck tasks", String(report.counts.stuckTasks), report.counts.stuckTasks ? "danger" : "neutral")}
+	      ${card("Runnable agents", String(report.counts.runnableAgents), report.counts.runnableAgents ? "neutral" : "warn")}
+	      ${card("Completed tasks", String(report.counts.doneTasks))}
+	    </div>
     <div class="stack">
       <section class="panel">
         <h2>Agents</h2>
         <table>
-          <thead><tr><th>Name</th><th>Role</th><th>Runtime</th><th>Team</th><th>Manager</th><th>Status</th><th>Queued</th><th>Active</th><th>Blocked</th><th>Budget</th><th>Next action</th><th>Pending approvals</th></tr></thead>
-          <tbody>${report.agents.map(renderAgentRow).join("") || '<tr><td colspan="12">No agents registered.</td></tr>'}</tbody>
-        </table>
-      </section>
+	          <thead><tr><th>Name</th><th>Role</th><th>Runtime</th><th>Team</th><th>Manager</th><th>Status</th><th>Runnable</th><th>Queued</th><th>Active</th><th>Blocked</th><th>Stuck</th><th>Budget</th><th>Next action</th><th>Pending approvals</th></tr></thead>
+	          <tbody>${report.agents.map(renderAgentRow).join("") || '<tr><td colspan="14">No agents registered.</td></tr>'}</tbody>
+	        </table>
+	      </section>
       <section class="panel">
         <h2>Goals</h2>
         <table>
@@ -1170,10 +1446,10 @@ export function renderDashboardHtml(report: DashboardReport): string {
       <section class="panel">
         <h2>Queue</h2>
         <table>
-          <thead><tr><th>ID</th><th>Goal</th><th>Task</th><th>Assignee</th><th>Parent</th><th>Status</th><th>Blocked reason</th></tr></thead>
-          <tbody>${report.queue.map(renderTaskRow).join("") || '<tr><td colspan="7">No queued work.</td></tr>'}</tbody>
-        </table>
-      </section>
+	          <thead><tr><th>ID</th><th>Goal</th><th>Task</th><th>Assignee</th><th>Parent</th><th>Status</th><th>Action</th><th>Failure class</th><th>Failures</th><th>Stuck</th><th>Blocked reason</th></tr></thead>
+	          <tbody>${report.queue.map(renderTaskRow).join("") || '<tr><td colspan="11">No queued work.</td></tr>'}</tbody>
+	        </table>
+	      </section>
       <section class="panel">
         <h2>Schedules</h2>
         <table>
@@ -1181,13 +1457,20 @@ export function renderDashboardHtml(report: DashboardReport): string {
           <tbody>${report.schedules.map(renderScheduleRow).join("") || '<tr><td colspan="9">No schedules recorded.</td></tr>'}</tbody>
         </table>
       </section>
-      <section class="panel">
-        <h2>Recent heartbeats</h2>
-        <table>
-          <thead><tr><th>Agent</th><th>Task</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Next action</th><th>Minutes</th></tr></thead>
-          <tbody>${report.heartbeats.map(renderHeartbeatRow).join("") || '<tr><td colspan="7">No heartbeats recorded.</td></tr>'}</tbody>
-        </table>
-      </section>
+	      <section class="panel">
+	        <h2>Recent heartbeats</h2>
+	        <table>
+	          <thead><tr><th>Agent</th><th>Task</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Next action</th><th>Minutes</th></tr></thead>
+	          <tbody>${report.heartbeats.map(renderHeartbeatRow).join("") || '<tr><td colspan="7">No heartbeats recorded.</td></tr>'}</tbody>
+	        </table>
+	      </section>
+	      <section class="panel">
+	        <h2>Recent executions</h2>
+	        <table>
+	          <thead><tr><th>Agent</th><th>Task</th><th>Action</th><th>Status</th><th>Failure class</th><th>Summary</th><th>Next action</th><th>Delegated</th></tr></thead>
+	          <tbody>${report.executions.map(renderExecutionRow).join("") || '<tr><td colspan="8">No executions recorded.</td></tr>'}</tbody>
+	        </table>
+	      </section>
       <section class="panel">
         <h2>Pending approvals</h2>
         <table>
@@ -1210,6 +1493,6 @@ export function writeDashboard(report: DashboardReport, outDir: string): { outDi
   const markdownPath = path.join(resolvedOutDir, "summary.md");
   fs.writeFileSync(htmlPath, renderDashboardHtml(report));
   fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  fs.writeFileSync(markdownPath, `# codex-stack control plane\n\n- Generated: ${report.generatedAt}\n- Agents: ${report.counts.agents}\n- Teams: ${report.counts.teams}\n- Goals: ${report.counts.goals}\n- Queued tasks: ${report.counts.queuedTasks}\n- Active tasks: ${report.counts.activeTasks}\n- Blocked tasks: ${report.counts.blockedTasks}\n- Schedules: ${report.counts.schedules}\n- Cooling schedules: ${report.counts.coolingSchedules}\n- Paused schedules: ${report.counts.pausedSchedules}\n- Exhausted schedules: ${report.counts.exhaustedSchedules}\n- Recent heartbeats: ${report.counts.recentHeartbeats}\n- Pending approvals: ${report.counts.pendingApprovals}\n- Exceeded budgets: ${report.counts.exceededBudgets}\n- Completed tasks: ${report.counts.doneTasks}\n`);
+  fs.writeFileSync(markdownPath, `# codex-stack control plane\n\n- Generated: ${report.generatedAt}\n- Agents: ${report.counts.agents}\n- Runnable agents: ${report.counts.runnableAgents}\n- Teams: ${report.counts.teams}\n- Goals: ${report.counts.goals}\n- Queued tasks: ${report.counts.queuedTasks}\n- Active tasks: ${report.counts.activeTasks}\n- Blocked tasks: ${report.counts.blockedTasks}\n- Stuck tasks: ${report.counts.stuckTasks}\n- Schedules: ${report.counts.schedules}\n- Cooling schedules: ${report.counts.coolingSchedules}\n- Paused schedules: ${report.counts.pausedSchedules}\n- Exhausted schedules: ${report.counts.exhaustedSchedules}\n- Recent heartbeats: ${report.counts.recentHeartbeats}\n- Recent executions: ${report.counts.recentExecutions}\n- Pending approvals: ${report.counts.pendingApprovals}\n- Exceeded budgets: ${report.counts.exceededBudgets}\n- Completed tasks: ${report.counts.doneTasks}\n`);
   return { outDir: resolvedOutDir, htmlPath, jsonPath, markdownPath };
 }

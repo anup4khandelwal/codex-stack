@@ -4,8 +4,10 @@ import {
   delegateTask,
   findGoal,
   listQueue,
+  normalizeApprovalKind,
   normalizeGoalStatus,
   normalizeGoalType,
+  normalizeTaskActionKind,
   normalizeTaskStatus,
   readState,
   requireTask,
@@ -72,6 +74,23 @@ interface TaskWriteArgs extends BaseArgs {
   summary: string;
   blockedReason: string;
   blockedBy: string[];
+  actionKind: string;
+  actionArgs: string[];
+  expectedDurationMinutes: number;
+  expectedCostUnits: number;
+  requireApprovalKind: string;
+  approvalTarget: string;
+  delegateTaskId: string;
+  delegateTitle: string;
+  delegateAssignee: string;
+  delegateGoalId: string;
+  delegateSummary: string;
+  delegateBlockedReason: string;
+  delegateBlockedBy: string[];
+  delegateActionKind: string;
+  delegateActionArgs: string[];
+  delegateExpectedDurationMinutes: number;
+  delegateExpectedCostUnits: number;
 }
 
 interface TaskListArgs extends BaseArgs {
@@ -101,6 +120,12 @@ interface TaskDelegateArgs extends BaseArgs {
   summary: string;
   blockedReason: string;
   blockedBy: string[];
+  actionKind: string;
+  actionArgs: string[];
+  expectedDurationMinutes: number;
+  expectedCostUnits: number;
+  requireApprovalKind: string;
+  approvalTarget: string;
 }
 
 function usage(): never {
@@ -111,9 +136,9 @@ Usage:
   bun src/cli.ts goals show <id> [--state <path>] [--json]
   bun src/cli.ts goals add --id <id> --title <title> [--type <org|initiative|repo|objective>] [--owner <agent>] [--repo <repo>] [--parent <goal-id>] [--status <planned|active|blocked|done>] [--summary <text>] [--state <path>] [--json]
   bun src/cli.ts goals queue [--assignee <agent>] [--state <path>] [--json]
-  bun src/cli.ts goals task add --id <id> --goal <goal-id> --title <title> [--assignee <agent>] [--status <queued|claimed|working|blocked|done>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--state <path>] [--json]
+  bun src/cli.ts goals task add --id <id> --goal <goal-id> --title <title> [--assignee <agent>] [--status <queued|claimed|working|blocked|done>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--action-kind <kind>] [--action-arg <arg>] [--expected-minutes <n>] [--expected-cost-units <n>] [--require-approval <kind>] [--approval-target <id>] [--delegate-id <id>] [--delegate-title <title>] [--delegate-assignee <agent>] [--delegate-goal <goal-id>] [--delegate-summary <text>] [--delegate-blocked-by <task-id>] [--delegate-blocked-reason <text>] [--delegate-action-kind <kind>] [--delegate-action-arg <arg>] [--delegate-expected-minutes <n>] [--delegate-expected-cost-units <n>] [--state <path>] [--json]
   bun src/cli.ts goals task list [--goal <goal-id>] [--assignee <agent>] [--status <queued|claimed|working|blocked|done>] [--state <path>] [--json]
-  bun src/cli.ts goals task delegate <parent-id> --id <id> --title <title> [--assignee <agent>] [--goal <goal-id>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--state <path>] [--json]
+  bun src/cli.ts goals task delegate <parent-id> --id <id> --title <title> [--assignee <agent>] [--goal <goal-id>] [--summary <text>] [--blocked-by <task-id>] [--blocked-reason <text>] [--action-kind <kind>] [--action-arg <arg>] [--expected-minutes <n>] [--expected-cost-units <n>] [--require-approval <kind>] [--approval-target <id>] [--state <path>] [--json]
   bun src/cli.ts goals task claim <id> [--assignee <agent>] [--state <path>] [--json]
   bun src/cli.ts goals task reassign <id> --assignee <agent> [--state <path>] [--json]
   bun src/cli.ts goals task block <id> --reason <text> [--state <path>] [--json]
@@ -125,6 +150,11 @@ Usage:
 
 function clean(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function parseNumber(value: string, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -219,6 +249,23 @@ function parseTaskArgs(argv: string[]): ParsedArgs {
       summary: "",
       blockedReason: "",
       blockedBy: [],
+      actionKind: "",
+      actionArgs: [],
+      expectedDurationMinutes: 0,
+      expectedCostUnits: 0,
+      requireApprovalKind: "",
+      approvalTarget: "",
+      delegateTaskId: "",
+      delegateTitle: "",
+      delegateAssignee: "",
+      delegateGoalId: "",
+      delegateSummary: "",
+      delegateBlockedReason: "",
+      delegateBlockedBy: [],
+      delegateActionKind: "",
+      delegateActionArgs: [],
+      delegateExpectedDurationMinutes: 0,
+      delegateExpectedCostUnits: 0,
     };
     for (let i = 1; i < argv.length; i += 1) {
       const arg = argv[i];
@@ -232,9 +279,28 @@ function parseTaskArgs(argv: string[]): ParsedArgs {
       else if (arg === "--summary") out.summary = clean(argv[++i]);
       else if (arg === "--blocked-reason") out.blockedReason = clean(argv[++i]);
       else if (arg === "--blocked-by") out.blockedBy.push(clean(argv[++i]));
+      else if (arg === "--action-kind") out.actionKind = clean(argv[++i]);
+      else if (arg === "--action-arg") out.actionArgs.push(String(argv[++i] || ""));
+      else if (arg === "--expected-minutes") out.expectedDurationMinutes = parseNumber(argv[++i], 0);
+      else if (arg === "--expected-cost-units") out.expectedCostUnits = parseNumber(argv[++i], 0);
+      else if (arg === "--require-approval") out.requireApprovalKind = clean(argv[++i]);
+      else if (arg === "--approval-target") out.approvalTarget = clean(argv[++i]);
+      else if (arg === "--delegate-id") out.delegateTaskId = clean(argv[++i]);
+      else if (arg === "--delegate-title") out.delegateTitle = clean(argv[++i]);
+      else if (arg === "--delegate-assignee") out.delegateAssignee = clean(argv[++i]);
+      else if (arg === "--delegate-goal") out.delegateGoalId = clean(argv[++i]);
+      else if (arg === "--delegate-summary") out.delegateSummary = clean(argv[++i]);
+      else if (arg === "--delegate-blocked-reason") out.delegateBlockedReason = clean(argv[++i]);
+      else if (arg === "--delegate-blocked-by") out.delegateBlockedBy.push(clean(argv[++i]));
+      else if (arg === "--delegate-action-kind") out.delegateActionKind = clean(argv[++i]);
+      else if (arg === "--delegate-action-arg") out.delegateActionArgs.push(String(argv[++i] || ""));
+      else if (arg === "--delegate-expected-minutes") out.delegateExpectedDurationMinutes = parseNumber(argv[++i], 0);
+      else if (arg === "--delegate-expected-cost-units") out.delegateExpectedCostUnits = parseNumber(argv[++i], 0);
       else throw new Error(`Unknown argument: ${arg}`);
     }
     if (!out.id || !out.goalId || !out.title) throw new Error("--id, --goal, and --title are required.");
+    if (out.actionKind) normalizeTaskActionKind(out.actionKind);
+    if (out.delegateActionKind) normalizeTaskActionKind(out.delegateActionKind);
     return out;
   }
   if (command === "list") {
@@ -266,6 +332,12 @@ function parseTaskArgs(argv: string[]): ParsedArgs {
       summary: "",
       blockedReason: "",
       blockedBy: [],
+      actionKind: "",
+      actionArgs: [],
+      expectedDurationMinutes: 0,
+      expectedCostUnits: 0,
+      requireApprovalKind: "",
+      approvalTarget: "",
     };
     for (let i = 2; i < argv.length; i += 1) {
       const arg = argv[i];
@@ -278,9 +350,16 @@ function parseTaskArgs(argv: string[]): ParsedArgs {
       else if (arg === "--summary") out.summary = clean(argv[++i]);
       else if (arg === "--blocked-reason") out.blockedReason = clean(argv[++i]);
       else if (arg === "--blocked-by") out.blockedBy.push(clean(argv[++i]));
+      else if (arg === "--action-kind") out.actionKind = clean(argv[++i]);
+      else if (arg === "--action-arg") out.actionArgs.push(String(argv[++i] || ""));
+      else if (arg === "--expected-minutes") out.expectedDurationMinutes = parseNumber(argv[++i], 0);
+      else if (arg === "--expected-cost-units") out.expectedCostUnits = parseNumber(argv[++i], 0);
+      else if (arg === "--require-approval") out.requireApprovalKind = clean(argv[++i]);
+      else if (arg === "--approval-target") out.approvalTarget = clean(argv[++i]);
       else throw new Error(`Unknown argument: ${arg}`);
     }
     if (!out.id || !out.title) throw new Error("--id and --title are required for delegate.");
+    if (out.actionKind) normalizeTaskActionKind(out.actionKind);
     return out;
   }
   if (command === "claim" || command === "reassign" || command === "block" || command === "unblock" || command === "complete") {
@@ -405,6 +484,27 @@ function handleTaskAdd(args: TaskWriteArgs): void {
     summary: args.summary,
     blockedReason: args.blockedReason,
     blockedBy: args.blockedBy,
+    actionKind: normalizeTaskActionKind(args.actionKind, true),
+    actionArgs: args.actionArgs,
+    expectedDurationMinutes: args.expectedDurationMinutes,
+    expectedCostUnits: args.expectedCostUnits,
+    requireApprovalKind: normalizeApprovalKind(args.requireApprovalKind, true),
+    approvalTarget: args.approvalTarget,
+    nextRunAfter: "",
+    failureCount: 0,
+    lastFailureClass: "",
+    stuck: false,
+    delegateTaskId: args.delegateTaskId,
+    delegateTitle: args.delegateTitle,
+    delegateAssignee: args.delegateAssignee,
+    delegateGoalId: args.delegateGoalId,
+    delegateSummary: args.delegateSummary,
+    delegateBlockedReason: args.delegateBlockedReason,
+    delegateBlockedBy: args.delegateBlockedBy,
+    delegateActionKind: normalizeTaskActionKind(args.delegateActionKind, true),
+    delegateActionArgs: args.delegateActionArgs,
+    delegateExpectedDurationMinutes: args.delegateExpectedDurationMinutes,
+    delegateExpectedCostUnits: args.delegateExpectedCostUnits,
   });
   const statePath = writeState(state, args.statePath);
   if (args.json) {
@@ -425,6 +525,12 @@ function handleTaskDelegate(args: TaskDelegateArgs): void {
     summary: args.summary,
     blockedReason: args.blockedReason,
     blockedBy: args.blockedBy,
+    actionKind: normalizeTaskActionKind(args.actionKind, true),
+    actionArgs: args.actionArgs,
+    expectedDurationMinutes: args.expectedDurationMinutes,
+    expectedCostUnits: args.expectedCostUnits,
+    requireApprovalKind: normalizeApprovalKind(args.requireApprovalKind, true),
+    approvalTarget: args.approvalTarget,
   });
   const statePath = writeState(state, args.statePath);
   if (args.json) {
@@ -460,6 +566,9 @@ function handleTaskSingle(args: TaskSingleArgs): void {
   if (args.command === "claim") {
     task.status = task.assignee ? "claimed" : "claimed";
     if (args.assignee) task.assignee = args.assignee;
+    task.stuck = false;
+    task.nextRunAfter = "";
+    task.blockedReason = "";
   } else if (args.command === "reassign") {
     task.assignee = args.assignee;
     task.status = task.status === "done" ? "done" : "queued";
@@ -469,9 +578,13 @@ function handleTaskSingle(args: TaskSingleArgs): void {
   } else if (args.command === "unblock") {
     task.status = "queued";
     task.blockedReason = "";
+    task.nextRunAfter = "";
+    task.stuck = false;
   } else if (args.command === "complete") {
     task.status = "done";
     task.blockedReason = "";
+    task.nextRunAfter = "";
+    task.stuck = false;
   }
   if (task.assignee) {
     const stateCheck = readState(args.statePath);
