@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "branch": "feat/47-visual-diff-and-digests",
+  "baseRef": "e783b8e9f8474d2e8cdd82dfa1eff5ddc9f92dff",
+  "checklistPath": "/home/runner/work/codex-stack/codex-stack/skills/review/checklist.md",
+  "checklistSummary": [
+    "# Review checklist",
+    "## Critical",
+    "- Trust boundary violations",
+    "- Missing auth or authorization checks",
+    "- Data corruption risks",
+    "- Race conditions and stale writes",
+    "- Unsafe migrations",
+    "- Silent retry loops or duplicate side effects"
+  ],
+  "fileNames": [
+    "README.md",
+    "browse/src/cli.ts",
+    "bun.lock",
+    "docs/commands.md",
+    "package.json",
+    "scripts/browse-snapshot-visual-pack.spec.ts",
+    "scripts/ci-check.sh",
+    "scripts/deploy-verify.spec.ts",
+    "scripts/deploy-verify.ts",
+    "scripts/preview-verify.spec.ts",
+    "scripts/qa-run.spec.ts",
+    "scripts/qa-run.ts",
+    "scripts/render-pr-review.spec.ts",
+    "scripts/render-pr-review.ts",
+    "scripts/retro-report.spec.ts",
+    "scripts/retro-report.ts",
+    "scripts/visual-pack-summary.ts",
+    "scripts/weekly-digest.spec.ts",
+    "scripts/weekly-digest.ts"
+  ],
+  "findings": [
+    {
+      "severity": "info",
+      "title": "No obvious structural issues detected",
+      "detail": "Reviewed branch feat/47-visual-diff-and-digests against e783b8e9f8474d2e8cdd82dfa1eff5ddc9f92dff. No heuristic findings triggered. Human review is still required.",
+      "files": []
+    }
+  ]
+}

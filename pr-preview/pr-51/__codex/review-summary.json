@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "branch": "feat/49-visual-risk-history",
+  "baseRef": "4fea03fd1955fe7896bcd1cb01a95d510c13d859",
+  "filesChanged": 16,
+  "criticalCount": 0,
+  "warningCount": 0,
+  "infoCount": 1,
+  "previewIncluded": true,
+  "previewStatus": "pass",
+  "previewBlocking": false,
+  "blocking": false
+}

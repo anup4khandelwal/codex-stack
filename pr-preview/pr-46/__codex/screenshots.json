@@ -1,0 +1,30 @@
+[
+  {
+    "path": "/login",
+    "device": "desktop",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login",
+    "status": "pass",
+    "screenshot": "preview-artifacts/screenshots/login-desktop.png"
+  },
+  {
+    "path": "/login",
+    "device": "mobile",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login",
+    "status": "pass",
+    "screenshot": "preview-artifacts/screenshots/login-mobile.png"
+  },
+  {
+    "path": "/dashboard",
+    "device": "desktop",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/dashboard",
+    "status": "pass",
+    "screenshot": "preview-artifacts/screenshots/dashboard-desktop.png"
+  },
+  {
+    "path": "/dashboard",
+    "device": "mobile",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/dashboard",
+    "status": "pass",
+    "screenshot": "preview-artifacts/screenshots/dashboard-mobile.png"
+  }
+]

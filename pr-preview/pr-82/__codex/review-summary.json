@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "branch": "feat/81-add-mcp-server",
+  "baseRef": "631e9223cd235c5c19dd634a7443ea9fd5183f21",
+  "filesChanged": 14,
+  "criticalCount": 0,
+  "warningCount": 2,
+  "infoCount": 0,
+  "previewIncluded": true,
+  "previewStatus": "pass",
+  "previewBlocking": false,
+  "blocking": false
+}

@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-03-16T12:25:50.591Z",
+  "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-82/login",
+  "mode": "full",
+  "session": "deploy-pr-82",
+  "status": "pass",
+  "healthScore": 100,
+  "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+  "findings": [],
+  "flowResults": [
+    {
+      "name": "portal-full-demo",
+      "status": "pass",
+      "steps": 20
+    }
+  ],
+  "routeResults": [],
+  "diffSummary": null,
+  "snapshotResult": null,
+  "accessibility": null,
+  "performance": null,
+  "visualRisk": {
+    "available": false,
+    "score": 0,
+    "level": "none",
+    "summary": "No visual evidence collected yet.",
+    "criticalChecks": 0,
+    "warningChecks": 0,
+    "consoleErrors": 0,
+    "changedSnapshots": 0,
+    "staleBaselines": 0,
+    "avgImageDiffScore": null,
+    "topDrivers": []
+  },
+  "decisionSummary": {
+    "totalDecisions": 0,
+    "appliedCount": 0,
+    "approvedCount": 0,
+    "suppressedCount": 0,
+    "refreshRequiredCount": 0,
+    "expiredCount": 0,
+    "unresolvedCount": 0,
+    "expiringSoonCount": 0
+  },
+  "appliedDecisions": [],
+  "expiredDecisions": [],
+  "unresolvedRegressions": [],
+  "artifacts": {
+    "json": ".codex-stack/qa/2026-03-16T12-25-50-anup4khandelwal.github.io-codex-stack-pr-preview-pr-82-login.json",
+    "markdown": ".codex-stack/qa/2026-03-16T12-25-50-anup4khandelwal.github.io-codex-stack-pr-preview-pr-82-login.md",
+    "latestJson": ".codex-stack/qa/latest.json",
+    "latestMarkdown": ".codex-stack/qa/latest.md",
+    "trendsJson": ".codex-stack/qa/trends.json",
+    "trendsMarkdown": ".codex-stack/qa/trends.md",
+    "published": {
+      "dir": "preview-artifacts/qa",
+      "json": "preview-artifacts/qa/report.json",
+      "markdown": "preview-artifacts/qa/report.md",
+      "annotation": "",
+      "screenshot": "",
+      "current": "",
+      "baseline": "",
+      "accessibilityJson": "",
+      "accessibilityMarkdown": "",
+      "performanceJson": "",
+      "performanceMarkdown": "",
+      "visualPack": null
+    }
+  }
+}

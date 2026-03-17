@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acme Release Readiness Demo</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body class="release-shell">
+    <div class="page">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">R</div>
+          <div class="brand-copy">
+            <strong>Acme Release Readiness</strong>
+            <span>Demo the merge decision workflow, not just a random UI</span>
+          </div>
+        </div>
+        <nav class="nav-links">
+          <a href="./login/">Sign in</a>
+          <a href="./dashboard/">Dashboard</a>
+          <a href="./changes/">Change impact</a>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <article class="panel hero-copy">
+          <div class="eyebrow">codex-stack proof demo</div>
+          <h1>Show why an AI-coded change is or is not ready to merge.</h1>
+          <p class="lede">
+            This demo is built for technical evaluators. It gives you one believable release candidate, one authenticated flow,
+            one change-impact surface, and enough stable evidence to demonstrate browse, QA, preview verification, and ship
+            decisions in a single five-minute walkthrough.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="./login/">Run the operator flow</a>
+            <a class="button secondary" href="./dashboard/">Open release dashboard</a>
+          </div>
+        </article>
+
+        <aside class="panel side-card">
+          <div>
+            <div class="label">Primary audience</div>
+            <div class="value">Technical evaluator</div>
+          </div>
+          <div class="stat">
+            <div class="value">5 min</div>
+            <div class="label">to show authenticated QA, visual evidence, and merge gating</div>
+          </div>
+          <div class="stat">
+            <div class="value">4</div>
+            <div class="label">core proof points: browse, qa, preview/deploy, ship</div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="metrics-grid">
+        <article class="metric-card" data-qa="metric-card">
+          <span>Preview checks planned</span>
+          <strong>6</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Unresolved regressions</span>
+          <strong>2</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Approved exceptions</span>
+          <strong>1</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Release confidence</span>
+          <strong>74%</strong>
+        </article>
+      </section>
+
+      <section class="section-grid">
+        <article class="panel stack-card">
+          <h2>What this demo proves</h2>
+          <ol class="task-list numbered-list">
+            <li><span>Use <code>browse</code> to run a real login flow and persist session state.</span><span class="badge good">Auth</span></li>
+            <li><span>Use <code>qa</code> to score release readiness with visual evidence and stable selectors.</span><span class="badge good">QA</span></li>
+            <li><span>Use <code>preview</code> or <code>deploy</code> to verify key routes on desktop and mobile.</span><span class="badge warn">Preview</span></li>
+            <li><span>Use <code>ship --dry-run</code> to show how merge decisions become PR metadata.</span><span class="badge good">Release</span></li>
+          </ol>
+        </article>
+        <article class="panel stack-card">
+          <h2>Suggested pitch</h2>
+          <p>
+            “This package is useful when code generation stops being the bottleneck and release confidence becomes the bottleneck.”
+          </p>
+          <p>
+            The demo intentionally centers on merge readiness so the evaluator sees operational proof, not just automation tricks.
+          </p>
+        </article>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "release-readiness-demo",
+    "generatedAt": "2026-03-16T11:42:26.831Z",
+    "status": "warning",
+    "healthScore": 14,
+    "visualRiskScore": 13.5,
+    "visualRiskLevel": "low",
+    "imageDiffScore": 84.3,
+    "baselineAgeDays": 1.2,
+    "staleBaseline": false,
+    "accessibilityViolations": 2,
+    "performanceBudgetViolations": 2,
+    "largestContentfulPaint": 2460,
+    "cumulativeLayoutShift": 0.14,
+    "approvedRegressions": 0,
+    "unresolvedRegressions": 5,
+    "expiredDecisions": 0,
+    "expiringSoonCount": 0,
+    "stableUrl": "https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"
+  }
+]

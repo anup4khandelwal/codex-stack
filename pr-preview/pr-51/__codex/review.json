@@ -1,0 +1,42 @@
+{
+  "status": "ok",
+  "branch": "feat/49-visual-risk-history",
+  "baseRef": "4fea03fd1955fe7896bcd1cb01a95d510c13d859",
+  "checklistPath": "/home/runner/work/codex-stack/codex-stack/skills/review/checklist.md",
+  "checklistSummary": [
+    "# Review checklist",
+    "## Critical",
+    "- Trust boundary violations",
+    "- Missing auth or authorization checks",
+    "- Data corruption risks",
+    "- Race conditions and stale writes",
+    "- Unsafe migrations",
+    "- Silent retry loops or duplicate side effects"
+  ],
+  "fileNames": [
+    "README.md",
+    "browse/src/cli.ts",
+    "docs/commands.md",
+    "scripts/ci-check.sh",
+    "scripts/deploy-verify.spec.ts",
+    "scripts/deploy-verify.ts",
+    "scripts/preview-verify.spec.ts",
+    "scripts/preview-verify.ts",
+    "scripts/qa-run.spec.ts",
+    "scripts/qa-run.ts",
+    "scripts/render-pr-review.spec.ts",
+    "scripts/render-pr-review.ts",
+    "scripts/render-qa-pages.spec.ts",
+    "scripts/render-qa-pages.ts",
+    "scripts/ship-branch.ts",
+    "scripts/visual-risk.ts"
+  ],
+  "findings": [
+    {
+      "severity": "info",
+      "title": "No obvious structural issues detected",
+      "detail": "Reviewed branch feat/49-visual-risk-history against 4fea03fd1955fe7896bcd1cb01a95d510c13d859. No heuristic findings triggered. Human review is still required.",
+      "files": []
+    }
+  ]
+}

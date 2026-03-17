@@ -1,0 +1,230 @@
+{
+  "marker": "<!-- codex-stack:preview-verify -->",
+  "generatedAt": "2026-03-15T03:50:35.645Z",
+  "status": "pass",
+  "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/",
+  "urlSource": "direct",
+  "context": {
+    "repo": "anup4khandelwal/codex-stack",
+    "owner": "anup4khandelwal",
+    "repoName": "codex-stack",
+    "pr": "51",
+    "branch": "feat/49-visual-risk-history",
+    "branchSlug": "feat-49-visual-risk-history",
+    "sha": "9a8613d61f7e3a49702e7a6cbd3aa73ac307d0d7",
+    "shortSha": "9a8613d"
+  },
+  "readiness": {
+    "status": "ready",
+    "attempts": 3,
+    "httpStatus": 200,
+    "checkedUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/",
+    "detail": "Deploy responded with HTTP 200."
+  },
+  "qa": {
+    "status": "pass",
+    "healthScore": 100,
+    "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+    "findings": [],
+    "flowResults": [
+      {
+        "name": "portal-full-demo",
+        "status": "pass",
+        "steps": 12
+      }
+    ],
+    "snapshotResult": null,
+    "artifacts": {
+      "json": ".codex-stack/qa/2026-03-15T03-50-35-anup4khandelwal.github.io-codex-stack-pr-preview-pr-51-login.json",
+      "markdown": ".codex-stack/qa/2026-03-15T03-50-35-anup4khandelwal.github.io-codex-stack-pr-preview-pr-51-login.md",
+      "latestJson": ".codex-stack/qa/latest.json",
+      "latestMarkdown": ".codex-stack/qa/latest.md",
+      "trendsJson": ".codex-stack/qa/trends.json",
+      "trendsMarkdown": ".codex-stack/qa/trends.md",
+      "published": {
+        "dir": "preview-artifacts/qa",
+        "json": "preview-artifacts/qa/report.json",
+        "markdown": "preview-artifacts/qa/report.md",
+        "annotation": "",
+        "screenshot": "",
+        "current": "",
+        "baseline": "",
+        "visualPack": null
+      }
+    }
+  },
+  "visualRisk": {
+    "available": true,
+    "score": 0,
+    "level": "none",
+    "summary": "Visual checks are clean.",
+    "criticalChecks": 0,
+    "warningChecks": 0,
+    "consoleErrors": 0,
+    "changedSnapshots": 0,
+    "staleBaselines": 0,
+    "avgImageDiffScore": null,
+    "topDrivers": []
+  },
+  "artifactRoot": "/home/runner/work/codex-stack/codex-stack/preview-artifacts",
+  "visualPack": {
+    "dir": "preview-artifacts/visual",
+    "index": "preview-artifacts/visual/index.html",
+    "manifest": "preview-artifacts/visual/manifest.json"
+  },
+  "runUrl": "https://github.com/anup4khandelwal/codex-stack/actions/runs/23102801320",
+  "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+  "deploy": {
+    "marker": "<!-- codex-stack:deploy-verify -->",
+    "generatedAt": "2026-03-15T03:50:35.642Z",
+    "status": "pass",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/",
+    "urlSource": "direct",
+    "context": {
+      "repo": "anup4khandelwal/codex-stack",
+      "owner": "anup4khandelwal",
+      "repoName": "codex-stack",
+      "pr": "51",
+      "branch": "feat/49-visual-risk-history",
+      "branchSlug": "feat-49-visual-risk-history",
+      "sha": "9a8613d61f7e3a49702e7a6cbd3aa73ac307d0d7",
+      "shortSha": "9a8613d"
+    },
+    "readiness": {
+      "status": "ready",
+      "attempts": 3,
+      "httpStatus": 200,
+      "checkedUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/",
+      "detail": "Deploy responded with HTTP 200."
+    },
+    "checks": {
+      "paths": [
+        "/login",
+        "/dashboard"
+      ],
+      "devices": [
+        "desktop",
+        "mobile"
+      ],
+      "strictConsole": false,
+      "strictHttp": false,
+      "session": "deploy-pr-51"
+    },
+    "pathResults": [
+      {
+        "path": "/login",
+        "device": "desktop",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login/",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/login-desktop.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/login",
+        "device": "mobile",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login/",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/login-mobile.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/dashboard",
+        "device": "desktop",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/dashboard",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login/?next=https%3A%2F%2Fanup4khandelwal.github.io%2Fcodex-stack%2Fpr-preview%2Fpr-51%2Fdashboard",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/dashboard-desktop.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/dashboard",
+        "device": "mobile",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/dashboard",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login/?next=https%3A%2F%2Fanup4khandelwal.github.io%2Fcodex-stack%2Fpr-preview%2Fpr-51%2Fdashboard",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/dashboard-mobile.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      }
+    ],
+    "qa": {
+      "status": "pass",
+      "healthScore": 100,
+      "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+      "findings": [],
+      "flowResults": [
+        {
+          "name": "portal-full-demo",
+          "status": "pass",
+          "steps": 12
+        }
+      ],
+      "snapshotResults": [],
+      "artifacts": {
+        "json": ".codex-stack/qa/2026-03-15T03-50-35-anup4khandelwal.github.io-codex-stack-pr-preview-pr-51-login.json",
+        "markdown": ".codex-stack/qa/2026-03-15T03-50-35-anup4khandelwal.github.io-codex-stack-pr-preview-pr-51-login.md",
+        "latestJson": ".codex-stack/qa/latest.json",
+        "latestMarkdown": ".codex-stack/qa/latest.md",
+        "trendsJson": ".codex-stack/qa/trends.json",
+        "trendsMarkdown": ".codex-stack/qa/trends.md",
+        "published": {
+          "dir": "preview-artifacts/qa",
+          "json": "preview-artifacts/qa/report.json",
+          "markdown": "preview-artifacts/qa/report.md",
+          "annotation": "",
+          "screenshot": "",
+          "current": "",
+          "baseline": "",
+          "visualPack": null
+        }
+      }
+    },
+    "visualRisk": {
+      "available": true,
+      "score": 0,
+      "level": "none",
+      "summary": "Visual checks are clean.",
+      "criticalChecks": 0,
+      "warningChecks": 0,
+      "consoleErrors": 0,
+      "changedSnapshots": 0,
+      "staleBaselines": 0,
+      "avgImageDiffScore": null,
+      "topDrivers": []
+    },
+    "artifactRoot": "/home/runner/work/codex-stack/codex-stack/preview-artifacts",
+    "screenshotManifest": "preview-artifacts/screenshots.json",
+    "visualPack": {
+      "dir": "preview-artifacts/visual",
+      "index": "preview-artifacts/visual/index.html",
+      "manifest": "preview-artifacts/visual/manifest.json"
+    },
+    "runUrl": "https://github.com/anup4khandelwal/codex-stack/actions/runs/23102801320",
+    "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land."
+  }
+}

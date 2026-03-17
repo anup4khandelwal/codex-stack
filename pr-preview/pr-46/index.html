@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acme Customer Portal</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body class="portal-shell">
+    <div class="page">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div class="brand-copy">
+            <strong>Acme Customer Portal</strong>
+            <span>Operations visibility for fast-moving support teams</span>
+          </div>
+        </div>
+        <nav class="nav-links">
+          <a href="./login/">Sign in</a>
+          <a href="./dashboard/">Dashboard</a>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <article class="panel hero-copy">
+          <div class="eyebrow">Demo project for codex-stack</div>
+          <h1>Show your friend a real login and dashboard flow.</h1>
+          <p class="lede">
+            This sample project is intentionally small, local-first, and visual. It gives you something concrete to review, ship,
+            and browser-test without needing a full external stack.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="./login/">Launch operator login</a>
+            <a class="button secondary" href="./dashboard/">View dashboard</a>
+          </div>
+        </article>
+
+        <aside class="panel side-card">
+          <div>
+            <div class="label">What this demo is for</div>
+            <div class="value">5-minute friend demo</div>
+          </div>
+          <div class="stat">
+            <div class="value">3</div>
+            <div class="label">core workflows to show: browse, ship, retro</div>
+          </div>
+          <div class="stat">
+            <div class="value">0 deps</div>
+            <div class="label">outside Bun and the existing Playwright install</div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="metrics-grid">
+        <article class="metric-card" data-qa="metric-card">
+          <span>Renewals at risk</span>
+          <strong>12</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Support queue age</span>
+          <strong>3.4h</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Customers onboarded</span>
+          <strong>84</strong>
+        </article>
+        <article class="metric-card" data-qa="metric-card">
+          <span>Automation coverage</span>
+          <strong>71%</strong>
+        </article>
+      </section>
+
+      <section class="section-grid">
+        <article class="panel stack-card">
+          <h2>What you can demonstrate</h2>
+          <ul class="task-list">
+            <li><span>Use `browse` to run a real login flow with assertions.</span><span class="badge good">QA</span></li>
+            <li><span>Use `ship --dry-run` to show PR title, labels, and reviewer planning.</span><span class="badge good">Release</span></li>
+            <li><span>Use `retro` to show delivery analytics after a couple of sample commits.</span><span class="badge warn">Ops</span></li>
+          </ul>
+        </article>
+        <article class="panel stack-card">
+          <h2>Suggested pitch</h2>
+          <p>
+            "This is not a prompt pack. It is a workflow layer that makes an AI coding agent usable for actual engineering work."
+          </p>
+        </article>
+      </section>
+    </div>
+  </body>
+</html>

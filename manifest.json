@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-03-16T15:28:51.747Z",
+  "repo": "anup4khandelwal/codex-stack",
+  "baseUrl": "https://anup4khandelwal.github.io/codex-stack/",
+  "sourceDir": "docs/qa",
+  "outDir": ".site",
+  "historyPath": "qa/history.json",
+  "reports": [
+    {
+      "slug": "release-readiness-demo",
+      "status": "warning",
+      "healthScore": 14,
+      "generatedAt": "2026-03-16T11:42:26.831Z",
+      "reportPath": "qa/release-readiness-demo/report.json",
+      "stableUrl": "https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/",
+      "stableAnnotationUrl": "https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/annotation.svg",
+      "stableScreenshotUrl": "https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/screenshot.png",
+      "stableVisualUrl": "https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/visual/index.html",
+      "visualRiskScore": 13.5,
+      "visualRiskLevel": "low",
+      "imageDiffScore": 84.3,
+      "baselineAgeDays": 1.2,
+      "staleBaseline": false,
+      "accessibilityViolations": 2,
+      "performanceBudgetViolations": 2,
+      "largestContentfulPaint": 2460,
+      "cumulativeLayoutShift": 0.14,
+      "approvedRegressions": 0,
+      "unresolvedRegressions": 5,
+      "expiredDecisions": 0,
+      "expiringSoonCount": 0
+    }
+  ]
+}

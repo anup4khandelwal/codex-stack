@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "branch": "feat/47-visual-diff-and-digests",
+  "baseRef": "e783b8e9f8474d2e8cdd82dfa1eff5ddc9f92dff",
+  "filesChanged": 19,
+  "criticalCount": 0,
+  "warningCount": 0,
+  "infoCount": 1,
+  "previewIncluded": true,
+  "previewStatus": "pass",
+  "previewBlocking": false,
+  "blocking": false
+}

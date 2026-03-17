@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "branch": "feat/45-add-visual-pr-qa-packs",
+  "baseRef": "583d5e23971da10bf42b8c8df926ddd9420bf3e2",
+  "filesChanged": 15,
+  "criticalCount": 0,
+  "warningCount": 3,
+  "infoCount": 0,
+  "previewIncluded": true,
+  "previewStatus": "pass",
+  "previewBlocking": false,
+  "blocking": false
+}

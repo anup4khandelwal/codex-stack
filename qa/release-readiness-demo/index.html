@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QA report • release-readiness-demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --panel: #fffdf8;
+      --ink: #1d1c1a;
+      --muted: #6d665c;
+      --line: #ded6ca;
+      --critical: #b42318;
+      --warning: #b54708;
+      --pass: #067647;
+      --accent: #1d4ed8;
+      --shadow: 0 18px 40px rgba(29, 28, 26, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 32%),
+        radial-gradient(circle at top right, rgba(180, 71, 8, 0.08), transparent 28%),
+        linear-gradient(180deg, #f7f4ee 0%, var(--bg) 100%);
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 48px 20px 80px; }
+    header { margin-bottom: 32px; }
+    h1 {
+      margin: 0 0 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: clamp(2rem, 3.8vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+    p.lead { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.6; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .toolbar {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .status.pass, .pill.pass { background: rgba(6, 118, 71, 0.12); color: var(--pass); }
+    .status.warning, .pill.warning { background: rgba(181, 71, 8, 0.12); color: var(--warning); }
+    .status.critical, .pill.critical { background: rgba(180, 35, 24, 0.12); color: var(--critical); }
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-top: 24px;
+    }
+    .report-card h2, .section h2 { margin-top: 0; font-size: 1.2rem; }
+    .report-card p { color: var(--muted); line-height: 1.5; }
+    .meta {
+      margin: 16px 0;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .links, .detail-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .links a, .detail-links a {
+      font-weight: 600;
+      padding: 0.5rem 0.85rem;
+      background: rgba(29, 78, 216, 0.08);
+      border-radius: 999px;
+    }
+    .statline {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      color: var(--muted);
+    }
+    ul.clean {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 12px;
+    }
+    .finding {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fff;
+    }
+    .finding.warning { border-color: rgba(181, 71, 8, 0.22); }
+    .finding.critical { border-color: rgba(180, 35, 24, 0.22); }
+    .finding-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.22rem 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+    .evidence {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .preview {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .preview img, .preview object {
+      display: block;
+      width: 100%;
+      max-height: 540px;
+      object-fit: contain;
+      background: #f8f5ee;
+    }
+    .chart {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffaf2;
+      margin-top: 14px;
+    }
+    .chart-legend {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .empty { color: var(--muted); }
+    footer {
+      margin-top: 32px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    @media (max-width: 720px) {
+      main { padding: 32px 16px 56px; }
+      .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>QA report • release-readiness-demo</h1>
+      <p class="lead">Hold the release until the regression evidence is explained or the baseline is refreshed intentionally.</p>
+      <div class="toolbar"><span>Pages base</span><a href="https://anup4khandelwal.github.io/codex-stack/">https://anup4khandelwal.github.io/codex-stack/</a></div>
+    </header>
+    
+      <div class="toolbar"><a href="../../index.html">Back to index</a> <span>•</span> <a href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/">Stable URL</a></div>
+      <section class="grid two">
+        <article class="card section">
+          <div class="status warning">warning</div>
+          <div class="meta">
+            <span><strong>Health score:</strong> 14</span>
+            <span><strong>Generated:</strong> Mar 16, 2026, 11:42 AM UTC</span>
+            <span><strong>Session:</strong> qa</span>
+            <span><strong>Mode:</strong> full</span>
+            <span><strong>URL:</strong> https://anup4khandelwal.github.io/codex-stack/</span>
+            <span><strong>A11y violations:</strong> 2</span>
+            <span><strong>Perf budget violations:</strong> 2</span>
+            <span><strong>Approved regressions:</strong> </span>
+            <span><strong>Unresolved regressions:</strong> 5</span>
+            <span><strong>Expired decisions:</strong> </span>
+            <span><strong>LCP:</strong> 2460 ms</span>
+            <span><strong>CLS:</strong> 0.14</span>
+          </div>
+          <div class="detail-links"><a href="visual/index.html">Visual pack</a>
+<a href="visual/manifest.json">Visual manifest</a>
+<a href="report.md">Markdown</a>
+<a href="report.json">JSON</a>
+<a href="annotation.svg">Annotation</a>
+<a href="screenshot.png">Screenshot</a></div>
+        </article>
+        <article class="card section">
+          <h2>Snapshot</h2>
+          <div class="meta">
+            <span><strong>Name:</strong> release-dashboard</span>
+            <span><strong>Status:</strong> changed</span>
+            <span><strong>Visual risk:</strong> LOW (13.5/100)</span>
+            <span><strong>Route:</strong> /dashboard</span>
+            <span><strong>Device:</strong> desktop</span>
+            <span><strong>Baseline age:</strong> 1.2d</span>
+            <span><strong>Baseline:</strong> docs/qa/release-readiness-demo/visual/baseline.json</span>
+            <span><strong>Current:</strong> docs/qa/release-readiness-demo/visual/current.json</span>
+          </div>
+        </article>
+      </section>
+      <section class="grid two" style="margin-top: 18px;">
+        <article class="card section">
+          <h2>Findings</h2>
+          <ul class="clean"><li class="finding warning">
+        <div class="finding-head">
+        <span class="pill warning">MEDIUM</span>
+        <strong>Snapshot drift detected</strong>
+        <span class="pill">visual</span>
+      </div>
+      <p>The page differs from the saved baseline for release-dashboard.</p>
+      <div class="evidence"><span><strong>snapshot:</strong> release-dashboard</span><span><strong>route:</strong> /dashboard</span><span><strong>device:</strong> desktop</span><span><strong>selectors:</strong> [data-qa=&#39;release-status-card&#39;], [data-qa=&#39;changes-approval-banner&#39;], [data-qa=&#39;changes-escalation-chip&#39;]</span><span><strong>decisionKind:</strong> snapshot-drift</span><span><strong>decisionTitle:</strong> Snapshot drift detected</span><span><strong>screenshot:</strong> docs/qa/release-readiness-demo/screenshot.png</span><span><strong>current:</strong> docs/qa/release-readiness-demo/visual/current.json</span><span><strong>annotation:</strong> docs/qa/release-readiness-demo/annotation.svg</span><span><strong>visualPack:</strong> docs/qa/release-readiness-demo/visual/index.html</span><span><strong>diffImage:</strong> docs/qa/release-readiness-demo/visual/diff.png</span></div>
+    </li>
+<li class="finding warning">
+        <div class="finding-head">
+        <span class="pill warning">HIGH</span>
+        <strong>Accessibility violation: color-contrast</strong>
+        <span class="pill">accessibility</span>
+      </div>
+      <p>Elements must meet minimum color contrast ratio thresholds (1 affected node)</p>
+      <div class="evidence"><span><strong>rule:</strong> color-contrast</span><span><strong>impact:</strong> serious</span><span><strong>route:</strong> /codex-stack/</span><span><strong>device:</strong> desktop</span><span><strong>decisionKind:</strong> accessibility-rule</span><span><strong>decisionTitle:</strong> color-contrast</span><span><strong>selectors:</strong> [data-qa=&#39;changes-approval-banner&#39;]</span><span><strong>helpUrl:</strong> https://dequeuniversity.com/rules/axe/4.10/color-contrast</span></div>
+    </li>
+<li class="finding warning">
+        <div class="finding-head">
+        <span class="pill warning">MEDIUM</span>
+        <strong>Accessibility violation: aria-input-field-name</strong>
+        <span class="pill">accessibility</span>
+      </div>
+      <p>Form elements must have labels (1 affected node)</p>
+      <div class="evidence"><span><strong>rule:</strong> aria-input-field-name</span><span><strong>impact:</strong> moderate</span><span><strong>route:</strong> /codex-stack/</span><span><strong>device:</strong> desktop</span><span><strong>decisionKind:</strong> accessibility-rule</span><span><strong>decisionTitle:</strong> aria-input-field-name</span><span><strong>selectors:</strong> [data-qa=&#39;qa-exception-input&#39;]</span><span><strong>helpUrl:</strong> https://dequeuniversity.com/rules/axe/4.10/aria-input-field-name</span></div>
+    </li>
+<li class="finding warning">
+        <div class="finding-head">
+        <span class="pill warning">HIGH</span>
+        <strong>Performance budget exceeded: Largest Contentful Paint</strong>
+        <span class="pill">performance</span>
+      </div>
+      <p>LCP exceeded the demo budget by 260ms on the release dashboard.</p>
+      <div class="evidence"><span><strong>metric:</strong> lcp</span><span><strong>route:</strong> /codex-stack/</span><span><strong>device:</strong> desktop</span><span><strong>decisionKind:</strong> performance-budget</span><span><strong>decisionTitle:</strong> Largest Contentful Paint</span><span><strong>threshold:</strong> 2200</span><span><strong>value:</strong> 2460</span></div>
+    </li>
+<li class="finding warning">
+        <div class="finding-head">
+        <span class="pill warning">MEDIUM</span>
+        <strong>Performance budget exceeded: Cumulative Layout Shift</strong>
+        <span class="pill">performance</span>
+      </div>
+      <p>CLS exceeded the demo budget by 0.04 because the approval banner pushed the checklist.</p>
+      <div class="evidence"><span><strong>metric:</strong> cls</span><span><strong>route:</strong> /codex-stack/</span><span><strong>device:</strong> desktop</span><span><strong>decisionKind:</strong> performance-budget</span><span><strong>decisionTitle:</strong> Cumulative Layout Shift</span><span><strong>threshold:</strong> 0.1</span><span><strong>value:</strong> 0.14</span></div>
+    </li></ul>
+        </article>
+        <article class="card section">
+          <h2>Flow results</h2>
+          <ul class="clean"><li><strong>release-login</strong><span>pass • 6 steps</span></li>
+<li><strong>release-dashboard</strong><span>pass • 7 steps</span></li>
+<li><strong>release-changes</strong><span>pass • 6 steps</span></li></ul>
+        </article>
+      </section>
+      <section class="grid two" style="margin-top: 18px;">
+        <article class="card section">
+          <h2>Accessibility</h2>
+          <div class="meta">
+            <span><strong>Enabled:</strong> yes</span>
+            <span><strong>Violations:</strong> 2</span>
+            <span><strong>Minimum impact:</strong> serious</span>
+          </div>
+          <ul class="clean"><li>color-contrast</li><li>aria-input-field-name</li></ul>
+        </article>
+        <article class="card section">
+          <h2>Performance</h2>
+          <div class="meta">
+            <span><strong>Enabled:</strong> yes</span>
+            <span><strong>Budget violations:</strong> 2</span>
+            <span><strong>LCP:</strong> 2460 ms</span>
+            <span><strong>CLS:</strong> 0.14</span>
+          </div>
+          <ul class="clean"><li>Largest Contentful Paint exceeded budget</li><li>Cumulative Layout Shift exceeded budget</li></ul>
+        </article>
+      </section>
+      <section class="grid two" style="margin-top: 18px;">
+        <article class="card section">
+          <h2>Applied decisions</h2>
+          <ul class="clean"><li class="empty">None.</li></ul>
+        </article>
+        <article class="card section">
+          <h2>Expired decisions</h2>
+          <ul class="clean"><li class="empty">None.</li></ul>
+        </article>
+      </section>
+      <section class="card section" style="margin-top: 18px;">
+        <h2>Unresolved regressions</h2>
+        <ul class="clean"><li class="finding warning"><div class="finding-head"><span class="pill warning">MEDIUM</span><strong>Snapshot drift detected</strong><span class="pill">visual</span></div><p>snapshot-drift @ /dashboard (desktop)</p></li>
+<li class="finding warning"><div class="finding-head"><span class="pill warning">HIGH</span><strong>Accessibility violation: color-contrast</strong><span class="pill">accessibility</span></div><p>accessibility-rule @ /codex-stack/ (desktop)</p></li>
+<li class="finding warning"><div class="finding-head"><span class="pill warning">MEDIUM</span><strong>Accessibility violation: aria-input-field-name</strong><span class="pill">accessibility</span></div><p>accessibility-rule @ /codex-stack/ (desktop)</p></li>
+<li class="finding warning"><div class="finding-head"><span class="pill warning">HIGH</span><strong>Performance budget exceeded: Largest Contentful Paint</strong><span class="pill">performance</span></div><p>performance-budget @ /codex-stack/ (desktop)</p></li>
+<li class="finding warning"><div class="finding-head"><span class="pill warning">MEDIUM</span><strong>Performance budget exceeded: Cumulative Layout Shift</strong><span class="pill">performance</span></div><p>performance-budget @ /codex-stack/ (desktop)</p></li></ul>
+      </section>
+      <section class="card section" style="margin-top: 18px;">
+        <h2>Visual evidence</h2>
+        <div class="preview"><object data="annotation.svg" type="image/svg+xml" aria-label="Annotated snapshot"></object></div>
+      </section>
+    
+    <footer>Generated by codex-stack QA Pages.</footer>
+  </main>
+</body>
+</html>

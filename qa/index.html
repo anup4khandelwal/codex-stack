@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>codex-stack QA Reports</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --panel: #fffdf8;
+      --ink: #1d1c1a;
+      --muted: #6d665c;
+      --line: #ded6ca;
+      --critical: #b42318;
+      --warning: #b54708;
+      --pass: #067647;
+      --accent: #1d4ed8;
+      --shadow: 0 18px 40px rgba(29, 28, 26, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 32%),
+        radial-gradient(circle at top right, rgba(180, 71, 8, 0.08), transparent 28%),
+        linear-gradient(180deg, #f7f4ee 0%, var(--bg) 100%);
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 48px 20px 80px; }
+    header { margin-bottom: 32px; }
+    h1 {
+      margin: 0 0 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: clamp(2rem, 3.8vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+    p.lead { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.6; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .toolbar {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .status.pass, .pill.pass { background: rgba(6, 118, 71, 0.12); color: var(--pass); }
+    .status.warning, .pill.warning { background: rgba(181, 71, 8, 0.12); color: var(--warning); }
+    .status.critical, .pill.critical { background: rgba(180, 35, 24, 0.12); color: var(--critical); }
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-top: 24px;
+    }
+    .report-card h2, .section h2 { margin-top: 0; font-size: 1.2rem; }
+    .report-card p { color: var(--muted); line-height: 1.5; }
+    .meta {
+      margin: 16px 0;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .links, .detail-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .links a, .detail-links a {
+      font-weight: 600;
+      padding: 0.5rem 0.85rem;
+      background: rgba(29, 78, 216, 0.08);
+      border-radius: 999px;
+    }
+    .statline {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      color: var(--muted);
+    }
+    ul.clean {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 12px;
+    }
+    .finding {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fff;
+    }
+    .finding.warning { border-color: rgba(181, 71, 8, 0.22); }
+    .finding.critical { border-color: rgba(180, 35, 24, 0.22); }
+    .finding-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.22rem 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+    .evidence {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .preview {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .preview img, .preview object {
+      display: block;
+      width: 100%;
+      max-height: 540px;
+      object-fit: contain;
+      background: #f8f5ee;
+    }
+    .chart {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffaf2;
+      margin-top: 14px;
+    }
+    .chart-legend {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .empty { color: var(--muted); }
+    footer {
+      margin-top: 32px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    @media (max-width: 720px) {
+      main { padding: 32px 16px 56px; }
+      .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>codex-stack QA Reports</h1>
+      <p class="lead">Stable GitHub Pages view for tracked QA evidence generated during shipping.</p>
+      <div class="toolbar"><span>Pages base</span><a href="https://anup4khandelwal.github.io/codex-stack/">https://anup4khandelwal.github.io/codex-stack/</a></div>
+    </header>
+    <section class="grid two" style="margin-top: 24px;">
+    <article class="card section">
+      <h2>Visual history</h2>
+      <p>Track risk, drift, and baseline age across published QA reports.</p>
+      <div class="meta"><span><strong>Reports:</strong> 1</span><span><strong>Latest visual risk:</strong> LOW (13.5/100)</span><span><strong>Latest accessibility violations:</strong> 2</span><span><strong>Latest perf budget violations:</strong> 2</span><span><strong>Latest approved regressions:</strong> 0</span><span><strong>Latest unresolved regressions:</strong> 5</span><span><strong>Latest image diff score:</strong> 84.3</span><span><strong>Stale baselines:</strong> 0</span></div>
+    </article>
+    <article class="card section">
+    <h2>Visual risk score</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Visual risk score">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#b42318" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,174.24"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="174.24" r="4.5" fill="#b42318"><title>release-readiness-demo: 13.5</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+    <article class="card section">
+    <h2>Snapshot image diff score</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Snapshot image diff score">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,49.632000000000005"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="49.632000000000005" r="4.5" fill="#1d4ed8"><title>release-readiness-demo: 84.3</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+    <article class="card section">
+    <h2>Accessibility violations</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Accessibility violations">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#7c3aed" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,162.8"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="162.8" r="4.5" fill="#7c3aed"><title>release-readiness-demo: 2</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+    <article class="card section">
+    <h2>Performance budget violations</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Performance budget violations">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#0f766e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,127.6"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="127.6" r="4.5" fill="#0f766e"><title>release-readiness-demo: 2</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+    <article class="card section">
+    <h2>Largest contentful paint (ms)</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Largest contentful paint (ms)">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#9333ea" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,24.816000000000003"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="24.816000000000003" r="4.5" fill="#9333ea"><title>release-readiness-demo: 2460</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+    <article class="card section">
+    <h2>Baseline age (days)</h2>
+    <svg class="chart" viewBox="0 0 720 220" role="img" aria-label="Baseline age (days)">
+      <rect x="0" y="0" width="720" height="220" rx="18" fill="#fffaf2"></rect>
+      <line x1="22" y1="198" x2="698" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <line x1="22" y1="22" x2="22" y2="198" stroke="#d1c6b6" stroke-width="1.5"></line>
+      <polyline fill="none" stroke="#b45308" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="22,190.96"></polyline>
+      <a xlink:href="https://anup4khandelwal.github.io/codex-stack/qa/release-readiness-demo/"><circle cx="22" cy="190.96" r="4.5" fill="#b45308"><title>release-readiness-demo: 1.2</title></circle></a>
+    </svg>
+    <div class="chart-legend"><span>Oldest: release-readiness-demo</span><span>Newest: release-readiness-demo</span></div>
+  </article>
+  </section><section class="report-grid"><article class="card report-card">
+        <div class="status warning">warning</div>
+        <h2>release-readiness-demo</h2>
+        <p>Hold the release until the regression evidence is explained or the baseline is refreshed intentionally.</p>
+        <div class="meta">
+          <span><strong>Health score:</strong> 14</span>
+          <span><strong>Visual risk:</strong> LOW (13.5/100)</span>
+          <span><strong>A11y violations:</strong> 2</span>
+          <span><strong>Perf budget violations:</strong> 2</span>
+          <span><strong>Approved regressions:</strong> </span>
+          <span><strong>Unresolved regressions:</strong> 5</span>
+          <span><strong>Expired decisions:</strong> </span>
+          <span><strong>LCP:</strong> 2460 ms</span>
+          <span><strong>Image diff:</strong> 84.3</span>
+          <span><strong>Baseline age:</strong> 1.2d</span>
+          <span><strong>Generated:</strong> Mar 16, 2026, 11:42 AM UTC</span>
+          <span><strong>URL:</strong> https://anup4khandelwal.github.io/codex-stack/</span>
+        </div>
+        <div class="statline">
+          <span>Findings: 5</span>
+          <span>Flows: 3</span>
+        </div>
+        <div class="links">
+          <a href="qa/release-readiness-demo/">Open report</a>
+          <a href="qa/release-readiness-demo/visual/index.html">Visual pack</a>
+          <a href="qa/release-readiness-demo/report.md">Markdown</a>
+          <a href="qa/release-readiness-demo/report.json">JSON</a>
+          <a href="qa/release-readiness-demo/annotation.svg">Annotation</a>
+          <a href="qa/release-readiness-demo/screenshot.png">Screenshot</a>
+        </div>
+      </article></section>
+    <footer>Generated by codex-stack QA Pages.</footer>
+  </main>
+</body>
+</html>

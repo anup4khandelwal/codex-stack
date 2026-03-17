@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Release Operator Sign In</title>
+    <link rel="stylesheet" href="../app.css" />
+    <script src="../app.js" defer></script>
+  </head>
+  <body class="release-auth" data-page="login">
+    <div class="page auth-shell">
+      <section class="panel auth-panel">
+        <div class="kicker">Release control workspace</div>
+        <h1>Release operator sign in</h1>
+        <p class="lede">
+          Use any email and password. The demo stores a lightweight local session so authenticated preview and QA flows can be
+          re-run without rebuilding a backend.
+        </p>
+        <div class="notice" data-login-notice>Recommended demo account: <strong>release-owner@acme.dev</strong></div>
+      </section>
+
+      <section class="panel auth-form">
+        <h2>Resume the candidate review</h2>
+        <p class="form-help">This is the deliberate auth gate for `browse`, preview verification, and session-bundle demos.</p>
+        <form data-login-form>
+          <label>
+            <span>Email</span>
+            <input type="email" name="email" placeholder="release-owner@acme.dev" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" name="password" placeholder="demo-password" autocomplete="current-password" />
+          </label>
+          <button class="primary" type="submit">Continue to release dashboard</button>
+        </form>
+      </section>
+    </div>
+  </body>
+</html>

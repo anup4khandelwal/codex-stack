@@ -1,0 +1,204 @@
+{
+  "marker": "<!-- codex-stack:preview-verify -->",
+  "generatedAt": "2026-03-15T03:09:13.744Z",
+  "status": "pass",
+  "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/",
+  "urlSource": "direct",
+  "context": {
+    "repo": "anup4khandelwal/codex-stack",
+    "owner": "anup4khandelwal",
+    "repoName": "codex-stack",
+    "pr": "46",
+    "branch": "feat/45-add-visual-pr-qa-packs",
+    "branchSlug": "feat-45-add-visual-pr-qa-packs",
+    "sha": "8147799ee18271385607d2b35e497d51b5e023b7",
+    "shortSha": "8147799"
+  },
+  "readiness": {
+    "status": "ready",
+    "attempts": 3,
+    "httpStatus": 200,
+    "checkedUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/",
+    "detail": "Deploy responded with HTTP 200."
+  },
+  "qa": {
+    "status": "pass",
+    "healthScore": 100,
+    "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+    "findings": [],
+    "flowResults": [
+      {
+        "name": "portal-full-demo",
+        "status": "pass",
+        "steps": 12
+      }
+    ],
+    "snapshotResult": null,
+    "artifacts": {
+      "json": ".codex-stack/qa/2026-03-15T03-09-13-anup4khandelwal.github.io-codex-stack-pr-preview-pr-46-login.json",
+      "markdown": ".codex-stack/qa/2026-03-15T03-09-13-anup4khandelwal.github.io-codex-stack-pr-preview-pr-46-login.md",
+      "latestJson": ".codex-stack/qa/latest.json",
+      "latestMarkdown": ".codex-stack/qa/latest.md",
+      "trendsJson": ".codex-stack/qa/trends.json",
+      "trendsMarkdown": ".codex-stack/qa/trends.md",
+      "published": {
+        "dir": "preview-artifacts/qa",
+        "json": "preview-artifacts/qa/report.json",
+        "markdown": "preview-artifacts/qa/report.md",
+        "annotation": "",
+        "screenshot": "",
+        "current": "",
+        "baseline": "",
+        "visualPack": null
+      }
+    }
+  },
+  "artifactRoot": "/home/runner/work/codex-stack/codex-stack/preview-artifacts",
+  "visualPack": {
+    "dir": "preview-artifacts/visual",
+    "index": "preview-artifacts/visual/index.html",
+    "manifest": "preview-artifacts/visual/manifest.json"
+  },
+  "runUrl": "https://github.com/anup4khandelwal/codex-stack/actions/runs/23102180405",
+  "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+  "deploy": {
+    "marker": "<!-- codex-stack:deploy-verify -->",
+    "generatedAt": "2026-03-15T03:09:13.741Z",
+    "status": "pass",
+    "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/",
+    "urlSource": "direct",
+    "context": {
+      "repo": "anup4khandelwal/codex-stack",
+      "owner": "anup4khandelwal",
+      "repoName": "codex-stack",
+      "pr": "46",
+      "branch": "feat/45-add-visual-pr-qa-packs",
+      "branchSlug": "feat-45-add-visual-pr-qa-packs",
+      "sha": "8147799ee18271385607d2b35e497d51b5e023b7",
+      "shortSha": "8147799"
+    },
+    "readiness": {
+      "status": "ready",
+      "attempts": 3,
+      "httpStatus": 200,
+      "checkedUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/",
+      "detail": "Deploy responded with HTTP 200."
+    },
+    "checks": {
+      "paths": [
+        "/login",
+        "/dashboard"
+      ],
+      "devices": [
+        "desktop",
+        "mobile"
+      ],
+      "strictConsole": false,
+      "strictHttp": false,
+      "session": "deploy-pr-46"
+    },
+    "pathResults": [
+      {
+        "path": "/login",
+        "device": "desktop",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login/",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/login-desktop.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/login",
+        "device": "mobile",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login/",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/login-mobile.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/dashboard",
+        "device": "desktop",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/dashboard",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login/?next=https%3A%2F%2Fanup4khandelwal.github.io%2Fcodex-stack%2Fpr-preview%2Fpr-46%2Fdashboard",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/dashboard-desktop.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      },
+      {
+        "path": "/dashboard",
+        "device": "mobile",
+        "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/dashboard",
+        "finalUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-46/login/?next=https%3A%2F%2Fanup4khandelwal.github.io%2Fcodex-stack%2Fpr-preview%2Fpr-46%2Fdashboard",
+        "title": "Operator Login",
+        "httpStatus": 200,
+        "console": {
+          "errors": [],
+          "warnings": []
+        },
+        "screenshot": "preview-artifacts/screenshots/dashboard-mobile.png",
+        "status": "pass",
+        "detail": "Page verification passed."
+      }
+    ],
+    "qa": {
+      "status": "pass",
+      "healthScore": 100,
+      "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+      "findings": [],
+      "flowResults": [
+        {
+          "name": "portal-full-demo",
+          "status": "pass",
+          "steps": 12
+        }
+      ],
+      "snapshotResults": [],
+      "artifacts": {
+        "json": ".codex-stack/qa/2026-03-15T03-09-13-anup4khandelwal.github.io-codex-stack-pr-preview-pr-46-login.json",
+        "markdown": ".codex-stack/qa/2026-03-15T03-09-13-anup4khandelwal.github.io-codex-stack-pr-preview-pr-46-login.md",
+        "latestJson": ".codex-stack/qa/latest.json",
+        "latestMarkdown": ".codex-stack/qa/latest.md",
+        "trendsJson": ".codex-stack/qa/trends.json",
+        "trendsMarkdown": ".codex-stack/qa/trends.md",
+        "published": {
+          "dir": "preview-artifacts/qa",
+          "json": "preview-artifacts/qa/report.json",
+          "markdown": "preview-artifacts/qa/report.md",
+          "annotation": "",
+          "screenshot": "",
+          "current": "",
+          "baseline": "",
+          "visualPack": null
+        }
+      }
+    },
+    "artifactRoot": "/home/runner/work/codex-stack/codex-stack/preview-artifacts",
+    "screenshotManifest": "preview-artifacts/screenshots.json",
+    "visualPack": {
+      "dir": "preview-artifacts/visual",
+      "index": "preview-artifacts/visual/index.html",
+      "manifest": "preview-artifacts/visual/manifest.json"
+    },
+    "runUrl": "https://github.com/anup4khandelwal/codex-stack/actions/runs/23102180405",
+    "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land."
+  }
+}

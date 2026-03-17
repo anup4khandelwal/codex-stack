@@ -1,0 +1,72 @@
+{
+  "status": "ok",
+  "branch": "feat/81-add-mcp-server",
+  "baseRef": "631e9223cd235c5c19dd634a7443ea9fd5183f21",
+  "checklistPath": "/home/runner/work/codex-stack/codex-stack/skills/review/checklist.md",
+  "checklistSummary": [
+    "# Review checklist",
+    "## Critical",
+    "- Trust boundary violations",
+    "- Missing auth or authorization checks",
+    "- Data corruption risks",
+    "- Race conditions and stale writes",
+    "- Unsafe migrations",
+    "- Silent retry loops or duplicate side effects"
+  ],
+  "fileNames": [
+    "README.md",
+    "bun.lock",
+    "docs/commands.md",
+    "docs/examples.md",
+    "package.json",
+    "scripts/ci-check.sh",
+    "scripts/mcp-server.spec.ts",
+    "scripts/mcp-server.ts",
+    "setup",
+    "skills/mcp/SKILL.md",
+    "src/cli.ts",
+    "src/mcp/server.ts",
+    "src/registry.ts",
+    "src/types.ts"
+  ],
+  "findings": [
+    {
+      "severity": "warning",
+      "title": "Large review surface",
+      "detail": "Diff against 631e9223cd235c5c19dd634a7443ea9fd5183f21 is 1279 changed lines. Split the change or expect shallow review quality.",
+      "files": [
+        "README.md",
+        "bun.lock",
+        "docs/commands.md",
+        "docs/examples.md",
+        "package.json",
+        "scripts/ci-check.sh",
+        "scripts/mcp-server.spec.ts",
+        "scripts/mcp-server.ts",
+        "setup",
+        "skills/mcp/SKILL.md"
+      ]
+    },
+    {
+      "severity": "warning",
+      "title": "Retry or background job logic needs idempotency review",
+      "detail": "The diff changes retry, cron, queue, or job behavior but does not show explicit idempotency handling.",
+      "files": [
+        "README.md",
+        "bun.lock",
+        "docs/commands.md",
+        "docs/examples.md",
+        "package.json",
+        "scripts/ci-check.sh",
+        "scripts/mcp-server.spec.ts",
+        "scripts/mcp-server.ts",
+        "setup",
+        "skills/mcp/SKILL.md",
+        "src/cli.ts",
+        "src/mcp/server.ts",
+        "src/registry.ts",
+        "src/types.ts"
+      ]
+    }
+  ]
+}

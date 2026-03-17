@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-03-15T03:26:56.270Z",
+  "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-48/login",
+  "mode": "full",
+  "session": "deploy-pr-48",
+  "status": "pass",
+  "healthScore": 100,
+  "recommendation": "QA checks passed. Keep the snapshot baseline fresh when intentional UI changes land.",
+  "findings": [],
+  "flowResults": [
+    {
+      "name": "portal-full-demo",
+      "status": "pass",
+      "steps": 12
+    }
+  ],
+  "routeResults": [],
+  "diffSummary": null,
+  "snapshotResult": null,
+  "artifacts": {
+    "json": ".codex-stack/qa/2026-03-15T03-26-56-anup4khandelwal.github.io-codex-stack-pr-preview-pr-48-login.json",
+    "markdown": ".codex-stack/qa/2026-03-15T03-26-56-anup4khandelwal.github.io-codex-stack-pr-preview-pr-48-login.md",
+    "latestJson": ".codex-stack/qa/latest.json",
+    "latestMarkdown": ".codex-stack/qa/latest.md",
+    "trendsJson": ".codex-stack/qa/trends.json",
+    "trendsMarkdown": ".codex-stack/qa/trends.md",
+    "published": {
+      "dir": "preview-artifacts/qa",
+      "json": "preview-artifacts/qa/report.json",
+      "markdown": "preview-artifacts/qa/report.md",
+      "annotation": "",
+      "screenshot": "",
+      "current": "",
+      "baseline": "",
+      "visualPack": null
+    }
+  }
+}

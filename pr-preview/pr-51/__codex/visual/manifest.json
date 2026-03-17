@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-03-15T03:50:35.644Z",
+  "title": "codex-stack visual review pack",
+  "status": "pass",
+  "visualRisk": {
+    "available": true,
+    "score": 0,
+    "level": "none",
+    "summary": "Visual checks are clean.",
+    "criticalChecks": 0,
+    "warningChecks": 0,
+    "consoleErrors": 0,
+    "changedSnapshots": 0,
+    "staleBaselines": 0,
+    "avgImageDiffScore": null,
+    "topDrivers": []
+  },
+  "previewUrl": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/",
+  "screenshotManifest": "../screenshots.json",
+  "screenshots": [
+    {
+      "path": "/login",
+      "device": "desktop",
+      "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login",
+      "status": "pass",
+      "httpStatus": 200,
+      "consoleErrors": 0,
+      "consoleWarnings": 0,
+      "screenshot": "screenshots/login-desktop.png"
+    },
+    {
+      "path": "/login",
+      "device": "mobile",
+      "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/login",
+      "status": "pass",
+      "httpStatus": 200,
+      "consoleErrors": 0,
+      "consoleWarnings": 0,
+      "screenshot": "screenshots/login-mobile.png"
+    },
+    {
+      "path": "/dashboard",
+      "device": "desktop",
+      "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/dashboard",
+      "status": "pass",
+      "httpStatus": 200,
+      "consoleErrors": 0,
+      "consoleWarnings": 0,
+      "screenshot": "screenshots/dashboard-desktop.png"
+    },
+    {
+      "path": "/dashboard",
+      "device": "mobile",
+      "url": "https://anup4khandelwal.github.io/codex-stack/pr-preview/pr-51/dashboard",
+      "status": "pass",
+      "httpStatus": 200,
+      "consoleErrors": 0,
+      "consoleWarnings": 0,
+      "screenshot": "screenshots/dashboard-mobile.png"
+    }
+  ],
+  "snapshots": []
+}

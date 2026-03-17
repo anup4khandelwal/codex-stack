@@ -1,0 +1,82 @@
+{
+  "status": "ok",
+  "branch": "feat/45-add-visual-pr-qa-packs",
+  "baseRef": "583d5e23971da10bf42b8c8df926ddd9420bf3e2",
+  "checklistPath": "/home/runner/work/codex-stack/codex-stack/skills/review/checklist.md",
+  "checklistSummary": [
+    "# Review checklist",
+    "## Critical",
+    "- Trust boundary violations",
+    "- Missing auth or authorization checks",
+    "- Data corruption risks",
+    "- Race conditions and stale writes",
+    "- Unsafe migrations",
+    "- Silent retry loops or duplicate side effects"
+  ],
+  "fileNames": [
+    ".github/workflows/pr-review.yml",
+    "README.md",
+    "browse/src/cli.ts",
+    "docs/commands.md",
+    "scripts/browse-snapshot-visual-pack.spec.ts",
+    "scripts/ci-check.sh",
+    "scripts/deploy-verify.spec.ts",
+    "scripts/deploy-verify.ts",
+    "scripts/preview-verify.spec.ts",
+    "scripts/preview-verify.ts",
+    "scripts/qa-run.spec.ts",
+    "scripts/qa-run.ts",
+    "scripts/render-pr-review.spec.ts",
+    "scripts/render-pr-review.ts",
+    "scripts/render-qa-pages.ts"
+  ],
+  "findings": [
+    {
+      "severity": "warning",
+      "title": "Large review surface",
+      "detail": "Diff against 583d5e23971da10bf42b8c8df926ddd9420bf3e2 is 905 changed lines. Split the change or expect shallow review quality.",
+      "files": [
+        ".github/workflows/pr-review.yml",
+        "README.md",
+        "browse/src/cli.ts",
+        "docs/commands.md",
+        "scripts/browse-snapshot-visual-pack.spec.ts",
+        "scripts/ci-check.sh",
+        "scripts/deploy-verify.spec.ts",
+        "scripts/deploy-verify.ts",
+        "scripts/preview-verify.spec.ts",
+        "scripts/preview-verify.ts"
+      ]
+    },
+    {
+      "severity": "warning",
+      "title": "Retry or background job logic needs idempotency review",
+      "detail": "The diff changes retry, cron, queue, or job behavior but does not show explicit idempotency handling.",
+      "files": [
+        ".github/workflows/pr-review.yml",
+        "README.md",
+        "browse/src/cli.ts",
+        "docs/commands.md",
+        "scripts/browse-snapshot-visual-pack.spec.ts",
+        "scripts/ci-check.sh",
+        "scripts/deploy-verify.spec.ts",
+        "scripts/deploy-verify.ts",
+        "scripts/preview-verify.spec.ts",
+        "scripts/preview-verify.ts",
+        "scripts/qa-run.spec.ts",
+        "scripts/qa-run.ts",
+        "scripts/render-pr-review.spec.ts",
+        "scripts/render-pr-review.ts",
+        "scripts/render-qa-pages.ts"
+      ]
+    },
+    {
+      "severity": "warning",
+      "title": "Workflow or release automation changed",
+      "detail": "CI/CD changes deserve a second reviewer and a dry run because failures often show up after merge.",
+      "files": [
+        ".github/workflows/pr-review.yml"
+      ]
+    }
+  ]
+}

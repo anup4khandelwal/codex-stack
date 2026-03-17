@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "waitMs": 1200,
+  "metrics": {
+    "ttfb": 182,
+    "domContentLoaded": 640,
+    "loadEvent": 1120,
+    "fcp": 710,
+    "lcp": 2460,
+    "cls": 0.14,
+    "jsHeapUsed": 18432000,
+    "resourceCount": 27,
+    "failedResourceCount": 0
+  },
+  "budgets": [
+    {
+      "metric": "lcp",
+      "label": "Largest Contentful Paint",
+      "threshold": 2200,
+      "unit": "ms",
+      "severity": "high",
+      "raw": "lcp=2200",
+      "value": 2460,
+      "passed": false,
+      "detail": "LCP exceeded the demo budget by 260ms on the release dashboard."
+    },
+    {
+      "metric": "cls",
+      "label": "Cumulative Layout Shift",
+      "threshold": 0.1,
+      "unit": "score",
+      "severity": "medium",
+      "raw": "cls=0.1",
+      "value": 0.14,
+      "passed": false,
+      "detail": "CLS exceeded the demo budget by 0.04 because the approval banner pushed the checklist."
+    }
+  ],
+  "budgetViolationCount": 2,
+  "topViolations": [
+    "Largest Contentful Paint exceeded budget",
+    "Cumulative Layout Shift exceeded budget"
+  ],
+  "artifactJson": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack-performance.json",
+  "artifactMarkdown": ".codex-stack/qa/2026-03-16T11-42-26-anup4khandelwal.github.io-codex-stack-performance.md"
+}
