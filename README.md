@@ -212,11 +212,11 @@ bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-
 bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
-bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1 --action-kind review --action-arg --base --action-arg origin/main --expected-minutes 10
 bun src/cli.ts goals queue --json
 bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
 bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review new queue items"
-bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed current diff" --next-action "Run QA after approval"
+bun src/cli.ts heartbeat run-due --agent reviewer-1 --max-agents 1 --max-tasks 1 --json
 bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
 bun src/cli.ts mcp inspect --json
 bun src/cli.ts mcp serve
@@ -277,6 +277,7 @@ Core ideas:
 - track initiative and repo goals explicitly
 - assign persistent queued work and delegate parent tasks into child tasks instead of only running one-shot commands
 - schedule heartbeats with continuity state, retry limits, and cooloff windows per agent
+- execute one bounded workflow step per agent heartbeat, capture execution history, and resume from continuity state on the next tick
 - enforce budget limits and explicit approvals for high-risk actions, including `ship` and rollout remediation preflight
 - render a static dashboard under `.codex-stack/control-plane/dashboard/`
 
@@ -286,12 +287,13 @@ Useful commands:
 bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
 bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
-bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
-bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1 --action-kind review --action-arg --base --action-arg origin/main --expected-minutes 10
+bun src/cli.ts goals task add --id release-train --goal release-q2 --title "Coordinate release" --assignee lead-1 --action-kind custom-command --action-arg node --action-arg -e --action-arg "console.log(JSON.stringify({summary:'lead ok',nextAction:'complete'}))" --delegate-id qa-contracts --delegate-title "Run delegated QA" --delegate-assignee qa-1 --delegate-action-kind qa --delegate-action-arg http://127.0.0.1:4173/dashboard --delegate-action-arg --flow --delegate-action-arg release-dashboard --delegate-expected-minutes 15
 bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
 bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
-bun src/cli.ts heartbeat due --agent reviewer-1 --json
-bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval" --require-approval ship-pr --approval-target review-contracts
+bun src/cli.ts heartbeat inspect --agent reviewer-1 --json
+bun src/cli.ts heartbeat run-due --agent reviewer-1 --max-agents 1 --max-tasks 1 --json
+bun src/cli.ts heartbeat run-agent --agent lead-1 --json
 bun src/cli.ts approvals approve <id> --by lead-1 --note "Approved release work"
 bun src/cli.ts ship --dry-run --pr --control-agent reviewer-1 --control-state .codex-stack/control-plane/state.json
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent lead-1 --control-state .codex-stack/control-plane/state.json --json

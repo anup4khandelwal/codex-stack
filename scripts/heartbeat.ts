@@ -6,6 +6,7 @@ import {
   findSchedule,
   findSession,
   listDueSchedules,
+  listRecentExecutions,
   listRecentHeartbeats,
   normalizeApprovalKind,
   normalizeHeartbeatStatus,
@@ -16,11 +17,13 @@ import {
   upsertSchedule,
   writeDashboard,
   writeState,
+  type ApprovalKind,
 } from "./control-plane.ts";
+import { runAgentCycle, runDueSchedules } from "./control-plane-runner.ts";
 
-type Command = "list" | "show" | "schedule" | "beat" | "due" | "dashboard";
+type Command = "list" | "show" | "inspect" | "schedule" | "beat" | "due" | "run-due" | "run-agent" | "dashboard";
 
-type ParsedArgs = ListArgs | ShowArgs | ScheduleArgs | BeatArgs | DueArgs | DashboardArgs;
+type ParsedArgs = ListArgs | ShowArgs | InspectArgs | ScheduleArgs | BeatArgs | DueArgs | RunDueArgs | RunAgentArgs | DashboardArgs;
 
 interface BaseArgs {
   command: Command;
@@ -35,6 +38,11 @@ interface ListArgs extends BaseArgs {
 
 interface ShowArgs extends BaseArgs {
   command: "show";
+  agent: string;
+}
+
+interface InspectArgs extends BaseArgs {
+  command: "inspect";
   agent: string;
 }
 
@@ -76,6 +84,18 @@ interface DueArgs extends BaseArgs {
   agent: string;
 }
 
+interface RunDueArgs extends BaseArgs {
+  command: "run-due";
+  agent: string;
+  maxAgents: number;
+  maxTasks: number;
+}
+
+interface RunAgentArgs extends BaseArgs {
+  command: "run-agent";
+  agent: string;
+}
+
 interface DashboardArgs extends BaseArgs {
   command: "dashboard";
   outDir: string;
@@ -87,11 +107,14 @@ function usage(): never {
 Usage:
   bun src/cli.ts heartbeat list [--agent <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat show <agent> [--state <path>] [--json]
+  bun src/cli.ts heartbeat inspect [--agent <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule add --agent <name> [--task <id>] [--trigger <manual|cron|event>] [--expression <expr>] [--summary <text>] [--id <schedule-id>] [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule list [--agent <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule pause <id> [--state <path>] [--json]
   bun src/cli.ts heartbeat schedule resume <id> [--state <path>] [--json]
   bun src/cli.ts heartbeat due [--agent <name>] [--state <path>] [--json]
+  bun src/cli.ts heartbeat run-due [--agent <name>] [--max-agents <n>] [--max-tasks <n>] [--state <path>] [--json]
+  bun src/cli.ts heartbeat run-agent --agent <name> [--state <path>] [--json]
   bun src/cli.ts heartbeat beat [--agent <name>] [--schedule <id>] [--task <id>] [--trigger <manual|cron|event>] [--status <ok|warning|blocked|error>] [--summary <text>] [--next-action <text>] [--output <text>] [--branch <name>] [--pr-url <url>] [--duration-minutes <n>] [--cost-units <n>] [--scheduled-by <name>] [--require-approval <ship-pr|merge-pr|update-snapshot|fleet-remediate|budget-override|custom>] [--approval-target <id>] [--requested-by <name>] [--state <path>] [--json]
   bun src/cli.ts heartbeat dashboard [--out <dir>] [--state <path>] [--json]
 `);
@@ -129,6 +152,17 @@ function parseArgs(argv: string[]): ParsedArgs {
       const arg = argv[i];
       if (arg === "--json") out.json = true;
       else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else throw new Error(`Unknown argument: ${arg}`);
+    }
+    return out;
+  }
+  if (command === "inspect") {
+    const out: InspectArgs = { command, json: false, statePath: "", agent: "" };
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      if (arg === "--json") out.json = true;
+      else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else if (arg === "--agent") out.agent = clean(argv[++i]);
       else throw new Error(`Unknown argument: ${arg}`);
     }
     return out;
@@ -226,6 +260,31 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     return out;
   }
+  if (command === "run-due") {
+    const out: RunDueArgs = { command, json: false, statePath: "", agent: "", maxAgents: 1, maxTasks: 1 };
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      if (arg === "--json") out.json = true;
+      else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else if (arg === "--agent") out.agent = clean(argv[++i]);
+      else if (arg === "--max-agents") out.maxAgents = parseNumber(argv[++i], 1);
+      else if (arg === "--max-tasks") out.maxTasks = parseNumber(argv[++i], 1);
+      else throw new Error(`Unknown argument: ${arg}`);
+    }
+    return out;
+  }
+  if (command === "run-agent") {
+    const out: RunAgentArgs = { command, json: false, statePath: "", agent: "" };
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      if (arg === "--json") out.json = true;
+      else if (arg === "--state") out.statePath = clean(argv[++i]);
+      else if (arg === "--agent") out.agent = clean(argv[++i]);
+      else throw new Error(`Unknown argument: ${arg}`);
+    }
+    if (!out.agent) throw new Error("--agent is required.");
+    return out;
+  }
   if (command === "dashboard") {
     const out: DashboardArgs = { command, json: false, statePath: "", outDir: ".codex-stack/control-plane/dashboard" };
     for (let i = 1; i < argv.length; i += 1) {
@@ -263,6 +322,7 @@ function showHeartbeat(args: ShowArgs): void {
     session: findSession(state, args.agent) || null,
     schedules: state.schedules.filter((schedule) => schedule.agent === args.agent),
     heartbeats: listRecentHeartbeats(state, args.agent, 10),
+    executions: listRecentExecutions(state, args.agent, 10),
     approvals: state.approvals.filter((approval) => approval.agent === args.agent && approval.status === "pending"),
   };
   if (args.json) {
@@ -274,6 +334,30 @@ function showHeartbeat(args: ShowArgs): void {
   console.log(`Next action: ${payload.session?.nextAction || "-"}`);
   console.log(`Schedules: ${payload.schedules.length}`);
   console.log(`Recent heartbeats: ${payload.heartbeats.length}`);
+  console.log(`Recent executions: ${payload.executions.length}`);
+  console.log(`Pending approvals: ${payload.approvals.length}`);
+}
+
+function inspect(args: InspectArgs): void {
+  const state = readState(args.statePath);
+  const payload = {
+    statePath: args.statePath,
+    counts: buildDashboardReport(state, args.statePath).counts,
+    dueSchedules: listDueSchedules(state, args.agent),
+    queue: args.agent ? state.tasks.filter((task) => task.assignee === args.agent && task.status !== "done") : state.tasks.filter((task) => task.status !== "done"),
+    sessions: args.agent ? [findSession(state, args.agent)].filter(Boolean) : state.sessions,
+    heartbeats: listRecentHeartbeats(state, args.agent, 20),
+    executions: listRecentExecutions(state, args.agent, 20),
+    approvals: state.approvals.filter((approval) => approval.status === "pending" && (!args.agent || approval.agent === args.agent)),
+  };
+  if (args.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.log(`Due schedules: ${payload.dueSchedules.length}`);
+  console.log(`Queued tasks: ${payload.queue.length}`);
+  console.log(`Recent heartbeats: ${payload.heartbeats.length}`);
+  console.log(`Recent executions: ${payload.executions.length}`);
   console.log(`Pending approvals: ${payload.approvals.length}`);
 }
 
@@ -353,7 +437,7 @@ function beat(args: BeatArgs): void {
     durationMinutes: args.durationMinutes,
     costUnits: args.costUnits,
     scheduledBy: args.scheduledBy,
-    requireApprovalKind: args.requireApproval ? normalizeApprovalKind(args.requireApproval) : undefined,
+    requireApprovalKind: args.requireApproval ? normalizeApprovalKind(args.requireApproval) as ApprovalKind : undefined,
     approvalTarget: args.approvalTarget,
     requestedBy: args.requestedBy,
   });
@@ -385,6 +469,40 @@ function due(args: DueArgs): void {
   }
 }
 
+function runDue(args: RunDueArgs): void {
+  const state = readState(args.statePath);
+  const results = runDueSchedules(state, {
+    agent: args.agent,
+    maxAgents: Math.max(1, args.maxAgents || 1),
+    maxTasks: Math.max(1, args.maxTasks || args.maxAgents || 1),
+  });
+  const statePath = writeState(state, args.statePath);
+  const payload = { statePath, results };
+  if (args.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  if (!results.length) {
+    console.log("No due schedules executed.");
+    return;
+  }
+  for (const result of results) {
+    console.log(`${result.agent}\t${result.taskId || "-"}\t${result.execution.status}\t${result.reason}`);
+  }
+}
+
+function runAgent(args: RunAgentArgs): void {
+  const state = readState(args.statePath);
+  const result = runAgentCycle(state, args.agent);
+  const statePath = writeState(state, args.statePath);
+  const payload = { statePath, result };
+  if (args.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.log(`${result.agent}\t${result.taskId || "-"}\t${result.execution.status}\t${result.reason}`);
+}
+
 function dashboard(args: DashboardArgs): void {
   const state = readState(args.statePath);
   const report = buildDashboardReport(state, args.statePath);
@@ -400,9 +518,12 @@ function main(): void {
   const args = parseArgs(process.argv.slice(2));
   if (args.command === "list") listHeartbeats(args);
   else if (args.command === "show") showHeartbeat(args);
+  else if (args.command === "inspect") inspect(args);
   else if (args.command === "schedule") scheduleHeartbeat(args);
   else if (args.command === "beat") beat(args);
   else if (args.command === "due") due(args);
+  else if (args.command === "run-due") runDue(args);
+  else if (args.command === "run-agent") runAgent(args);
   else if (args.command === "dashboard") dashboard(args);
 }
 

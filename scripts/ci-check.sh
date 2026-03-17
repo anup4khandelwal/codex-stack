@@ -107,6 +107,7 @@ run_ts scripts/qa-trends.spec.ts >/tmp/codex-stack-qa-trends-spec.log
 run_ts scripts/control-plane.spec.ts >/tmp/codex-stack-control-plane-spec.log
 run_ts scripts/control-plane-governance.spec.ts >/tmp/codex-stack-control-plane-governance-spec.log
 run_ts scripts/control-plane-preflight.spec.ts >/tmp/codex-stack-control-plane-preflight-spec.log
+run_ts scripts/control-plane-loop.spec.ts >/tmp/codex-stack-control-plane-loop-spec.log
 run_ts scripts/qa-diff-mode.spec.ts >/tmp/codex-stack-qa-diff-mode-spec.log
 run_ts scripts/browse-session.spec.ts >/tmp/codex-stack-browse-session-spec.log
 run_ts scripts/browse-browser-profile.spec.ts >/tmp/codex-stack-browse-browser-profile-spec.log

@@ -179,8 +179,8 @@ CLI:
 
 ```bash
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
-bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
-bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1 --action-kind review --action-arg --base --action-arg origin/main --expected-minutes 10
+bun src/cli.ts goals task add --id release-train --goal release-q2 --title "Coordinate release" --assignee lead-1 --action-kind custom-command --action-arg node --action-arg -e --action-arg "console.log(JSON.stringify({summary:'lead ok',nextAction:'complete'}))" --delegate-id qa-contracts --delegate-title "Run delegated QA" --delegate-assignee qa-1 --delegate-action-kind qa --delegate-action-arg http://127.0.0.1:4173/dashboard --delegate-action-arg --flow --delegate-action-arg release-dashboard
 bun src/cli.ts goals queue --json
 ```
 
@@ -194,8 +194,9 @@ CLI:
 
 ```bash
 bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
-bun src/cli.ts heartbeat due --agent reviewer-1 --json
-bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Run QA after approval" --json
+bun src/cli.ts heartbeat inspect --agent reviewer-1 --json
+bun src/cli.ts heartbeat run-due --agent reviewer-1 --max-agents 1 --max-tasks 1 --json
+bun src/cli.ts heartbeat run-agent --agent lead-1 --json
 bun src/cli.ts heartbeat show reviewer-1 --json
 ```
 

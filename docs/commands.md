@@ -34,13 +34,14 @@ bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-
 bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
-bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
-bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1 --action-kind review --action-arg --base --action-arg origin/main --expected-minutes 10
+bun src/cli.ts goals task add --id release-train --goal release-q2 --title "Coordinate release" --assignee lead-1 --action-kind custom-command --action-arg node --action-arg -e --action-arg "console.log(JSON.stringify({summary:'lead ok',nextAction:'complete'}))" --delegate-id qa-contracts --delegate-title "Run delegated QA" --delegate-assignee qa-1 --delegate-action-kind qa --delegate-action-arg http://127.0.0.1:4173/dashboard --delegate-action-arg --flow --delegate-action-arg release-dashboard --delegate-expected-minutes 15
 bun src/cli.ts goals queue --json
 bun src/cli.ts agents budget set --agent reviewer-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
 bun src/cli.ts heartbeat schedule add --agent reviewer-1 --task review-contracts --trigger cron --expression "*/30 * * * *" --summary "Review queue" --retry-limit 2 --cooldown-minutes 30
-bun src/cli.ts heartbeat due --agent reviewer-1 --json
-bun src/cli.ts heartbeat beat --agent reviewer-1 --task review-contracts --summary "Reviewed queue" --next-action "Open PR after approval"
+bun src/cli.ts heartbeat inspect --agent reviewer-1 --json
+bun src/cli.ts heartbeat run-due --agent reviewer-1 --max-agents 1 --max-tasks 1 --json
+bun src/cli.ts heartbeat run-agent --agent lead-1 --json
 bun src/cli.ts approvals gate --agent reviewer-1 --kind ship-pr --target review-contracts --json
 bun src/cli.ts ship --dry-run --pr --control-agent reviewer-1 --control-state .codex-stack/control-plane/state.json
 bun src/cli.ts fleet remediate --manifest .codex-stack/fleet.example.json --dry-run --open-prs --control-agent lead-1 --control-state .codex-stack/control-plane/state.json --json
@@ -277,8 +278,8 @@ bun src/cli.ts agents list --json
 bun src/cli.ts agents add --name lead-1 --runtime codex --role manager --team platform --status working
 bun src/cli.ts agents add --name reviewer-1 --runtime claude-code --role reviewer --team platform --manager lead-1
 bun src/cli.ts goals add --id release-q2 --title "Release Q2 hardening" --type initiative --owner lead-1 --status active
-bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1
-bun src/cli.ts goals task delegate review-contracts --id qa-contracts --title "Run delegated QA" --assignee qa-1
+bun src/cli.ts goals task add --id review-contracts --goal release-q2 --title "Review agent contracts" --assignee reviewer-1 --action-kind review --action-arg --base --action-arg origin/main --expected-minutes 10
+bun src/cli.ts goals task add --id release-train --goal release-q2 --title "Coordinate release" --assignee lead-1 --action-kind custom-command --action-arg node --action-arg -e --action-arg "console.log(JSON.stringify({summary:'lead ok',nextAction:'complete'}))" --delegate-id qa-contracts --delegate-title "Run delegated QA" --delegate-assignee qa-1 --delegate-action-kind qa --delegate-action-arg http://127.0.0.1:4173/dashboard --delegate-action-arg --flow --delegate-action-arg release-dashboard --delegate-expected-minutes 15
 bun src/cli.ts goals queue --assignee reviewer-1 --json
 bun src/cli.ts agents dashboard --out .codex-stack/control-plane/dashboard
 ```
@@ -287,7 +288,7 @@ Notes:
 
 - The local state file defaults to `.codex-stack/control-plane/state.json`.
 - `agents` manages roster metadata such as runtime, role, team, manager, and staffing status.
-- `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, complete, and delegate actions.
+- `goals` manages goal hierarchy plus a persistent task queue with claim, reassign, block, unblock, complete, delegate, and executable action metadata.
 - `agents dashboard` writes `index.html`, `manifest.json`, and `summary.md` so you can inspect the local control plane without needing a server.
 
 ## Heartbeat and governance workflow
@@ -295,7 +296,9 @@ Notes:
 ```bash
 bun src/cli.ts agents budget set --agent ship-1 --window daily --max-runs 8 --max-minutes 120 --max-cost-units 20
 bun src/cli.ts heartbeat schedule add --agent ship-1 --task ship-pr --trigger cron --expression "*/15 * * * *" --summary "Check release branch" --retry-limit 2 --cooldown-minutes 30
-bun src/cli.ts heartbeat due --agent ship-1 --json
+bun src/cli.ts heartbeat inspect --agent ship-1 --json
+bun src/cli.ts heartbeat run-due --max-agents 2 --max-tasks 2 --json
+bun src/cli.ts heartbeat run-agent --agent ship-1 --json
 bun src/cli.ts heartbeat beat --agent ship-1 --task ship-pr --summary "Ready to open PR" --next-action "Open PR after approval" --require-approval ship-pr --approval-target ship-pr --json
 bun src/cli.ts approvals list --agent ship-1 --status pending --json
 bun src/cli.ts approvals approve <approval-id> --by lead-1 --note "Approved release PR"
@@ -307,7 +310,9 @@ Notes:
 
 - `heartbeat schedule` records named wakeups using `manual`, `cron`, or `event` triggers.
 - `heartbeat schedule` also tracks retry limits and cooloff windows, and `heartbeat due` only returns schedules whose cooloff has expired.
-- `heartbeat beat` records a run, updates per-agent continuity state, and can automatically request approvals when the action needs a gate.
+- `heartbeat run-due` executes one bounded task per runnable agent, writes execution history, updates continuity, and honors retry/cooloff windows.
+- `heartbeat run-agent` forces one bounded execution cycle for a specific agent without waiting for a due cron slot.
+- `heartbeat beat` remains available for manual or external run recording when the built-in executor is not the thing doing the work.
 - Budget policies are attached per agent and checked against heartbeat runs in a daily, weekly, or monthly window.
 - When a beat would exceed budget without a `budget-override` approval, it is recorded as blocked and the pending approval is created automatically.
 - `approvals gate` gives a cheap allow/block answer for a specific kind plus target pair.
